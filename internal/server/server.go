@@ -59,7 +59,7 @@ func (s *Server) Start() error {
 
 	hsmSvc, err := hsm.NewHSM(lmk)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("failed to initialize HSM service")
 	}
 	s.hsmSvc = hsmSvc
 

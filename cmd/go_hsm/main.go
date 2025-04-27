@@ -18,12 +18,12 @@ func main() {
 
 	pm := plugins.NewPluginManager(context.Background())
 	if err := pm.LoadAll("./commands"); err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("failed to load plugins")
 	}
 
-	srv, err := server.NewServer(":9999", pm)
+	srv, err := server.NewServer(":1500", pm)
 	if err != nil {
-		panic(err)
+		log.Fatal().Err(err).Msg("failed to initialize server")
 	}
 
 	// reload plugins on SIGHUP.
@@ -39,18 +39,19 @@ func main() {
 		}
 	}()
 
-	// shutdown server on SIGINT or SIGTERM.
+	if err := srv.Start(); err != nil {
+		log.Fatal().Err(err).Msg("failed to start server")
+	}
+
+	// wait for shutdown signal.
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-stopChan
-		if err := srv.Stop(); err != nil {
-			log.Error().Err(err).Msg("failed to stop server")
-		}
-		os.Exit(0)
-	}()
+	sig := <-stopChan
+	log.Info().Msgf("signal %v received, shutting down server", sig)
 
-	if err := srv.Start(); err != nil {
-		panic(err)
+	if err := srv.Stop(); err != nil {
+		log.Error().Err(err).Msg("failed to stop server")
 	}
+
+	os.Exit(0)
 }
