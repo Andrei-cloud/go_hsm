@@ -27,33 +27,33 @@ type Server struct {
 }
 
 func (l logAdapter) Print(v ...any) {
-	log.Logger.Info().Msg(fmt.Sprint(v...))
+	log.Info().Msg(fmt.Sprint(v...))
 }
 
 func (l logAdapter) Printf(format string, v ...any) {
-	log.Logger.Info().Msgf(format, v...)
+	log.Info().Msgf(format, v...)
 }
 
 func (l logAdapter) Infof(format string, v ...any) {
-	log.Logger.Info().Msgf(format, v...)
+	log.Info().Msgf(format, v...)
 }
 
 func (l logAdapter) Warnf(format string, v ...any) {
-	log.Logger.Warn().Msgf(format, v...)
+	log.Warn().Msgf(format, v...)
 }
 
 func (l logAdapter) Errorf(format string, v ...any) {
-	log.Logger.Error().Msgf(format, v...)
+	log.Error().Msgf(format, v...)
 }
 
 // NewServer configures and returns the HSM server instance.
 func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 	cfg := &anetserver.ServerConfig{
 		MaxConns:        100,
-		ReadTimeout:     30,
-		WriteTimeout:    30,
-		IdleTimeout:     60,
-		ShutdownTimeout: 5,
+		ReadTimeout:     30 * time.Second,
+		WriteTimeout:    30 * time.Second,
+		IdleTimeout:     60 * time.Second,
+		ShutdownTimeout: 5 * time.Second,
 		Logger:          logAdapter{},
 	}
 
@@ -70,14 +70,11 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 
 // Start initializes HSM backend and begins listening for connections.
 func (s *Server) Start() error {
-	log.Info().
-		Str("address", s.address).
-		Msg("server started")
+	log.Info().Str("address", s.address).Msg("server started")
 
 	lmk := os.Getenv("HSM_LMK")
 	if lmk == "" {
 		log.Warn().Msg("HSM_LMK not set; using default LMK")
-
 		lmk = "0123456789ABCDEFFEDCBA9876543210"
 	}
 
@@ -99,7 +96,7 @@ func (s *Server) Stop() error {
 	return s.srv.Stop()
 }
 
-// handle processes incoming HSM requests using WASM plugins or built-in handlers.
+// Enhanced error handling and logging for unknown commands and errors.
 func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error) {
 	client := conn.Conn.RemoteAddr().String()
 	atomic.AddInt32(&s.activeConns, 1)
@@ -113,7 +110,6 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	if len(data) < 2 {
 		log.Error().Str("client_ip", client).Msg("malformed request")
-
 		return nil, errors.New("malformed request")
 	}
 
@@ -124,37 +120,37 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		Str("event", "request_received").
 		Str("client_ip", client).
 		Str("command", cmd).
-		Str("description", s.pluginManager.GetDescription(cmd)).
 		Str("request_hex", reqHex).
 		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
 		Msg("received command")
 
-	log.Debug().Int("payload_len", len(payload)).Msg("payload length")
+	// record plugin execution time.
+	execStart := time.Now()
+	resp, err := s.pluginManager.ExecuteCommand(cmd, payload)
+	execDur := time.Since(execStart)
+	log.Debug().
+		Str("event", "command_executed").
+		Str("client_ip", client).
+		Str("command", cmd).
+		Str("duration", execDur.String()).
+		Msg("command execution complete")
 
-	var resp []byte
-	var err error
-
-	if cmd == "A0" {
-		encStart := time.Now()
-		log.Debug().Str("event", "encrypt_under_lmk_start").Msg("starting LMK encryption")
-
-		encrypted, e := s.hsmSvc.EncryptUnderLMK(payload)
-		if e != nil {
+	if err != nil {
+		if err.Error() == "unknown command" {
 			resp = s.errorResponse(cmd)
+			log.Warn().
+				Str("event", "unknown_command").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Msg("Command not recognized, responding with error code")
 		} else {
-			log.Debug().Int64("duration_ms", time.Since(encStart).Milliseconds()).Msg("LMK encryption complete")
-
-			resp = append([]byte(s.incrementCode(cmd)), encrypted...)
-		}
-	} else {
-		execStart := time.Now()
-		log.Debug().Str("event", "plugin_execute_start").Str("command", cmd).Msg("invoking plugin")
-
-		resp, err = s.pluginManager.ExecuteCommand(cmd, payload)
-		if err != nil {
+			log.Error().
+				Str("event", "plugin_error").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Err(err).
+				Msg("Plugin execution failed")
 			resp = s.errorResponse(cmd)
-		} else {
-			log.Debug().Int64("duration_ms", time.Since(execStart).Milliseconds()).Msg("plugin execution complete")
 		}
 	}
 
@@ -166,9 +162,12 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
 		Msg("sent response")
 
+	total := time.Since(start)
 	log.Debug().
 		Str("event", "handle_done").
-		Int64("total_ms", time.Since(start).Milliseconds()).
+		Str("request_hex", reqHex).
+		Str("response_hex", rspHex).
+		Str("duration", total.String()).
 		Msg("completed request handling")
 
 	return resp, nil

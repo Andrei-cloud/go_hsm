@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/andrei-cloud/go_hsm/internal/logging"
@@ -14,7 +15,10 @@ import (
 
 // main initializes logging, plugins, and starts the HSM server.
 func main() {
-	logging.InitLogger(true)
+	// determine debug mode from environment variable.
+	debugStr := os.Getenv("HSM_DEBUG")
+	debug, _ := strconv.ParseBool(debugStr)
+	logging.InitLogger(debug)
 
 	pm := plugins.NewPluginManager(context.Background())
 	if err := pm.LoadAll("./commands"); err != nil {

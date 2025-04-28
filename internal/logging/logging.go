@@ -2,6 +2,7 @@ package logging
 
 import (
 	"os"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -9,7 +10,7 @@ import (
 
 // InitLogger initializes the zerolog logger with the specified debug mode.
 func InitLogger(debug bool) {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	zerolog.TimeFieldFormat = time.RFC3339
 	log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
 
 	if debug {

@@ -3,12 +3,12 @@ package plugins
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
 )
@@ -52,13 +52,13 @@ func (pm *PluginManager) LoadAll(dir string) error {
 
 		wasmBytes, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
-			log.Printf("Failed to read %s: %v", f.Name(), err)
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to read plugin file")
 			continue
 		}
 
 		compiled, err := pm.runtime.CompileModule(context.Background(), wasmBytes)
 		if err != nil {
-			log.Printf("Failed to compile %s: %v", f.Name(), err)
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to compile plugin")
 			continue
 		}
 
@@ -68,13 +68,13 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			wazero.NewModuleConfig(),
 		)
 		if err != nil {
-			log.Printf("Failed to instantiate %s: %v", f.Name(), err)
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin")
 			continue
 		}
 
 		executeFn := module.ExportedFunction("Execute")
 		if executeFn == nil {
-			log.Printf("WASM %s does not export Execute", f.Name())
+			log.Warn().Str("file", f.Name()).Msg("plugin does not export Execute function")
 			continue
 		}
 
@@ -84,7 +84,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			ExecuteFn:   executeFn,
 			Description: cmdCode,
 		}
-		log.Printf("Loaded WASM plugin: %s", cmdCode)
+		log.Info().Str("plugin", cmdCode).Msg("loaded WASM plugin")
 	}
 
 	pm.mu.Lock()
