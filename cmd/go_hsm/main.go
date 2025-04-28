@@ -18,7 +18,11 @@ func main() {
 	// determine debug mode from environment variable.
 	debugStr := os.Getenv("HSM_DEBUG")
 	debug, _ := strconv.ParseBool(debugStr)
-	logging.InitLogger(debug)
+
+	// determine human-readable output mode from environment.
+	humanStr := os.Getenv("HUMAN")
+	human, _ := strconv.ParseBool(humanStr)
+	logging.InitLogger(debug, human)
 
 	pm := plugins.NewPluginManager(context.Background())
 	if err := pm.LoadAll("./commands"); err != nil {
