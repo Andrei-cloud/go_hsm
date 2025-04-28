@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"os"
 	"sync/atomic"
+	"time"
 
-	anetserver "github.com/andrei-cloud/anet/server" // use anet TCP server.
+	anetserver "github.com/andrei-cloud/anet/server"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/rs/zerolog/log"
 )
+
+// logAdapter implements anet.Logger using zerolog.
+type logAdapter struct{}
 
 // Server wraps the anet TCP server and HSM logic.
 type Server struct {
@@ -22,6 +26,26 @@ type Server struct {
 	activeConns   int32
 }
 
+func (l logAdapter) Print(v ...any) {
+	log.Logger.Info().Msg(fmt.Sprint(v...))
+}
+
+func (l logAdapter) Printf(format string, v ...any) {
+	log.Logger.Info().Msgf(format, v...)
+}
+
+func (l logAdapter) Infof(format string, v ...any) {
+	log.Logger.Info().Msgf(format, v...)
+}
+
+func (l logAdapter) Warnf(format string, v ...any) {
+	log.Logger.Warn().Msgf(format, v...)
+}
+
+func (l logAdapter) Errorf(format string, v ...any) {
+	log.Logger.Error().Msgf(format, v...)
+}
+
 // NewServer configures and returns the HSM server instance.
 func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 	cfg := &anetserver.ServerConfig{
@@ -30,10 +54,10 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 		WriteTimeout:    30,
 		IdleTimeout:     60,
 		ShutdownTimeout: 5,
+		Logger:          logAdapter{},
 	}
 
 	s := &Server{address: address, pluginManager: pm}
-	// wrap our handler to the anet/server HandlerFunc.
 	handler := anetserver.HandlerFunc(s.handle)
 	srv, err := anetserver.NewServer(address, handler, cfg)
 	if err != nil {
@@ -81,6 +105,12 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	atomic.AddInt32(&s.activeConns, 1)
 	defer atomic.AddInt32(&s.activeConns, -1)
 
+	start := time.Now()
+	log.Debug().
+		Str("event", "handle_start").
+		Str("client_ip", client).
+		Msg("starting request handling")
+
 	if len(data) < 2 {
 		log.Error().Str("client_ip", client).Msg("malformed request")
 
@@ -99,20 +129,32 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
 		Msg("received command")
 
+	log.Debug().Int("payload_len", len(payload)).Msg("payload length")
+
 	var resp []byte
 	var err error
 
 	if cmd == "A0" {
+		encStart := time.Now()
+		log.Debug().Str("event", "encrypt_under_lmk_start").Msg("starting LMK encryption")
+
 		encrypted, e := s.hsmSvc.EncryptUnderLMK(payload)
 		if e != nil {
 			resp = s.errorResponse(cmd)
 		} else {
+			log.Debug().Int64("duration_ms", time.Since(encStart).Milliseconds()).Msg("LMK encryption complete")
+
 			resp = append([]byte(s.incrementCode(cmd)), encrypted...)
 		}
 	} else {
+		execStart := time.Now()
+		log.Debug().Str("event", "plugin_execute_start").Str("command", cmd).Msg("invoking plugin")
+
 		resp, err = s.pluginManager.ExecuteCommand(cmd, payload)
 		if err != nil {
 			resp = s.errorResponse(cmd)
+		} else {
+			log.Debug().Int64("duration_ms", time.Since(execStart).Milliseconds()).Msg("plugin execution complete")
 		}
 	}
 
@@ -123,6 +165,11 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		Str("response_hex", rspHex).
 		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
 		Msg("sent response")
+
+	log.Debug().
+		Str("event", "handle_done").
+		Int64("total_ms", time.Since(start).Milliseconds()).
+		Msg("completed request handling")
 
 	return resp, nil
 }
