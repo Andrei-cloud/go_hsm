@@ -10,7 +10,7 @@ import (
 const firmwareVersion = "1.0.0"
 
 //export Execute
-func Execute(ptr uint32, length uint32) uint64 {
+func Execute(ptr uint32, _ uint32) uint64 {
 	// build response: ND + error code 00 + LMK Check Value + firmwareVersion.
 	lmkHex := "0123456789ABCDEF0123456789ABCDEF"
 	kcv, _ := cryptoutils.KeyCV([]byte(lmkHex), 16)

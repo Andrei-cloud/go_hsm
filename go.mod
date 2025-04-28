@@ -16,3 +16,5 @@ require (
 )
 
 replace github.com/andrei-cloud/anet => ../anet
+
+replace github.com/andrei-cloud/go_hsm => .

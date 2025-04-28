@@ -84,10 +84,6 @@ func (s *Server) Start() error {
 	}
 	s.hsmSvc = hsmSvc
 
-	if err := s.pluginManager.LoadAll("./commands"); err != nil {
-		log.Error().Err(err).Msg("failed to load plugins")
-	}
-
 	return s.srv.Start()
 }
 

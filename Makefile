@@ -23,6 +23,6 @@ plugins: ## compile Go WASM plugins for each command.
 	@for d in commands/*; do \
 		if [ -d $$d ]; then \
 			name=$$(basename $$d); \
-			GOOS=wasip1 GOARCH=wasm go build -o commands/$$name.wasm github.com/andrei-cloud/go_hsm/commands/$$name; \
+			tinygo build -o commands/$$name.wasm -target wasi ./commands/$$name; \
 		fi; \
 	done

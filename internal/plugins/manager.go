@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +12,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
+	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
-// PluginManager manages WASM plugin instances.
+// PluginManager manages WASM plugin instances and supports hot reload by recreating the runtime.
 type PluginManager struct {
+	ctx     context.Context
 	runtime wazero.Runtime
 	plugins map[string]*PluginInstance
 	mu      sync.RWMutex
@@ -28,12 +31,9 @@ type PluginInstance struct {
 	mu          sync.Mutex
 }
 
-// NewPluginManager initializes a Wazero runtime and returns a PluginManager.
+// NewPluginManager returns a PluginManager ready to load plugins.
 func NewPluginManager(ctx context.Context) *PluginManager {
-	return &PluginManager{
-		runtime: wazero.NewRuntime(ctx),
-		plugins: make(map[string]*PluginInstance),
-	}
+	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance)}
 }
 
 // LoadAll loads all WASM plugins from the specified directory.
@@ -42,6 +42,11 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	if err != nil {
 		return err
 	}
+
+	// create new runtime for fresh module instantiation.
+	newRt := wazero.NewRuntimeWithConfig(pm.ctx, wazero.NewRuntimeConfigInterpreter())
+	// instantiate WASI in new runtime for modules that import wasi_snapshot_preview1.
+	wasi_snapshot_preview1.MustInstantiate(pm.ctx, newRt)
 
 	newPlugins := make(map[string]*PluginInstance)
 
@@ -53,43 +58,56 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		wasmBytes, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
 			log.Error().Err(err).Str("file", f.Name()).Msg("failed to read plugin file")
+
 			continue
 		}
 
-		compiled, err := pm.runtime.CompileModule(context.Background(), wasmBytes)
+		cmdCode := strings.TrimSuffix(f.Name(), ".wasm")
+		// compile the module from code
+		compiled, err := newRt.CompileModule(pm.ctx, wasmBytes)
 		if err != nil {
-			log.Error().Err(err).Str("file", f.Name()).Msg("failed to compile plugin")
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to compile plugin wasm")
+
 			continue
 		}
-
-		module, err := pm.runtime.InstantiateModule(
-			context.Background(),
+		// instantiate the compiled module
+		module, err := newRt.InstantiateModule(
+			pm.ctx,
 			compiled,
-			wazero.NewModuleConfig(),
+			wazero.NewModuleConfig().WithName(cmdCode),
 		)
 		if err != nil {
-			log.Error().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin")
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin module")
+
 			continue
 		}
 
 		executeFn := module.ExportedFunction("Execute")
 		if executeFn == nil {
 			log.Warn().Str("file", f.Name()).Msg("plugin does not export Execute function")
+
 			continue
 		}
 
-		cmdCode := strings.TrimSuffix(f.Name(), ".wasm")
 		newPlugins[cmdCode] = &PluginInstance{
 			Module:      module,
 			ExecuteFn:   executeFn,
 			Description: cmdCode,
 		}
-		log.Info().Str("plugin", cmdCode).Msg("loaded WASM plugin")
+		log.Info().Str("plugin", cmdCode).Msg("loaded wasm plugin")
 	}
 
 	pm.mu.Lock()
+	if pm.runtime != nil {
+		if err := pm.runtime.Close(pm.ctx); err != nil {
+			log.Error().Err(err).Msg("failed to close previous runtime")
+		}
+	}
+	pm.runtime = newRt
 	pm.plugins = newPlugins
 	pm.mu.Unlock()
+
+	// returning success
 
 	return nil
 }
@@ -100,35 +118,36 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	inst, ok := pm.plugins[cmd]
 	pm.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("unknown command")
+		return nil, errors.New("unknown command")
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	// prepare memory and write input at offset 0.
 	mem := inst.Module.Memory()
 	if len(input) > 0 {
-		if !mem.Write(0, input) {
-			return nil, fmt.Errorf("failed to write memory")
+		written := mem.Write(0, input)
+		if !written {
+			return nil, errors.New("failed to write memory")
 		}
 	}
 
-	// call the Execute function with pointer and length.
-	results, err := inst.ExecuteFn.Call(context.Background(), uint64(0), uint64(len(input)))
+	results, err := inst.ExecuteFn.Call(pm.ctx, uint64(0), uint64(len(input)))
 	if err != nil {
 		return nil, fmt.Errorf("plugin execution error: %w", err)
 	}
+
 	if len(results) < 2 {
-		return nil, fmt.Errorf("invalid plugin response")
+		return nil, errors.New("invalid plugin response")
 	}
 
-	// read output from module memory using returned pointer and length.
 	outPtr := uint32(results[0])
 	outLen := uint32(results[1])
 	data, ok := mem.Read(outPtr, outLen)
 	if !ok {
-		return nil, fmt.Errorf("failed to read memory")
+		return nil, errors.New("failed to read memory")
 	}
+
+	// successful execution
 
 	return data, nil
 }
@@ -140,5 +159,6 @@ func (pm *PluginManager) GetDescription(cmd string) string {
 	if inst, ok := pm.plugins[cmd]; ok {
 		return inst.Description
 	}
+
 	return cmd
 }
