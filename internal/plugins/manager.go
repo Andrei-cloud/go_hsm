@@ -17,6 +17,7 @@ import (
 
 // PluginManager manages WASM plugin instances and supports hot reload by recreating the runtime.
 type PluginManager struct {
+	//nolint:containedctx. prevents storing context in struct.
 	ctx     context.Context
 	runtime wazero.Runtime
 	plugins map[string]*PluginInstance
@@ -26,6 +27,8 @@ type PluginManager struct {
 // PluginInstance holds a WASM module and its execute function.
 type PluginInstance struct {
 	Module      api.Module
+	Alloc       api.Function
+	Free        api.Function
 	ExecuteFn   api.Function
 	Description string
 	mu          sync.Mutex
@@ -44,8 +47,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	}
 
 	// create new runtime for fresh module instantiation.
-	newRt := wazero.NewRuntimeWithConfig(pm.ctx, wazero.NewRuntimeConfigInterpreter())
-	// instantiate WASI in new runtime for modules that import wasi_snapshot_preview1.
+	newRt := wazero.NewRuntime(pm.ctx)
 	wasi_snapshot_preview1.MustInstantiate(pm.ctx, newRt)
 
 	newPlugins := make(map[string]*PluginInstance)
@@ -63,19 +65,18 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		}
 
 		cmdCode := strings.TrimSuffix(f.Name(), ".wasm")
-		// compile the module from code
 		compiled, err := newRt.CompileModule(pm.ctx, wasmBytes)
 		if err != nil {
-			log.Error().Err(err).Str("file", f.Name()).Msg("failed to compile plugin wasm")
-
+			log.Error().Err(err).Str("file", f.Name()).Msg("failed to compile plugin module")
 			continue
 		}
-		// instantiate the compiled module
-		module, err := newRt.InstantiateModule(
-			pm.ctx,
-			compiled,
-			wazero.NewModuleConfig().WithName(cmdCode),
-		)
+
+		// Create module config that disables automatic start function execution
+		cfg := wazero.NewModuleConfig().
+			WithName(cmdCode).
+			WithStartFunctions() // Empty list means don't run any start functions
+
+		module, err := newRt.InstantiateModule(pm.ctx, compiled, cfg)
 		if err != nil {
 			log.Error().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin module")
 
@@ -89,8 +90,22 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			continue
 		}
 
+		allocFn := module.ExportedFunction("Alloc")
+		if allocFn == nil {
+			log.Warn().Str("file", f.Name()).Msg("plugin does not export Alloc function")
+			continue
+		}
+
+		freeFn := module.ExportedFunction("Free")
+		if freeFn == nil {
+			log.Warn().Str("file", f.Name()).Msg("plugin does not export Free function")
+			continue
+		}
+
 		newPlugins[cmdCode] = &PluginInstance{
 			Module:      module,
+			Alloc:       allocFn,
+			Free:        freeFn,
 			ExecuteFn:   executeFn,
 			Description: cmdCode,
 		}
@@ -107,8 +122,6 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	pm.plugins = newPlugins
 	pm.mu.Unlock()
 
-	// returning success
-
 	return nil
 }
 
@@ -123,33 +136,28 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	mem := inst.Module.Memory()
-	if len(input) > 0 {
-		written := mem.Write(0, input)
-		if !written {
-			return nil, errors.New("failed to write memory")
-		}
+	// allocate guest memory and write input.
+	ptr, err := AllocAndWrite(pm.ctx, inst.Module, inst.Alloc, input)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
 	}
 
-	results, err := inst.ExecuteFn.Call(pm.ctx, uint64(0), uint64(len(input)))
+	// execute plugin and get combined result.
+	combined, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {
 		return nil, fmt.Errorf("plugin execution error: %w", err)
 	}
 
-	if len(results) < 2 {
-		return nil, errors.New("invalid plugin response")
+	// unpack result into pointer and length.
+	outPtr, outLen := UnpackResult(combined)
+
+	// read response from guest memory.
+	resp, err := ReadResult(inst.Module, outPtr, outLen)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
 	}
 
-	outPtr := uint32(results[0])
-	outLen := uint32(results[1])
-	data, ok := mem.Read(outPtr, outLen)
-	if !ok {
-		return nil, errors.New("failed to read memory")
-	}
-
-	// successful execution
-
-	return data, nil
+	return resp, nil
 }
 
 // GetDescription returns the description of the given command or the command if not found.

@@ -1,2 +1,3 @@
 .DS_Store
 *.wasm
+go_hsm.code-workspace

@@ -16,15 +16,17 @@ import (
 // main initializes logging, plugins, and starts the HSM server.
 func main() {
 	// determine debug mode from environment variable.
-	debugStr := os.Getenv("HSM_DEBUG")
-	debug, _ := strconv.ParseBool(debugStr)
+	debugEnv := os.Getenv("DEBUG")
+	debug, _ := strconv.ParseBool(debugEnv)
 
 	// determine human-readable output mode from environment.
 	humanStr := os.Getenv("HUMAN")
 	human, _ := strconv.ParseBool(humanStr)
 	logging.InitLogger(debug, human)
 
-	pm := plugins.NewPluginManager(context.Background())
+	// Use background context for plugin manager to prevent premature cancellation
+	ctx := context.Background()
+	pm := plugins.NewPluginManager(ctx)
 	if err := pm.LoadAll("./commands"); err != nil {
 		log.Fatal().Err(err).Msg("failed to load plugins")
 	}
