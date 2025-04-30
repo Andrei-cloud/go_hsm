@@ -17,7 +17,7 @@ import (
 
 // PluginManager manages WASM plugin instances and supports hot reload by recreating the runtime.
 type PluginManager struct {
-	//nolint:containedctx. prevents storing context in struct.
+	//nolint:containedctx // Context is stored in the struct intentionally to allow reuse across plugin operations.
 	ctx     context.Context
 	runtime wazero.Runtime
 	plugins map[string]*PluginInstance
@@ -169,4 +169,14 @@ func (pm *PluginManager) GetDescription(cmd string) string {
 	}
 
 	return cmd
+}
+
+// Context returns the context used by the plugin manager.
+func (pm *PluginManager) Context() context.Context {
+	return pm.ctx
+}
+
+// Close closes the underlying WASM runtime.
+func (pm *PluginManager) Close() error {
+	return pm.runtime.Close(pm.ctx)
 }

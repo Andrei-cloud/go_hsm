@@ -21,11 +21,12 @@ type logAdapter struct{}
 
 // Server wraps the anet TCP server and HSM logic.
 type Server struct {
-	address       string
-	srv           *anetserver.Server
-	pluginManager *plugins.PluginManager
-	hsmSvc        *hsm.HSM
-	activeConns   int32
+	address             string
+	srv                 *anetserver.Server
+	pluginManager       *plugins.PluginManager
+	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
+	hsmSvc              *hsm.HSM
+	activeConns         int32
 }
 
 func (l logAdapter) Print(v ...any) {
@@ -60,6 +61,7 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 	}
 
 	s := &Server{address: address, pluginManager: pm}
+	s.pluginManagerHolder.Store(pm)
 	handler := anetserver.HandlerFunc(s.handle)
 	srv, err := anetserver.NewServer(address, handler, cfg)
 	if err != nil {
@@ -100,6 +102,20 @@ func (s *Server) Start() error {
 // Stop gracefully shuts down the server.
 func (s *Server) Stop() error {
 	return s.srv.Stop()
+}
+
+// SetPluginManager swaps in a new PluginManager atomically and closes the old one.
+func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
+	old, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
+	if !ok {
+		log.Error().Msg("failed to load old plugin manager")
+		return
+	}
+	s.pluginManagerHolder.Store(newPM)
+
+	if err := old.Close(); err != nil {
+		log.Error().Err(err).Msg("failed to close old plugin manager")
+	}
 }
 
 // formatData returns ascii string if all bytes are printable, else hex string.
@@ -147,6 +163,12 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	if cmd == "A0" {
 		encrypted, err2 := s.hsmSvc.EncryptUnderLMK(origPayload)
 		if err2 != nil {
+			log.Error().
+				Str("event", "encryption_error").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Err(err2).
+				Msg("Error during encryption under LMK")
 			resp = s.errorResponse(cmd)
 		} else {
 			resp = append([]byte(s.incrementCode(cmd)), encrypted...)
@@ -174,7 +196,23 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 		// record plugin execution time.
 		execStart := time.Now()
-		resp, execErr = s.pluginManager.ExecuteCommand(cmd, execPayload)
+		pm, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
+		if !ok {
+			log.Error().
+				Str("event", "plugin_manager_load_error").
+				Msg("failed to load plugin manager")
+
+			return nil, errors.New("plugin manager load failed")
+		}
+		resp, execErr = pm.ExecuteCommand(cmd, execPayload)
+		if execErr != nil {
+			log.Error().
+				Str("event", "plugin_execution_error").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Err(execErr).
+				Msg("Error during plugin execution")
+		}
 		execDur := time.Since(execStart)
 		log.Debug().
 			Str("event", "command_executed").

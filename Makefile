@@ -25,7 +25,10 @@ plugins: ## compile Go WASM plugins using TinyGo
 	  if [ -d $$d ]; then \
 	    name=$$(basename $$d); \
 	    echo "  - $$name.wasm"; \
-	    tinygo build -o ./commands/$$name.wasm -target=wasi ./commands/$$name/main.go; \
+	    tinygo build -o ./commands/$$name.wasm -target=wasi -scheduler=none \
+		-opt=z \
+		-no-debug \
+		./commands/$$name/main.go; \
 	  fi; \
 	done
 

@@ -40,10 +40,13 @@ func main() {
 	reloadChan := make(chan os.Signal, 1)
 	signal.Notify(reloadChan, syscall.SIGHUP)
 	go func() {
+		// replace reload loop to atomically swap plugin manager on SIGHUP.
 		for range reloadChan {
-			if err := pm.LoadAll("./commands"); err != nil {
+			newPM := plugins.NewPluginManager(ctx)
+			if err := newPM.LoadAll("./commands"); err != nil {
 				log.Error().Err(err).Msg("failed to reload plugins")
 			} else {
+				srv.SetPluginManager(newPM)
 				log.Info().Msg("plugins reloaded")
 			}
 		}
