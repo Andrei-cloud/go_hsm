@@ -14,7 +14,7 @@ var nextPtr uint32 = 8
 //export Alloc
 func Alloc(size uint32) uint32 {
 	ptr := nextPtr
-	nextPtr += size + (8 - size%8) // Align to 8-byte boundary
+	nextPtr += size + (8 - size%8) // Align to 8-byte boundary.
 	return ptr
 }
 
@@ -25,14 +25,17 @@ func Free(_ uint32) {
 
 //export Execute
 func Execute(ptr, length uint32) uint64 {
+	nextPtr = 8
+
 	// Input validation
 	if length < 48 {
-		// Input too short for LMK hex, return error
+		// Input too short for LMK hex, return error.
+
 		return makeErrorResponse()
 	}
 
 	// The input is already in WASM memory at ptr
-	// No need to copy, just slice the memory
+	// No need to copy, just slice the memory.
 	lmkHex := getData(ptr, 48)
 	firmware := getData(ptr+48, length-48)
 
@@ -42,13 +45,13 @@ func Execute(ptr, length uint32) uint64 {
 		return makeErrorResponse()
 	}
 
-	// Build success response: ND00 + KCV + firmware
+	// Build success response: ND00 + KCV + firmware.
 	resp := make([]byte, 0, 4+len(kcv)+len(firmware))
 	resp = append(resp, []byte("ND00")...)
 	resp = append(resp, kcv...)
 	resp = append(resp, firmware...)
 
-	// Write response to memory
+	// Write response to memory.
 	outPtr := Alloc(uint32(len(resp)))
 	putData(outPtr, resp)
 
@@ -63,14 +66,14 @@ func makeErrorResponse() uint64 {
 	return uint64(outPtr)<<32 | 4
 }
 
-// getData gets a slice of data from WASM memory
+// getData gets a slice of data from WASM memory.
 //
 //go:inline
 func getData(offset, length uint32) []byte {
 	return (*[1 << 30]byte)(unsafe.Pointer(uintptr(offset)))[:length:length]
 }
 
-// putData writes data to WASM memory
+// putData writes data to WASM memory.
 //
 //go:inline
 func putData(offset uint32, data []byte) {
