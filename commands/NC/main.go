@@ -8,7 +8,7 @@ import (
 
 // Memory layout:
 // [0-7]: reserved
-// [8+]: available for allocation
+// [8+]: available for allocation.
 var nextPtr uint32 = 8
 
 //export Alloc
@@ -19,7 +19,7 @@ func Alloc(size uint32) uint32 {
 }
 
 //export Free
-func Free(ptr uint32) {
+func Free(_ uint32) {
 	// No-op for this implementation
 }
 
@@ -59,6 +59,7 @@ func makeErrorResponse() uint64 {
 	errResp := []byte("ND86")
 	outPtr := Alloc(4)
 	putData(outPtr, errResp)
+
 	return uint64(outPtr)<<32 | 4
 }
 
