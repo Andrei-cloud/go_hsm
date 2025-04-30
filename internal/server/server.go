@@ -54,7 +54,7 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 		MaxConns:        100,
 		ReadTimeout:     30 * time.Second,
 		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     60 * time.Second,
+		IdleTimeout:     0 * time.Second, // disable idle connection closure.
 		ShutdownTimeout: 5 * time.Second,
 		Logger:          logAdapter{},
 	}
