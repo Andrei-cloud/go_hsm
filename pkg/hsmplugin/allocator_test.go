@@ -4,6 +4,7 @@ import "testing"
 
 // TestResetAllocator verifies that ResetAllocator sets nextPtr to the initial offset.
 func TestResetAllocator(t *testing.T) {
+	t.Parallel()
 	ResetAllocator()
 
 	ptr := Alloc(1)
@@ -14,6 +15,7 @@ func TestResetAllocator(t *testing.T) {
 
 // TestAllocAlignment verifies that Alloc returns 8-byte aligned pointers.
 func TestAllocAlignment(t *testing.T) {
+	t.Parallel()
 	ResetAllocator()
 
 	ptr1 := Alloc(5)

@@ -6,6 +6,7 @@ import (
 
 // TestPackResult verifies that PackResult combines pointer and length into a uint64 value.
 func TestPackResult(t *testing.T) {
+	t.Parallel()
 	highIn := uint32(0xDEADBEEF)
 	lowIn := uint32(0xFEEDFACE)
 	combined := PackResult(highIn, lowIn)
@@ -19,6 +20,7 @@ func TestPackResult(t *testing.T) {
 
 // TestWriteError verifies that WriteError returns a packed result with correct pointer and length.
 func TestWriteError(t *testing.T) {
+	t.Parallel()
 	ResetAllocator()
 
 	cmd := "AZ"

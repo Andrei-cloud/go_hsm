@@ -4,6 +4,8 @@ package hsmplugin
 import "unsafe"
 
 // ReadBytes reads length bytes from WASM linear memory at ptr.
+//
+//nolint:gosec // allow unsafe pointer usage.
 func ReadBytes(ptr, length uint32) []byte {
 	return (*[1 << 30]byte)(unsafe.Pointer(uintptr(ptr)))[:length:length]
 }
