@@ -25,13 +25,17 @@ plugins: ## compile Go WASM plugins using TinyGo
 	@echo "Building wasm plugins with TinyGo..."
 	@rm -f commands/*.wasm
 	@for d in commands/*; do \
-	  if [ -d $$d ]; then \
-	    name=$$(basename $$d); \
-	    echo "  - $$name.wasm"; \
-	    tinygo build -o ./commands/$$name.wasm -target=wasi -scheduler=none \
-		-opt=z \
-		-no-debug \
-		./commands/$$name/main.go; \
-	  fi; \
+		if [ -d $$d ]; then \
+			name=$$(basename $$d); \
+			echo "  - $$name.wasm"; \
+			if [ -f ./commands/$$name/main.go ]; then \
+				tinygo build -o ./commands/$$name.wasm -target=wasi -scheduler=none \
+				-opt=z \
+				-no-debug \
+				./commands/$$name/main.go; \
+			else \
+				echo "    Skipping - no main.go"; \
+			fi; \
+		fi; \
 	done
 

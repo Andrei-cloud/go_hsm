@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -21,6 +23,7 @@ type PluginManager struct {
 	ctx     context.Context
 	runtime wazero.Runtime
 	plugins map[string]*PluginInstance
+	hsm     *hsm.HSM
 	mu      sync.RWMutex
 }
 
@@ -35,8 +38,8 @@ type PluginInstance struct {
 }
 
 // NewPluginManager returns a PluginManager ready to load plugins.
-func NewPluginManager(ctx context.Context) *PluginManager {
-	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance)}
+func NewPluginManager(ctx context.Context, hsm *hsm.HSM) *PluginManager {
+	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance), hsm: hsm}
 }
 
 // LoadAll loads all WASM plugins from the specified directory.
@@ -49,6 +52,109 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	// create new runtime for fresh module instantiation.
 	newRt := wazero.NewRuntime(pm.ctx)
 	wasi_snapshot_preview1.MustInstantiate(pm.ctx, newRt)
+
+	// Create env module with LMK host functions
+	envBuilder := newRt.NewHostModuleBuilder("env")
+
+	// Add log debug function
+	envBuilder.NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) {
+			data, ok := m.Memory().Read(ptr, length)
+			if !ok {
+				log.Error().Msg("failed to read memory in log_debug")
+				return
+			}
+			log.Debug().
+				Str("event", "plugin_debug").
+				Str("debug_msg", string(data)).
+				Msg("plugin debug message")
+		}).
+		Export("log_debug")
+
+	// Add LMK encryption/decryption functions
+	envBuilder.NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, m api.Module, ptr, length uint32) uint64 {
+			data, ok := m.Memory().Read(ptr, length)
+			if !ok {
+				log.Error().Msg("failed to read memory in DecryptUnderLMK")
+				return 0
+			}
+			log.Debug().
+				Str("event", "decrypt_lmk").
+				Str("input_hex", hex.EncodeToString(data)).
+				Msg("calling DecryptUnderLMK")
+			decrypted, err := pm.hsm.DecryptUnderLMK(data)
+			if err != nil {
+				log.Error().Err(err).Msg("DecryptUnderLMK failed")
+				return 0
+			}
+			// Allocate memory for result using Alloc
+			allocFn := m.ExportedFunction("Alloc")
+			if allocFn == nil {
+				log.Error().Msg("failed to get Alloc function")
+				return 0
+			}
+			res, err := allocFn.Call(ctx, uint64(len(decrypted)))
+			if err != nil || len(res) == 0 {
+				log.Error().Err(err).Msg("failed to allocate memory")
+				return 0
+			}
+			outPtr := api.DecodeU32(res[0])
+			if !m.Memory().Write(outPtr, decrypted) {
+				log.Error().Msg("failed to write memory")
+				return 0
+			}
+			return (uint64(outPtr) << 32) | uint64(len(decrypted))
+		}).
+		Export("DecryptUnderLMK")
+
+	envBuilder.NewFunctionBuilder().
+		WithFunc(func(ctx context.Context, m api.Module, ptr, length uint32) uint64 {
+			data, ok := m.Memory().Read(ptr, length)
+			if !ok {
+				log.Error().Msg("failed to read memory in EncryptUnderLMK")
+				return 0
+			}
+			log.Debug().
+				Str("event", "encrypt_lmk").
+				Str("input_hex", hex.EncodeToString(data)).
+				Msg("calling EncryptUnderLMK")
+			encrypted, err := pm.hsm.EncryptUnderLMK(data)
+			if err != nil {
+				log.Error().Err(err).Msg("EncryptUnderLMK failed")
+				return 0
+			}
+			log.Debug().
+				Str("event", "encrypt_lmk_result").
+				Str("output_hex", hex.EncodeToString(encrypted)).
+				Msg("EncryptUnderLMK result")
+
+			// Allocate new memory for result using module's Alloc
+			allocFn := m.ExportedFunction("Alloc")
+			if allocFn == nil {
+				log.Error().Msg("failed to get Alloc function")
+				return 0
+			}
+			res, err := allocFn.Call(ctx, uint64(len(encrypted)))
+			if err != nil || len(res) == 0 {
+				log.Error().Err(err).Msg("failed to allocate memory for encrypted result")
+				return 0
+			}
+			outPtr := api.DecodeU32(res[0])
+			if !m.Memory().Write(outPtr, encrypted) {
+				log.Error().Msg("failed to write encrypted result to memory")
+				return 0
+			}
+
+			// Return pointer and actual length
+			return (uint64(outPtr) << 32) | uint64(len(encrypted))
+		}).
+		Export("EncryptUnderLMK")
+
+	// Instantiate the env module
+	if _, err := envBuilder.Instantiate(pm.ctx); err != nil {
+		return fmt.Errorf("failed to instantiate env module: %w", err)
+	}
 
 	newPlugins := make(map[string]*PluginInstance)
 
@@ -157,6 +263,12 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 		return nil, fmt.Errorf("%w", err)
 	}
 
+	log.Debug().
+		Str("event", "plugin_response").
+		Str("command", cmd).
+		Str("response_hex", hex.EncodeToString(resp)).
+		Msg("plugin execution response")
+
 	return resp, nil
 }
 
@@ -174,6 +286,11 @@ func (pm *PluginManager) GetDescription(cmd string) string {
 // Context returns the context used by the plugin manager.
 func (pm *PluginManager) Context() context.Context {
 	return pm.ctx
+}
+
+// HSM returns the HSM instance used by this plugin manager.
+func (pm *PluginManager) HSM() *hsm.HSM {
+	return pm.hsm
 }
 
 // Close closes the underlying WASM runtime.

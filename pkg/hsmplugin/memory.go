@@ -7,6 +7,7 @@ import "unsafe"
 //
 //nolint:gosec // allow unsafe pointer usage.
 func ReadBytes(ptr, length uint32) []byte {
+	// Directly map to WASM memory.
 	return (*[1 << 30]byte)(unsafe.Pointer(uintptr(ptr)))[:length:length]
 }
 

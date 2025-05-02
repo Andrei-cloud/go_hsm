@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andrei-cloud/anet"
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	server "github.com/andrei-cloud/go_hsm/internal/server"
 )
@@ -17,8 +18,15 @@ const testAddr = "127.0.0.1:1500"
 // startTestServer starts the HSM server for testing.
 func startTestServer(t *testing.T) *server.Server {
 	t.Helper()
-	pm := plugins.NewPluginManager(context.Background())
-	err := pm.LoadAll("../../commands")
+
+	// Initialize test HSM with default LMK
+	hsmSvc, err := hsm.NewHSM("0123456789ABCDEFFEDCBA9876543210", "0007-E000")
+	if err != nil {
+		t.Fatalf("failed to initialize HSM: %v", err)
+	}
+
+	pm := plugins.NewPluginManager(context.Background(), hsmSvc)
+	err = pm.LoadAll("../../commands")
 	if err != nil {
 		t.Fatalf("failed to load plugins: %v", err)
 	}

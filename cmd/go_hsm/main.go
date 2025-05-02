@@ -7,13 +7,14 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/internal/server"
 	"github.com/rs/zerolog/log"
 )
 
-// main initializes logging, plugins, and starts the HSM server.
+// main initializes logging, HSM, plugins, and starts the HSM server.
 func main() {
 	// determine debug mode from environment variable.
 	debugEnv := os.Getenv("DEBUG")
@@ -24,9 +25,21 @@ func main() {
 	human, _ := strconv.ParseBool(humanStr)
 	logging.InitLogger(debug, human)
 
+	// Initialize HSM
+	lmkHex := os.Getenv("HSM_LMK")
+	if lmkHex == "" {
+		log.Warn().Msg("HSM_LMK not set; using default LMK")
+		lmkHex = "0123456789ABCDEFFEDCBA9876543210"
+	}
+
+	hsmSvc, err := hsm.NewHSM(lmkHex, "0007-E000")
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to initialize HSM service")
+	}
+
 	// Use background context for plugin manager to prevent premature cancellation
 	ctx := context.Background()
-	pm := plugins.NewPluginManager(ctx)
+	pm := plugins.NewPluginManager(ctx, hsmSvc)
 	if err := pm.LoadAll("./commands"); err != nil {
 		log.Fatal().Err(err).Msg("failed to load plugins")
 	}
@@ -42,7 +55,7 @@ func main() {
 	go func() {
 		// replace reload loop to atomically swap plugin manager on SIGHUP.
 		for range reloadChan {
-			newPM := plugins.NewPluginManager(ctx)
+			newPM := plugins.NewPluginManager(ctx, hsmSvc)
 			if err := newPM.LoadAll("./commands"); err != nil {
 				log.Error().Err(err).Msg("failed to reload plugins")
 			} else {
