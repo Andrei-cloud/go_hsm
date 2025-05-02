@@ -1,3 +1,4 @@
 .DS_Store
 *.wasm
 go_hsm.code-workspace
+.github/copilot-instructions.md
