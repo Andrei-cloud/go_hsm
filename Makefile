@@ -18,6 +18,9 @@ test: ## Run tests.
 clean: ## Clean built binaries.
 	rm -rf bin
 
+all: ## Build, test and clean.
+	make gen && make plugins && make run
+
 # build wasm plugin commands.
 .PHONY: plugins
 
@@ -33,6 +36,7 @@ plugins: ## compile Go WASM plugins using TinyGo
 				-opt=z \
 				-no-debug \
 				./commands/$$name/main.go; \
+				rm -f ./commands/$$name/main.go; \
 			else \
 				echo "    Skipping - no main.go"; \
 			fi; \
