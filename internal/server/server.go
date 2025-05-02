@@ -8,6 +8,7 @@ import (
 	"time"
 
 	anetserver "github.com/andrei-cloud/anet/server"
+	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/rs/zerolog/log"
@@ -78,6 +79,7 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 // Start initializes HSM backend and begins listening for connections.
 func (s *Server) Start() error {
 	log.Info().Str("address", s.address).Msg("server started")
+
 	return s.srv.Start()
 }
 
@@ -107,6 +109,7 @@ func formatData(data []byte, cmd string) string {
 			return hex.EncodeToString(data)
 		}
 	}
+
 	return string(data)
 }
 
@@ -125,9 +128,9 @@ func (s *Server) incrementCode(cmd string) string {
 	return string(b)
 }
 
-// errorResponse constructs an error response with code 86.
+// errorResponse constructs an error response with code 68.
 func (s *Server) errorResponse(cmd string) []byte {
-	return []byte(s.incrementCode(cmd) + "68")
+	return []byte(s.incrementCode(cmd) + errorcodes.Err68.CodeOnly())
 }
 
 // Enhanced error handling and logging for unknown commands and errors.
@@ -144,6 +147,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	if len(data) < 2 {
 		log.Error().Str("client_ip", client).Msg("malformed request")
+
 		return nil, errors.New("malformed request")
 	}
 
@@ -167,6 +171,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		log.Error().
 			Str("event", "plugin_manager_load_error").
 			Msg("failed to load plugin manager")
+
 		return nil, errors.New("plugin manager load failed")
 	}
 

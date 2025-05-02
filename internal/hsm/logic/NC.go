@@ -36,7 +36,7 @@ func ExecuteNC(input []byte,
 	resp = append(resp, "ND00"...)                        // Status
 	resp = append(resp, cryptoutils.Raw2B(kcvRaw[:8])...) // KCV
 	// append firmware version constant
-	resp = append(resp, []byte(input)...)
+	resp = append(resp, input...)
 
 	log.Debug().
 		Str("event", "nc_format_response").
