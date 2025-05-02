@@ -14,8 +14,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const firmware = "0007-E000"
-
 // logAdapter implements anet.Logger using zerolog.
 type logAdapter struct{}
 
@@ -178,7 +176,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	// Execute command through plugin manager, pass empty slice for NC since it gets firmware from constant
 	execPayload := origPayload
 	if cmd == "NC" {
-		execPayload = []byte(firmware)
+		execPayload = []byte(s.hsmSvc.FirmwareVersion)
 	}
 
 	// Execute command through plugin manager

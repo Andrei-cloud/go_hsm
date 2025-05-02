@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
+	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -38,8 +39,8 @@ type PluginInstance struct {
 }
 
 // NewPluginManager returns a PluginManager ready to load plugins.
-func NewPluginManager(ctx context.Context, hsm *hsm.HSM) *PluginManager {
-	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance), hsm: hsm}
+func NewPluginManager(ctx context.Context, hsmInstance *hsm.HSM) *PluginManager {
+	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance), hsm: hsmInstance}
 }
 
 // LoadAll loads all WASM plugins from the specified directory.
@@ -69,11 +70,10 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Str("debug_msg", string(data)).
 				Msg("plugin debug message")
 		}).
-		Export("log_debug")
-
-	// Add LMK encryption/decryption functions
-	envBuilder.NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, m api.Module, ptr, length uint32) uint64 {
+		Export("log_debug").
+		// Add LMK encryption/decryption functions
+		NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) uint64 {
 			data, ok := m.Memory().Read(ptr, length)
 			if !ok {
 				log.Error().Msg("failed to read memory in DecryptUnderLMK")
@@ -88,28 +88,12 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				log.Error().Err(err).Msg("DecryptUnderLMK failed")
 				return 0
 			}
-			// Allocate memory for result using Alloc
-			allocFn := m.ExportedFunction("Alloc")
-			if allocFn == nil {
-				log.Error().Msg("failed to get Alloc function")
-				return 0
-			}
-			res, err := allocFn.Call(ctx, uint64(len(decrypted)))
-			if err != nil || len(res) == 0 {
-				log.Error().Err(err).Msg("failed to allocate memory")
-				return 0
-			}
-			outPtr := api.DecodeU32(res[0])
-			if !m.Memory().Write(outPtr, decrypted) {
-				log.Error().Msg("failed to write memory")
-				return 0
-			}
-			return (uint64(outPtr) << 32) | uint64(len(decrypted))
-		}).
-		Export("DecryptUnderLMK")
 
-	envBuilder.NewFunctionBuilder().
-		WithFunc(func(ctx context.Context, m api.Module, ptr, length uint32) uint64 {
+			return hsmplugin.PackResult(hsmplugin.WriteBytes(decrypted))
+		}).
+		Export("DecryptUnderLMK").
+		NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) uint64 {
 			data, ok := m.Memory().Read(ptr, length)
 			if !ok {
 				log.Error().Msg("failed to read memory in EncryptUnderLMK")
@@ -129,25 +113,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Str("output_hex", hex.EncodeToString(encrypted)).
 				Msg("EncryptUnderLMK result")
 
-			// Allocate new memory for result using module's Alloc
-			allocFn := m.ExportedFunction("Alloc")
-			if allocFn == nil {
-				log.Error().Msg("failed to get Alloc function")
-				return 0
-			}
-			res, err := allocFn.Call(ctx, uint64(len(encrypted)))
-			if err != nil || len(res) == 0 {
-				log.Error().Err(err).Msg("failed to allocate memory for encrypted result")
-				return 0
-			}
-			outPtr := api.DecodeU32(res[0])
-			if !m.Memory().Write(outPtr, encrypted) {
-				log.Error().Msg("failed to write encrypted result to memory")
-				return 0
-			}
-
-			// Return pointer and actual length
-			return (uint64(outPtr) << 32) | uint64(len(encrypted))
+			return hsmplugin.PackResult(hsmplugin.WriteBytes(encrypted))
 		}).
 		Export("EncryptUnderLMK")
 
@@ -196,22 +162,8 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			continue
 		}
 
-		allocFn := module.ExportedFunction("Alloc")
-		if allocFn == nil {
-			log.Warn().Str("file", f.Name()).Msg("plugin does not export Alloc function")
-			continue
-		}
-
-		freeFn := module.ExportedFunction("Free")
-		if freeFn == nil {
-			log.Warn().Str("file", f.Name()).Msg("plugin does not export Free function")
-			continue
-		}
-
 		newPlugins[cmdCode] = &PluginInstance{
 			Module:      module,
-			Alloc:       allocFn,
-			Free:        freeFn,
 			ExecuteFn:   executeFn,
 			Description: cmdCode,
 		}
@@ -242,20 +194,23 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	// allocate guest memory and write input.
-	ptr, err := AllocAndWrite(pm.ctx, inst.Module, inst.Alloc, input)
-	if err != nil {
-		return nil, fmt.Errorf("%w", err)
+	ptr, inputLen := hsmplugin.WriteBytes(input)
+	if inputLen == 0 {
+		return nil, errors.New("failed to write input to memory")
+	}
+
+	if !inst.Module.Memory().Write(ptr, input[:inputLen]) {
+		return nil, errors.New("failed to write input to memory")
 	}
 
 	// execute plugin and get combined result.
-	combined, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, uint32(len(input)))
+	combined, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, inputLen)
 	if err != nil {
 		return nil, fmt.Errorf("plugin execution error: %w", err)
 	}
 
 	// unpack result into pointer and length.
-	outPtr, outLen := UnpackResult(combined)
+	outPtr, outLen := hsmplugin.UnpackResult(combined)
 
 	// read response from guest memory.
 	resp, err := ReadResult(inst.Module, outPtr, outLen)

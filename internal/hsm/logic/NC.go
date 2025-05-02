@@ -2,7 +2,6 @@
 package logic
 
 import (
-	"encoding/hex"
 	"errors"
 
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
@@ -14,6 +13,12 @@ func ExecuteNC(input []byte,
 	_ func([]byte) ([]byte, error),
 	encryptUnderLMK func([]byte) ([]byte, error),
 ) ([]byte, error) {
+	log.Debug().
+		Str("event", "nc_input_received").
+		Str("input_hex", cryptoutils.Raw2Str(input)).
+		Int("input_length", len(input)).
+		Msg("received NC command input")
+
 	if len(input) < 2 {
 		return nil, errors.New("input too short")
 	}
@@ -27,16 +32,15 @@ func ExecuteNC(input []byte,
 
 	log.Debug().
 		Str("event", "nc_kcv_calc").
-		Str("zeros_hex", hex.EncodeToString(zeros)).
-		Str("kcv_raw_hex", hex.EncodeToString(kcvRaw)).
+		Str("zeros_hex", cryptoutils.Raw2Str(zeros)).
+		Str("kcv_raw_hex", cryptoutils.Raw2Str(kcvRaw)).
 		Msg("KCV calculation")
 
-	// Format response: ND00 + KCV + firmware version.
-	resp := make([]byte, 0, 4+16+len(input))              // ND00 + 16 hex KCV + firmware
-	resp = append(resp, "ND00"...)                        // Status
-	resp = append(resp, cryptoutils.Raw2B(kcvRaw[:8])...) // KCV
-	// append firmware version constant
-	resp = append(resp, input...)
+	// Format response: ND00 + KCV (16 chars) + firmware version from input
+	resp := make([]byte, 0, 4+16+len(input))
+	resp = append(resp, "ND00"...)                        // Command + status
+	resp = append(resp, cryptoutils.Raw2B(kcvRaw[:8])...) // First 8 bytes of KCV in hex
+	resp = append(resp, input...)                         // Firmware version from input parameter
 
 	log.Debug().
 		Str("event", "nc_format_response").

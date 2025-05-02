@@ -40,13 +40,6 @@ func CallExecute(ctx context.Context, exec api.Function, ptr, length uint32) (ui
 	return results[0], nil
 }
 
-// UnpackResult splits a combined uint64 value into pointer and length.
-func UnpackResult(val uint64) (uint32, uint32) {
-	ptr := api.DecodeU32(val >> 32)
-	length := api.DecodeU32(val)
-	return ptr, length
-}
-
 // ReadResult reads length bytes from guest memory at ptr.
 func ReadResult(mod api.Module, ptr, length uint32) ([]byte, error) {
 	data, ok := mod.Memory().Read(ptr, length)

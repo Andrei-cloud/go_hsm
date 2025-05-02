@@ -11,8 +11,7 @@ func TestPackResult(t *testing.T) {
 	lowIn := uint32(0xFEEDFACE)
 	combined := PackResult(highIn, lowIn)
 
-	high := uint32(combined >> 32)
-	low := uint32(combined)
+	high, low := UnpackResult(combined)
 	if high != highIn || low != lowIn {
 		t.Errorf("expected high=0x%X low=0x%X, got high=0x%X low=0x%X", highIn, lowIn, high, low)
 	}
@@ -21,16 +20,14 @@ func TestPackResult(t *testing.T) {
 // TestWriteError verifies that WriteError returns a packed result with correct pointer and length.
 func TestWriteError(t *testing.T) {
 	t.Parallel()
-	ResetAllocator()
 
 	cmd := "AZ"
 	res := WriteError(cmd)
-	high := uint32(res >> 32)
-	low := uint32(res)
+	high, low := UnpackResult(res)
 	if low != 4 {
 		t.Errorf("expected length 4, got %d", low)
 	}
-	if high != 8 {
-		t.Errorf("expected pointer 8, got %d", high)
+	if high != 0x0 {
+		t.Errorf("expected pointer 0, got %d", high)
 	}
 }
