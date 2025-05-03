@@ -235,6 +235,12 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
 
+	log.Debug().
+		Str("event", "plugin_execution").
+		Str("command", cmd).
+		Str("request_hex", hex.EncodeToString(input)).
+		Msg("plugin execution call")
+
 	// execute plugin and get combined result.
 	res, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {

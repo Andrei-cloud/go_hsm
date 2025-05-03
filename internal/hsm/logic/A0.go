@@ -5,11 +5,9 @@ import (
 	"crypto/des"
 	"crypto/rand"
 	"errors"
-	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
-	"github.com/rs/zerolog/log"
 )
 
 // ExecuteA0 processes the A0 payload and returns response bytes.
@@ -33,11 +31,6 @@ func ExecuteA0(
 
 	// Validate mode (0=under LMK only, 1=under ZMK/TMK)
 	if mode != '0' && mode != '1' {
-		log.Debug().
-			Str("event", "a0_validation_error").
-			Str("mode", string(mode)).
-			Msg("invalid mode")
-
 		return nil, errorcodes.ErrA8
 	}
 
@@ -55,7 +48,7 @@ func ExecuteA0(
 	// Generate random key
 	clearKey := make([]byte, keyLength)
 	if n, err := rand.Read(clearKey); err != nil {
-		return nil, fmt.Errorf("generate random key: %w", err)
+		return nil, errors.Join(errors.New("generate random key"), err)
 	} else if n != keyLength {
 		return nil, errors.New("random read incomplete")
 	}
@@ -68,7 +61,7 @@ func ExecuteA0(
 	// Calculate KCV using cryptoutils
 	kcv, err := cryptoutils.KeyCV(cryptoutils.Raw2B(clearKey), 6)
 	if err != nil {
-		return nil, fmt.Errorf("calculate kcv: %w", err)
+		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
 
 	// Handle mode 1 - encrypt under ZMK/TMK
@@ -102,12 +95,12 @@ func ExecuteA0(
 		// Decode and decrypt ZMK/TMK
 		zmkBytes, err := cryptoutils.B2Raw(hexZmk)
 		if err != nil {
-			return nil, fmt.Errorf("decode zmk: %w", err)
+			return nil, errors.Join(errors.New("zmk to binary"), err)
 		}
 
 		rawZmk, err := decryptUnderLMK(zmkBytes)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt zmk: %w", err)
+			return nil, errors.Join(errors.New("decrypt zmk"), err)
 		}
 
 		// Verify ZMK parity using cryptoutils
@@ -127,7 +120,7 @@ func ExecuteA0(
 
 		zmkBlock, err := des.NewTripleDESCipher(fullZmk)
 		if err != nil {
-			return nil, fmt.Errorf("create zmk cipher: %w", err)
+			return nil, errors.Join(errors.New("create zmk cipher"), err)
 		}
 
 		// Encrypt under ZMK
@@ -140,7 +133,7 @@ func ExecuteA0(
 	// Encrypt key under LMK
 	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
 	if err != nil {
-		return nil, fmt.Errorf("encrypt under lmk: %w", err)
+		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}
 
 	// Build response

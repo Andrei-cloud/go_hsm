@@ -101,7 +101,7 @@ func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 }
 
 // formatData returns ascii string if all bytes are printable, else hex string.
-func formatData(data []byte, cmd string) string {
+func formatData(data []byte) string {
 	for _, b := range data {
 		if b < 32 || b > 126 {
 			return hex.EncodeToString(data)
@@ -151,7 +151,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	cmd := string(data[:2])
 	origPayload := data[2:]
-	reqStr := formatData(data, cmd)
+	reqStr := formatData(data)
 	log.Info().
 		Str("event", "request_received").
 		Str("client_ip", client).
@@ -209,7 +209,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		}
 	}
 
-	respStr := formatData(resp, cmd)
+	respStr := formatData(resp)
 	log.Info().
 		Str("event", "response_sent").
 		Str("client_ip", client).
