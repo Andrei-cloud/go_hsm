@@ -4,7 +4,6 @@ package logic
 import (
 	"crypto/des"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -22,7 +21,7 @@ func ExecuteA0(
 ) ([]byte, error) {
 	log.Debug().
 		Str("event", "a0_input").
-		Str("input_hex", hex.EncodeToString(input)).
+		Str("input_hex", cryptoutils.Raw2Str(input)).
 		Int("input_length", len(input)).
 		Msg("processing A0 command")
 
@@ -103,7 +102,7 @@ func ExecuteA0(
 	log.Debug().
 		Str("event", "a0_key_generated").
 		Int("key_length", keyLength).
-		Str("key_hex", hex.EncodeToString(clearKey)).
+		Str("key_hex", cryptoutils.Raw2Str(clearKey)).
 		Msg("generated new random key")
 
 	// Fix key parity using cryptoutils
@@ -115,7 +114,7 @@ func ExecuteA0(
 		Str("event", "a0_key_parity").
 		Bool("original_parity_ok", originalParity).
 		Bool("new_parity_ok", newParity).
-		Str("key_hex", hex.EncodeToString(clearKey)).
+		Str("key_hex", cryptoutils.Raw2Str(clearKey)).
 		Msg("adjusted key parity")
 
 	// Calculate KCV using cryptoutils
@@ -247,7 +246,7 @@ func ExecuteA0(
 
 		log.Debug().
 			Str("event", "a0_zmk_encrypted").
-			Str("encrypted_hex", hex.EncodeToString(zmkEncryptedKey)).
+			Str("encrypted_hex", cryptoutils.Raw2Str(zmkEncryptedKey)).
 			Msg("encrypted key under ZMK")
 	}
 
@@ -264,7 +263,7 @@ func ExecuteA0(
 
 	log.Debug().
 		Str("event", "a0_lmk_encrypted").
-		Str("encrypted_hex", hex.EncodeToString(lmkEncryptedKey)).
+		Str("encrypted_hex", cryptoutils.Raw2Str(lmkEncryptedKey)).
 		Msg("encrypted key under LMK")
 
 	// Build response
@@ -283,7 +282,7 @@ func ExecuteA0(
 	log.Debug().
 		Str("event", "a0_response").
 		Int("response_length", len(resp)).
-		Str("response_hex", hex.EncodeToString(resp)).
+		Str("response_hex", cryptoutils.Raw2Str(resp)).
 		Bool("has_zmk", zmkEncryptedKey != nil).
 		Msg("built final A0 response")
 

@@ -36,6 +36,7 @@ func AllocBuffer(
 	if !mod.Memory().Write(ptr, data) {
 		return 0, errors.New("memory write failed: bounds exceeded")
 	}
+
 	return ptr, nil
 }
 

@@ -88,7 +88,21 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				return 0
 			}
 
-			return uint64(hsmplugin.ToBuffer(decrypted))
+			// allocate guest memory for decrypted data
+			allocFn := m.ExportedFunction("Alloc")
+			results, err := allocFn.Call(context.Background(), uint64(len(decrypted)))
+			if err != nil || len(results) == 0 {
+				log.Error().Err(err).Msg("failed to alloc guest memory for DecryptUnderLMK")
+				return 0
+			}
+			packed := results[0]
+			dst := api.DecodeU32(packed >> 32)
+			if !m.Memory().Write(dst, decrypted) {
+				log.Error().Msg("failed to write decrypted data to guest memory")
+				return 0
+			}
+
+			return packed
 		}).
 		Export("DecryptUnderLMK").
 		NewFunctionBuilder().
@@ -112,7 +126,21 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Str("output_hex", hex.EncodeToString(encrypted)).
 				Msg("EncryptUnderLMK result")
 
-			return uint64(hsmplugin.ToBuffer(encrypted))
+			// allocate guest memory for encrypted data
+			allocFn := m.ExportedFunction("Alloc")
+			results, err := allocFn.Call(context.Background(), uint64(len(encrypted)))
+			if err != nil || len(results) == 0 {
+				log.Error().Err(err).Msg("failed to alloc guest memory for EncryptUnderLMK")
+				return 0
+			}
+			packed := results[0]
+			dst := api.DecodeU32(packed >> 32)
+			if !m.Memory().Write(dst, encrypted) {
+				log.Error().Msg("failed to write encrypted data to guest memory")
+				return 0
+			}
+
+			return packed
 		}).
 		Export("EncryptUnderLMK")
 
