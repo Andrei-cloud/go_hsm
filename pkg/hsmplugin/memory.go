@@ -59,10 +59,10 @@ func writeBytes(data []byte) (uint32, uint32) {
 		return 0, 0
 	}
 
-	address := uint32(uintptr(unsafe.Pointer(&data[0])) << 32)
-	length := uint32(len(data))
+	// get the low 32 bits of the wasm-memory pointer to data[0].
+	ptr := uint32(uintptr(unsafe.Pointer(&data[0])))
 
-	return address, length
+	return ptr, uint32(len(data))
 }
 
 // packResult combines a pointer and a length into a single uint64 result.

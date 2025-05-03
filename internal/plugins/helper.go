@@ -9,26 +9,33 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
-// AllocBuffer allocates guest memory via alloc function and writes data into it.
+// AllocBuffer allocates guest memory via the wasm Alloc export and writes
+// the given host‐side data slice into the guest’s linear memory.
 func AllocBuffer(
 	ctx context.Context,
 	mod api.Module,
 	alloc api.Function,
-	buf hsmplugin.Buffer,
+	data []byte,
 ) (uint32, error) {
-	_, length := buf.AddressSize()
+	length := uint32(len(data))
 	if length == 0 {
 		return 0, errors.New("buffer length is zero")
 	}
+
 	results, err := alloc.Call(ctx, uint64(length))
 	if err != nil {
 		return 0, fmt.Errorf("alloc failed: %w", err)
 	}
-	ptr := api.DecodeU32(results[0])
-	if !mod.Memory().Write(ptr, buf.ToBytes()) {
-		return 0, errors.New("memory write failed: bounds exceeded")
+	if len(results) < 1 {
+		return 0, errors.New("alloc returned no results")
 	}
 
+	// The wasm Alloc returns a packed u64 ptr<<32|len, so high 32 bits is ptr.
+	ptr := api.DecodeU32(results[0] >> 32)
+
+	if !mod.Memory().Write(ptr, data) {
+		return 0, errors.New("memory write failed: bounds exceeded")
+	}
 	return ptr, nil
 }
 

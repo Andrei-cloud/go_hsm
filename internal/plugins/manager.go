@@ -201,11 +201,8 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	buf := hsmplugin.ToBuffer(input)
-	if buf == 0 {
-		return nil, errors.New("failed to create buffer")
-	}
-	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, buf)
+	// allocate guest memory for input and copy it in
+	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
