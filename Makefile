@@ -36,7 +36,6 @@ plugins: ## compile Go WASM plugins using TinyGo
 				-opt=z \
 				-no-debug \
 				./commands/$$name/main.go; \
-				rm -f ./commands/$$name/main.go; \
 			else \
 				echo "    Skipping - no main.go"; \
 			fi; \

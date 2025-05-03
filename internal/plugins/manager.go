@@ -31,8 +31,7 @@ type PluginManager struct {
 // PluginInstance holds a WASM module and its execute function.
 type PluginInstance struct {
 	Module      api.Module
-	Alloc       api.Function
-	Free        api.Function
+	AllocFn     api.Function
 	ExecuteFn   api.Function
 	Description string
 	mu          sync.Mutex
@@ -89,7 +88,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				return 0
 			}
 
-			return hsmplugin.PackResult(hsmplugin.WriteBytes(decrypted))
+			return uint64(hsmplugin.ToBuffer(decrypted))
 		}).
 		Export("DecryptUnderLMK").
 		NewFunctionBuilder().
@@ -113,7 +112,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Str("output_hex", hex.EncodeToString(encrypted)).
 				Msg("EncryptUnderLMK result")
 
-			return hsmplugin.PackResult(hsmplugin.WriteBytes(encrypted))
+			return uint64(hsmplugin.ToBuffer(encrypted))
 		}).
 		Export("EncryptUnderLMK")
 
@@ -162,9 +161,17 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			continue
 		}
 
+		allocFn := module.ExportedFunction("Alloc")
+		if allocFn == nil {
+			log.Warn().Str("file", f.Name()).Msg("plugin does not export Alloc function")
+
+			continue
+		}
+
 		newPlugins[cmdCode] = &PluginInstance{
 			Module:      module,
 			ExecuteFn:   executeFn,
+			AllocFn:     allocFn,
 			Description: cmdCode,
 		}
 		log.Info().Str("plugin", cmdCode).Msg("loaded wasm plugin")
@@ -194,26 +201,23 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 
-	ptr, inputLen := hsmplugin.WriteBytes(input)
-	if inputLen == 0 {
-		return nil, errors.New("failed to write input to memory")
+	buf := hsmplugin.ToBuffer(input)
+	if buf == 0 {
+		return nil, errors.New("failed to create buffer")
 	}
-
-	if !inst.Module.Memory().Write(ptr, input[:inputLen]) {
-		return nil, errors.New("failed to write input to memory")
+	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
 
 	// execute plugin and get combined result.
-	combined, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, inputLen)
+	res, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {
 		return nil, fmt.Errorf("plugin execution error: %w", err)
 	}
 
-	// unpack result into pointer and length.
-	outPtr, outLen := hsmplugin.UnpackResult(combined)
-
 	// read response from guest memory.
-	resp, err := ReadResult(inst.Module, outPtr, outLen)
+	resp, err := ReadBuffer(inst.Module, hsmplugin.Buffer(res))
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}

@@ -27,25 +27,32 @@ func DecryptUnderLMK(ptr, length uint32) uint64
 //export EncryptUnderLMK
 func EncryptUnderLMK(ptr, length uint32) uint64
 
+//export Alloc
+func Alloc(size uint32) hsmplugin.Buffer {
+  return hsmplugin.ToBuffer(make([]byte, size))
+}
+
 //export Execute
-func Execute(ptr, length uint32) uint64 {
-    in := hsmplugin.ReadBytes(ptr, length)
-    hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} command input: %x", in))
+func Execute(buf hsmplugin.Buffer) uint64 {
+    in := hsmplugin.Buffer(buf).ToBytes()
+    hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  command input: %x", in))
 
     decryptUnderLMK := func(data []byte) ([]byte, error) {
         if len(data) == 0 {
             return nil, fmt.Errorf("encrypt data is empty")
         }
-        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} decrypt request: %x", data))
-        
-        r := DecryptUnderLMK(hsmplugin.WriteBytes(data))
+        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  decrypt request: %x", data))
+
+        buf := hsmplugin.ToBuffer(data)
+
+        r := DecryptUnderLMK(buf.AddressSize())
         if r == 0 {
-            hsmplugin.LogToHost("{{.Cmd}} decrypt failed")
+            hsmplugin.LogToHost("{{.Cmd}}  decrypt failed")
             return nil, fmt.Errorf("decrypt failed")
         }
 
-        result := hsmplugin.ReadBytes(hsmplugin.UnpackResult(r))
-        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} decrypt result: %x", result))
+        result := hsmplugin.Buffer(r).ToBytes()
+        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  decrypt result: %x", result))
 
         return result, nil
     }
@@ -54,32 +61,37 @@ func Execute(ptr, length uint32) uint64 {
         if len(data) == 0 {
             return nil, fmt.Errorf("encrypt data is empty")
         }
-        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} encrypt request: %x", data))
+        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  encrypt request: %x", data))
+
+
+        buf := hsmplugin.ToBuffer(data)
         
-        r := EncryptUnderLMK(hsmplugin.WriteBytes(data))
+        r := EncryptUnderLMK(buf.AddressSize())
         if r == 0 {
-            hsmplugin.LogToHost("{{.Cmd}} encrypt failed")
+            hsmplugin.LogToHost("{{.Cmd}}  encrypt failed")
             return nil, fmt.Errorf("encrypt failed")
         }
 
-        result := hsmplugin.ReadBytes(hsmplugin.UnpackResult(r))
-        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} encrypt result: %x", result))
+        result := hsmplugin.Buffer(r).ToBytes()
+    
+        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  encrypt result: %x", result))
 
         return result, nil
     }
 
     out, err := logic.Execute{{.Cmd}}(in, decryptUnderLMK, encryptUnderLMK)
     if err != nil {
-        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} execution failed: %v", err))
-        return hsmplugin.WriteError("{{.Cmd}}")
+        hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  execution failed: %v", err))
+        return uint64(hsmplugin.WriteError("{{.Cmd}} "))
     }
 
-    hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}} command output: %x", out))
+    hsmplugin.LogToHost(fmt.Sprintf("{{.Cmd}}  command output: %x", out))
 
-    return hsmplugin.PackResult(hsmplugin.WriteBytes(out))
+    return uint64(hsmplugin.ToBuffer(out))
 }
 
-func main() {}`
+func main() {}
+`
 
 func main() {
 	// parse flags
