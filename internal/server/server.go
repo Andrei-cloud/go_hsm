@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -10,6 +9,7 @@ import (
 	anetserver "github.com/andrei-cloud/anet/server"
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
+	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/rs/zerolog/log"
 )
@@ -100,17 +100,6 @@ func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 	}
 }
 
-// formatData returns ascii string if all bytes are printable, else hex string.
-func formatData(data []byte) string {
-	for _, b := range data {
-		if b < 32 || b > 126 {
-			return hex.EncodeToString(data)
-		}
-	}
-
-	return string(data)
-}
-
 // incrementCode returns the next command code by incrementing the second character.
 func (s *Server) incrementCode(cmd string) string {
 	b := []byte(cmd)
@@ -151,14 +140,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	cmd := string(data[:2])
 	origPayload := data[2:]
-	reqStr := formatData(data)
-	log.Info().
-		Str("event", "request_received").
-		Str("client_ip", client).
-		Str("command", cmd).
-		Str("request", reqStr).
-		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
-		Msg("received command")
+	// skip separate request log in non-debug mode, will log processed result later.
 
 	// handle built-in A0 encryption under LMK.
 	var resp []byte
@@ -209,21 +191,30 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 		}
 	}
 
-	respStr := formatData(resp)
-	log.Info().
-		Str("event", "response_sent").
-		Str("client_ip", client).
-		Str("response", respStr).
-		Int("active_connections", int(atomic.LoadInt32(&s.activeConns))).
-		Msg("sent response")
-
-	total := time.Since(start)
-	log.Debug().
-		Str("event", "handle_done").
-		Str("request", reqStr).
-		Str("response", respStr).
-		Str("duration", total.String()).
-		Msg("completed request handling")
+	// unified processed log with duration and error status
+	duration := time.Since(start)
+	reqStr := logging.FormatData(data)
+	respStr := logging.FormatData(resp)
+	if execErr != nil {
+		log.Error().
+			Str("event", "request_processed").
+			Str("client_ip", client).
+			Str("command", cmd).
+			Str("request", reqStr).
+			Str("response", respStr).
+			Str("duration", duration.String()).
+			Err(execErr).
+			Msg("command execution failed")
+	} else {
+		log.Info().
+			Str("event", "request_processed").
+			Str("client_ip", client).
+			Str("command", cmd).
+			Str("request", reqStr).
+			Str("response", respStr).
+			Str("duration", duration.String()).
+			Msg("command processed")
+	}
 
 	return resp, nil
 }

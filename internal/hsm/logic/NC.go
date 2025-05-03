@@ -11,8 +11,9 @@ import (
 func ExecuteNC(input []byte,
 	_ func([]byte) ([]byte, error),
 	encryptUnderLMK func([]byte) ([]byte, error),
+	logFn func(string),
 ) ([]byte, error) {
-	if len(input) < 2 {
+	if len(input) < 9 {
 		return nil, errors.New("input too short")
 	}
 

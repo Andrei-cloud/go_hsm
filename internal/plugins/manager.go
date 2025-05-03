@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
+	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
@@ -66,8 +67,8 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			}
 			log.Debug().
 				Str("event", "plugin_debug").
-				Str("debug_msg", string(data)).
-				Msg("plugin debug message")
+				Str("msg", logging.FormatData(data)).
+				Msg("wasm")
 		}).
 		Export("log_debug").
 		// Add LMK encryption/decryption functions

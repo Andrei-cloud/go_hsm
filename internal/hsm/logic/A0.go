@@ -16,6 +16,7 @@ func ExecuteA0(
 	input []byte,
 	decryptUnderLMK func([]byte) ([]byte, error),
 	encryptUnderLMK func([]byte) ([]byte, error),
+	logFn func(string),
 ) ([]byte, error) {
 	// Validate minimum input length: mode(1) + keytype(3) + scheme(1)
 	if len(input) < 5 {
@@ -39,30 +40,35 @@ func ExecuteA0(
 		return nil, errorcodes.Err26
 	}
 
-	// Determine key length based on scheme
-	keyLength := 16 // 'U' scheme = double length
+	// Determine key length based on scheme.
+	keyLength := 16 // 'U' scheme = double length.
 	if keyScheme == 'T' {
-		keyLength = 24 // 'T' scheme = triple length
+		keyLength = 24 // 'T' scheme = triple length.
 	}
-
-	// Generate random key
+	// Generate random key.
 	clearKey := make([]byte, keyLength)
 	if n, err := rand.Read(clearKey); err != nil {
 		return nil, errors.Join(errors.New("generate random key"), err)
 	} else if n != keyLength {
 		return nil, errors.New("random read incomplete")
 	}
-
-	// Fix key parity using cryptoutils
+	// If double-length key, extend to 24 bytes by appending first 8 bytes to the end.
+	if keyScheme == 'U' {
+		clearKey = append(clearKey, clearKey[:8]...)
+	}
+	// Fix key parity using cryptoutils.
 	if !cryptoutils.CheckKeyParity(clearKey) {
 		clearKey = cryptoutils.ModifyKeyParity(clearKey)
 	}
+	logFn("A0 clear key: " + cryptoutils.Raw2Str(clearKey[:keyLength]))
 
 	// Calculate KCV using cryptoutils
 	kcv, err := cryptoutils.KeyCV(cryptoutils.Raw2B(clearKey), 6)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
+
+	logFn("A0 kcv: " + string(kcv))
 
 	// Handle mode 1 - encrypt under ZMK/TMK
 	var zmkEncryptedKey []byte
@@ -124,14 +130,14 @@ func ExecuteA0(
 		}
 
 		// Encrypt under ZMK
-		zmkEncryptedKey = make([]byte, len(clearKey))
+		zmkEncryptedKey = make([]byte, len(clearKey[:keyLength]))
 		for i := 0; i < len(clearKey); i += 8 {
 			zmkBlock.Encrypt(zmkEncryptedKey[i:i+8], clearKey[i:i+8])
 		}
 	}
 
 	// Encrypt key under LMK
-	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
+	lmkEncryptedKey, err := encryptUnderLMK(clearKey[:keyLength])
 	if err != nil {
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}

@@ -86,7 +86,7 @@ func WriteError(cmd string) Buffer {
 		b++
 	}
 
-	errCode := cmd[:1] + string(b) + errorcodes.Err68.CodeOnly()
+	errCode := "Err: " + cmd[:1] + string(b) + errorcodes.Err68.CodeOnly()
 
 	return ToBuffer([]byte(errCode))
 }

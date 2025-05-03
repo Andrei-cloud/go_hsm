@@ -67,3 +67,16 @@ func LogResponse(
 		Int("active_connections", activeConns).
 		Msg("sent response")
 }
+
+// FormatData returns ascii string if all bytes are printable or contain 0x0A, else hex string.
+func FormatData(data []byte) string {
+	for _, b := range data {
+		if b < 32 || b > 126 {
+			if b != 0x0A {
+				return hex.EncodeToString(data)
+			}
+		}
+	}
+
+	return string(data)
+}

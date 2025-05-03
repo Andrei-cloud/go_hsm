@@ -29,6 +29,10 @@ func DecryptUnderLMK(ptr, length uint32) uint64
 //export EncryptUnderLMK
 func EncryptUnderLMK(ptr, length uint32) uint64
 
+//go:wasm-module env
+//export log_debug
+func LogToHost(string)
+
 //export Alloc
 func Alloc(size uint32) hsmplugin.Buffer {
   return hsmplugin.ToBuffer(make([]byte, size))
@@ -37,22 +41,21 @@ func Alloc(size uint32) hsmplugin.Buffer {
 //export Execute
 func Execute(buf hsmplugin.Buffer) uint64 {
     in := hsmplugin.Buffer(buf).ToBytes()
-    hsmplugin.LogToHost("{{.Cmd}} command input: " + cryptoutils.Raw2Str(in))
+    LogToHost("{{.Cmd}} command input: " + string(in))
 
     decryptUnderLMK := func(data []byte) ([]byte, error) {
         if len(data) == 0 {
             return nil, errors.New("encrypt data is empty")
         }
-        hsmplugin.LogToHost("{{.Cmd}} decrypt request: " + cryptoutils.Raw2Str(data))
+        LogToHost("{{.Cmd}} decrypt request: " + cryptoutils.Raw2Str(data))
 
         buf := hsmplugin.ToBuffer(data)
         r := DecryptUnderLMK(buf.AddressSize())
         if r == 0 {
-            hsmplugin.LogToHost("{{.Cmd}} decrypt failed")
             return nil, errors.New("decrypt failed")
         }
         result := hsmplugin.Buffer(r).ToBytes()
-        hsmplugin.LogToHost("{{.Cmd}} decrypt result: " + cryptoutils.Raw2Str(result))
+        LogToHost("{{.Cmd}} decrypt result: " + cryptoutils.Raw2Str(result))
 
         return result, nil
     }
@@ -61,27 +64,30 @@ func Execute(buf hsmplugin.Buffer) uint64 {
         if len(data) == 0 {
             return nil, errors.New("encrypt data is empty")
         }
-        hsmplugin.LogToHost("{{.Cmd}} encrypt request: " + cryptoutils.Raw2Str(data))
+        LogToHost("{{.Cmd}} encrypt request: " + string(data))
 
         buf := hsmplugin.ToBuffer(data)
         r := EncryptUnderLMK(buf.AddressSize())
         if r == 0 {
-            hsmplugin.LogToHost("{{.Cmd}} encrypt failed")
             return nil, errors.New("encrypt failed")
         }
         result := hsmplugin.Buffer(r).ToBytes()
-        hsmplugin.LogToHost("{{.Cmd}} encrypt result: " + cryptoutils.Raw2Str(result))
+        LogToHost("{{.Cmd}} encrypt result: " + cryptoutils.Raw2Str(result))
 
         return result, nil
     }
 
-    out, err := logic.Execute{{.Cmd}}(in, decryptUnderLMK, encryptUnderLMK)
+    logToHost := func(data string) {
+        LogToHost(data)
+    }
+
+    out, err := logic.Execute{{.Cmd}}(in, decryptUnderLMK, encryptUnderLMK, logToHost)
     if err != nil {
-        hsmplugin.LogToHost("{{.Cmd}} execution failed: " + err.Error())
+        LogToHost("{{.Cmd}} execution failed: " + err.Error())
         return uint64(hsmplugin.WriteError("{{.Cmd}} "))
     }
 
-    hsmplugin.LogToHost("{{.Cmd}} command output: " + cryptoutils.Raw2Str(out))
+    LogToHost("{{.Cmd}} command output: " + string(out))
 
     return uint64(hsmplugin.ToBuffer(out))
 }
