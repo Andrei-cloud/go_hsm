@@ -1,3 +1,4 @@
+// Package server wraps the TCP server and HSM logic for processing HSM commands.
 package server
 
 import (
@@ -17,7 +18,7 @@ import (
 // logAdapter implements anet.Logger using zerolog.
 type logAdapter struct{}
 
-// Server wraps the anet TCP server and HSM logic.
+// Server handles HSM requests over TCP by delegating to WASM plugins.
 type Server struct {
 	address             string
 	srv                 *anetserver.Server
@@ -47,7 +48,7 @@ func (l logAdapter) Errorf(format string, v ...any) {
 	log.Error().Msgf(format, v...)
 }
 
-// NewServer configures and returns the HSM server instance.
+// NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
 func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 	cfg := &anetserver.ServerConfig{
 		MaxConns:        100,
@@ -74,7 +75,7 @@ func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
 	return s, nil
 }
 
-// Start initializes HSM backend and begins listening for connections.
+// Start begins listening for connections and processing requests.
 func (s *Server) Start() error {
 	log.Info().Str("address", s.address).Msg("server started")
 
@@ -86,7 +87,7 @@ func (s *Server) Stop() error {
 	return s.srv.Stop()
 }
 
-// SetPluginManager swaps in a new PluginManager atomically and closes the old one.
+// SetPluginManager atomically replaces the PluginManager and closes the old one.
 func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 	old, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
 	if !ok {

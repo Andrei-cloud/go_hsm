@@ -1,4 +1,4 @@
-// Package hsmplugin provides helper functions for WASM plugins.
+// Package hsmplugin provides WASM memory management and helper utilities for plugin wrappers.
 package hsmplugin
 
 import (
@@ -8,8 +8,11 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// Buffer represents a pointer and length packed in a uint64 for WASM memory operations.
+// The high 32 bits hold the pointer and the low 32 bits hold the length.
 type Buffer uint64
 
+// ToBuffer allocates memory for data in WASM linear memory and returns a Buffer referencing it.
 func ToBuffer(data []byte) Buffer {
 	if len(data) == 0 {
 		return Buffer(0)
@@ -18,6 +21,7 @@ func ToBuffer(data []byte) Buffer {
 	return Buffer(packResult(writeBytes(data)))
 }
 
+// ToBytes reads and returns the byte slice from WASM memory pointed to by Buffer.
 func (b Buffer) ToBytes() []byte {
 	if b == 0 {
 		return nil
@@ -32,6 +36,7 @@ func (b Buffer) ToBytes() []byte {
 	return ReadBytes(ptr, length)
 }
 
+// AddressSize returns the pointer and length stored within the Buffer.
 func (b Buffer) AddressSize() (uint32, uint32) {
 	if b == 0 {
 		return 0, 0
@@ -45,7 +50,7 @@ func (b Buffer) AddressSize() (uint32, uint32) {
 	return ptr, length
 }
 
-// ReadBytes reads length bytes from WASM linear memory at ptr.
+// ReadBytes reads length bytes from WASM linear memory at ptr and returns them as a slice.
 //
 //nolint:gosec // allow unsafe pointer usage.
 func ReadBytes(ptr, length uint32) []byte {
@@ -77,7 +82,7 @@ func unpackResult(val uint64) (uint32, uint32) {
 	return ptr, length
 }
 
-// WriteError allocates and writes an error code for the specified command and returns the packed result.
+// WriteError allocates and writes an error code for the specified command and returns a Buffer containing the packed result.
 func WriteError(cmd string) Buffer {
 	b := cmd[1]
 	if b == 'Z' {

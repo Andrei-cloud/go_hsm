@@ -1,3 +1,4 @@
+// Package plugins provides helper routines for allocating and executing WASM plugin memory operations.
 package plugins
 
 import (
@@ -10,7 +11,7 @@ import (
 )
 
 // AllocBuffer allocates guest memory via the wasm Alloc export and writes
-// the given host‐side data slice into the guest’s linear memory.
+// the given host-side data slice into the guest's linear memory, returning the pointer address.
 func AllocBuffer(
 	ctx context.Context,
 	mod api.Module,
@@ -40,7 +41,7 @@ func AllocBuffer(
 	return ptr, nil
 }
 
-// CallExecute invokes the plugin's Execute function with pointer and length.
+// CallExecute invokes the plugin's Execute function with pointer and length and returns the packed uint64 result.
 func CallExecute(ctx context.Context, exec api.Function, ptr, length uint32) (uint64, error) {
 	results, err := exec.Call(ctx, uint64(ptr)<<32|uint64(length))
 	if err != nil {
@@ -53,7 +54,7 @@ func CallExecute(ctx context.Context, exec api.Function, ptr, length uint32) (ui
 	return results[0], nil
 }
 
-// ReadBuffer reads length bytes from guest memory at ptr.
+// ReadBuffer reads bytes from guest memory at the address represented by buf and returns them as a byte slice.
 func ReadBuffer(mod api.Module, buf hsmplugin.Buffer) ([]byte, error) {
 	data, ok := mod.Memory().Read(buf.AddressSize())
 	if !ok {

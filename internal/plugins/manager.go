@@ -1,3 +1,4 @@
+// Package plugins manages the loading and execution of WASM plugin instances for HSM commands.
 package plugins
 
 import (
@@ -29,7 +30,7 @@ type PluginManager struct {
 	mu      sync.RWMutex
 }
 
-// PluginInstance holds a WASM module and its execute function.
+// PluginInstance holds a WASM module and its execute and allocation functions.
 type PluginInstance struct {
 	Module      api.Module
 	AllocFn     api.Function
@@ -38,12 +39,12 @@ type PluginInstance struct {
 	mu          sync.Mutex
 }
 
-// NewPluginManager returns a PluginManager ready to load plugins.
+// NewPluginManager returns a PluginManager ready to load plugins using the provided context and HSM instance.
 func NewPluginManager(ctx context.Context, hsmInstance *hsm.HSM) *PluginManager {
 	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance), hsm: hsmInstance}
 }
 
-// LoadAll loads all WASM plugins from the specified directory.
+// LoadAll loads all WASM plugins from the specified directory, instantiating each and storing it by command code.
 func (pm *PluginManager) LoadAll(dir string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -219,7 +220,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	return nil
 }
 
-// ExecuteCommand executes the given command with input via the corresponding WASM plugin.
+// ExecuteCommand executes the given command with input via the corresponding WASM plugin and returns the response bytes.
 func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error) {
 	pm.mu.RLock()
 	inst, ok := pm.plugins[cmd]
@@ -263,7 +264,7 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	return resp, nil
 }
 
-// GetDescription returns the description of the given command or the command if not found.
+// GetDescription returns the description of the given command or the command code if not found.
 func (pm *PluginManager) GetDescription(cmd string) string {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
@@ -284,7 +285,7 @@ func (pm *PluginManager) HSM() *hsm.HSM {
 	return pm.hsm
 }
 
-// Close closes the underlying WASM runtime.
+// Close closes the underlying WASM runtime and releases resources.
 func (pm *PluginManager) Close() error {
 	return pm.runtime.Close(pm.ctx)
 }

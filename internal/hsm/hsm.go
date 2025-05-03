@@ -1,3 +1,4 @@
+// Package hsm provides the HSM service implementation and key management.
 package hsm
 
 import (
@@ -7,7 +8,7 @@ import (
 	"errors"
 )
 
-// HSM represents the hardware security module server.
+// HSM represents the hardware security module server holding the LMK, firmware version, and cipher for encryption operations.
 type HSM struct {
 	LMK             []byte
 	FirmwareVersion string
@@ -15,6 +16,7 @@ type HSM struct {
 }
 
 // NewHSM creates a new HSM instance with the given LMK key in hex and firmware version.
+// keyHex must be 16, 32, or 48 hex characters; shorter lengths are expanded automatically.
 func NewHSM(keyHex, firmwareVersion string) (*HSM, error) {
 	if len(keyHex)%16 != 0 || len(keyHex) > 48 {
 		return nil, errors.New("invalid key hex length: must be 16, 32 or 48 hex characters")
@@ -38,7 +40,7 @@ func NewHSM(keyHex, firmwareVersion string) (*HSM, error) {
 	return &HSM{LMK: key, FirmwareVersion: firmwareVersion, cipher: cipherBlock}, nil
 }
 
-// EncryptUnderLMK encrypts the provided key under the LMK.
+// EncryptUnderLMK encrypts the provided key under the LMK and returns the ciphertext.
 func (h *HSM) EncryptUnderLMK(key []byte) ([]byte, error) {
 	if len(key) != 16 && len(key) != 24 {
 		return nil, errors.New("key length must be 16 or 24 bytes")
@@ -54,7 +56,7 @@ func (h *HSM) EncryptUnderLMK(key []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
-// DecryptUnderLMK decrypts the provided key under the LMK.
+// DecryptUnderLMK decrypts the provided key under the LMK and returns the plaintext.
 func (h *HSM) DecryptUnderLMK(key []byte) ([]byte, error) {
 	if len(key) != 16 && len(key) != 24 {
 		return nil, errors.New("key length must be 16 or 24 bytes")
