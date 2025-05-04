@@ -277,7 +277,7 @@ func TestParityAndKeyParity(t *testing.T) {
 	}
 }
 
-func TestGetPINBlock(t *testing.T) {
+func TestComputePINBlockFormat0(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -308,28 +308,111 @@ func TestGetPINBlock(t *testing.T) {
 			want:    0,
 			wantErr: true,
 		},
+		{
+			name:    "pin too long",
+			pin:     "12345678901234",
+			pan:     "4000123412341234",
+			want:    0,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		tt := tt // capture range variable.
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := GetPINBlock(tt.pin, tt.pan)
+			got, err := ComputePINBlockFormat0(tt.pin, tt.pan)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("GetPINBlock() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("ComputePINBlockFormat0() error = %v, wantErr %v.", err, tt.wantErr)
 
 				return
 			}
 			if !tt.wantErr && len(got) != tt.want {
-				t.Errorf("GetPINBlock() got length = %v, want %v.", len(got), tt.want)
+				t.Errorf("ComputePINBlockFormat0() length = %v, want %v.", len(got), tt.want)
 			}
 
-			// Test clear pin recovery.
+			// Verify PIN block can be decrypted
 			if !tt.wantErr {
-				_, err = GetClearPin([]byte(got), tt.pan)
-				if err == nil {
-					t.Error("GetClearPin() expected error for mismatched padding.")
+				pin, err := ExtractPINFormat0(got, tt.pan)
+				if err != nil {
+					t.Errorf("ExtractPINFormat0() error = %v.", err)
 				}
+				if string(pin) != tt.pin {
+					t.Errorf("ExtractPINFormat0() = %v, want %v.", string(pin), tt.pin)
+				}
+			}
+		})
+	}
+}
+
+func TestExtractPINFormat0(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		pinBlock string
+		pan      string
+		wantPin  string
+		wantErr  bool
+	}{
+		{
+			name:     "valid pin block",
+			pinBlock: "041235DCBEDCBEDC", // Correct XORed PIN block hex.
+			pan:      "4000123412341234",
+			wantPin:  "1234",
+			wantErr:  false,
+		},
+		{
+			name:     "invalid pin block length",
+			pinBlock: "0412", // Still invalid length.
+			pan:      "4000123412341234",
+			wantPin:  "",
+			wantErr:  true,
+		},
+		{
+			name: "invalid pin length indicator",
+			// Calculate expected block for PIN field 0F1234FFFFFFFFFF
+			// 0F 12 34 FF FF FF FF FF ^ 00 00 01 23 41 23 41 23 = 0F 12 35 DC BE DC BE DC
+			pinBlock: "0F1235DCBEDCBEDC",
+			pan:      "4000123412341234",
+			wantPin:  "",
+			wantErr:  true,
+		},
+		{
+			name: "non-numeric pin",
+			// Calculate expected block for PIN field 04AB34FFFFFFFFFF
+			// 04 AB 34 FF FF FF FF FF ^ 00 00 01 23 41 23 41 23 = 04 AB 35 DC BE DC BE DC
+			pinBlock: "04AB35DCBEDCBEDC",
+			pan:      "4000123412341234",
+			wantPin:  "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Convert pinBlock hex string to byte array.
+			pinBlockBytes, err := B2Raw([]byte(tt.pinBlock))
+			if err != nil &&
+				!tt.wantErr { // Allow B2Raw error if wantErr is true (e.g., invalid length).
+				t.Fatalf("failed to convert pinBlock: %v.", err)
+			}
+
+			// Handle cases where B2Raw itself should fail (like invalid length).
+			if err != nil && tt.wantErr {
+				return // Expected error from B2Raw, test passes.
+			}
+
+			got, err := ExtractPINFormat0(pinBlockBytes, tt.pan)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractPINFormat0() error = %v, wantErr %v.", err, tt.wantErr)
+
+				return
+			}
+			if !tt.wantErr && string(got) != tt.wantPin {
+				t.Errorf("ExtractPINFormat0() = %v, want %v.", string(got), tt.wantPin)
 			}
 		})
 	}

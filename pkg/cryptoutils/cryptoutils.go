@@ -253,73 +253,149 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 	return []byte(GetDigitsFromString(Raw2Str(dst), 3)), nil
 }
 
-// GetClearPin recovers the clear PIN from a PIN block and PAN.
-func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
-	if len(pinBlockHex) == 0 || accountNumber == "" {
-		return nil, errors.New("pinblock and pan must not be empty")
-	}
-	rawPin, err := hex.DecodeString(string(pinBlockHex))
-	if err != nil {
-		return nil, err
-	}
-	acctPadded := "0000" + accountNumber
-	rawAcct, err := hex.DecodeString(acctPadded)
-	if err != nil {
-		return nil, err
-	}
-	if len(rawPin) != len(rawAcct) {
-		return nil, errors.New("getclearpin: length mismatch")
-	}
-	xorBytes := make([]byte, len(rawPin))
-	for i := range rawPin {
-		xorBytes[i] = rawPin[i] ^ rawAcct[i]
-	}
-	pinHex := Raw2Str(xorBytes)
-	pinLen, err := strconv.ParseInt(pinHex[:2], 16, 0)
-	if err != nil {
-		return nil, err
-	}
-	if pinLen >= 4 && pinLen < 9 {
-		pin := pinHex[2 : 2+pinLen]
-		if _, err := strconv.Atoi(pin); err != nil {
-			return nil, errors.New("getclearpin: pin contains non-numeric characters")
+// ExtractPINFormat0 takes a Format 0 PIN block (8 bytes or 16 hex chars) and a PAN,
+// returning the decoded PIN as a string.
+func ExtractPINFormat0(pinBlock []byte, pan string) ([]byte, error) {
+	var rawPinBlock []byte
+	if len(pinBlock) == 16 { // Hex string input.
+		var err error
+		rawPinBlock, err = hex.DecodeString(string(pinBlock))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode PIN block hex: %v", err)
 		}
-
-		return []byte(pin), nil
+	} else if len(pinBlock) == 8 { // Raw bytes input.
+		rawPinBlock = pinBlock
+	} else {
+		return nil, errors.New("pinBlock must be either 8 bytes or 16 hex chars")
 	}
 
-	return nil, fmt.Errorf("getclearpin: incorrect pin length %d", pinLen)
+	// Validate PAN.
+	if len(pan) < 13 {
+		return nil, errors.New("PAN must be at least 13 digits")
+	}
+	for _, r := range pan {
+		if !unicode.IsDigit(r) {
+			return nil, errors.New("PAN must contain only numeric characters")
+		}
+	}
+
+	// Build PAN field (8 bytes).
+	// Take 12 rightmost PAN digits excluding the check digit.
+	panWithoutCheck := pan[:len(pan)-1] // remove last digit.
+	panDigits := panWithoutCheck
+	if len(panWithoutCheck) > 12 {
+		panDigits = panWithoutCheck[len(panWithoutCheck)-12:]
+	} else if len(panWithoutCheck) < 12 {
+		panDigits = fmt.Sprintf("%012s", panWithoutCheck) // pad left with zeros.
+	}
+	panFieldHex := "0000" + panDigits
+	panField, err := hex.DecodeString(panFieldHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PAN field: %v", err)
+	}
+
+	// XOR pinBlock with PAN field to retrieve original PIN field.
+	pinField := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		pinField[i] = rawPinBlock[i] ^ panField[i]
+	}
+
+	// Convert pin field to uppercase hex for processing.
+	pinFieldHex := strings.ToUpper(hex.EncodeToString(pinField))
+
+	// Check Format nibble is '0'.
+	if pinFieldHex[0] != '0' {
+		return nil, fmt.Errorf("unexpected PIN block format: %c", pinFieldHex[0])
+	}
+
+	// PIN length is second nibble.
+	pinLenNibble := pinFieldHex[1]
+	pinLen, err := strconv.ParseInt(string(pinLenNibble), 16, 8)
+	if err != nil {
+		return nil, fmt.Errorf("invalid PIN length nibble: %v", err)
+	}
+
+	if pinLen < 1 || pinLen > 12 {
+		return nil, fmt.Errorf("invalid decoded PIN length: %d", pinLen)
+	}
+
+	// Extract PIN digits directly from the hex string.
+	// The PIN digits start at index 2 and have length pinLen.
+	pinDigitsStr := pinFieldHex[2 : 2+int(pinLen)]
+
+	// Validate that PIN contains only numeric characters '0'-'9'.
+	for _, r := range pinDigitsStr {
+		if r < '0' || r > '9' {
+			return nil, errors.New("pin contains non-numeric characters")
+		}
+	}
+
+	return []byte(pinDigitsStr), nil
 }
 
-// GetPINBlock constructs an ISO-0 PIN block from the PIN and PAN.
-func GetPINBlock(pin, pan string) (string, error) {
-	if pin == "" || pan == "" {
-		return "", errors.New("pin and pan must not be empty")
+// ComputePINBlockFormat0 encodes a PIN and PAN into a Format 0 PIN block (ISO 9564-1 / ANSI X9.8).
+// It returns a PIN block as a hex string (16 bytes), or an error if inputs are invalid.
+func ComputePINBlockFormat0(pin, pan string) ([]byte, error) {
+	// Validate PIN: must be 1-12 digits (numeric only).
+	pinLength := len(pin)
+	if pinLength == 0 || pinLength > 12 {
+		return nil, fmt.Errorf("invalid PIN length %d (must be 1–12 digits)", pinLength)
 	}
-	// Format block1
-	b1 := fmt.Sprintf("0%d%s", len(pin), pin)
-	for len(b1) < 16 {
-		b1 += "F"
-	}
-	// Format block2
-	b2 := "0000" + pan[len(pan)-13:len(pan)-1]
-	raw1, err := hex.DecodeString(b1)
-	if err != nil {
-		return "", err
-	}
-	raw2, err := hex.DecodeString(b2)
-	if err != nil {
-		return "", err
-	}
-	if len(raw1) != len(raw2) {
-		return "", errors.New("getpinblock: length mismatch")
-	}
-	xorBytes := make([]byte, len(raw1))
-	for i := range raw1 {
-		xorBytes[i] = raw1[i] ^ raw2[i]
+	for _, r := range pin {
+		if !unicode.IsDigit(r) {
+			return nil, errors.New("pin contains non-numeric characters")
+		}
 	}
 
-	return strings.ToUpper(hex.EncodeToString(xorBytes)), nil
+	// Validate PAN: must be numeric and at least 2 digits long.
+	if len(pan) < 2 {
+		return nil, fmt.Errorf("invalid PAN length %d (must be at least 2 digits)", len(pan))
+	}
+	for _, r := range pan {
+		if !unicode.IsDigit(r) {
+			return nil, errors.New("pan contains non-numeric characters")
+		}
+	}
+
+	// Construct PIN field (16 hex nibbles):
+	// First nibble "0", second nibble is PIN length in hex, then PIN digits, then F padding.
+	pinLenHex := fmt.Sprintf("%X", pinLength) // PIN length as a single hex character (0-9 or A-C).
+	padLen := 14 - pinLength                  // number of 'F' pad nibbles needed (total nibbles = 2 + pinLength + padLen = 16).
+	pinFieldHex := "0" + pinLenHex + pin + strings.Repeat("F", padLen)
+
+	// Construct PAN field (16 hex nibbles):
+	// Exclude the last PAN digit (check digit).
+	panWithoutCheck := pan[:len(pan)-1]
+	// Take the rightmost 12 digits of panWithoutCheck. If shorter, left-pad with zeros.
+	var panDigits12 string
+	if len(panWithoutCheck) >= 12 {
+		panDigits12 = panWithoutCheck[len(panWithoutCheck)-12:]
+	} else {
+		// pad with leading zeros to make it 12 digits.
+		panDigits12 = fmt.Sprintf("%012s", panWithoutCheck)
+	}
+	// Now prepend four '0' nibbles:
+	panFieldHex := "0000" + panDigits12
+
+	// Decode the hex strings to 8-byte arrays.
+	pinFieldBytes, err := hex.DecodeString(pinFieldHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PIN field hex: %v", err)
+	}
+	panFieldBytes, err := hex.DecodeString(panFieldHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PAN field hex: %v", err)
+	}
+
+	// XOR the PIN field and PAN field byte-by-byte to get the PIN block.
+	result := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		result[i] = pinFieldBytes[i] ^ panFieldBytes[i]
+	}
+
+	// Convert result to hex string.
+
+	return Raw2B(result), nil
 }
 
 // ParityOf returns 0 for even number of set bits, -1 for odd.
@@ -362,6 +438,16 @@ func FixKeyParity(key []byte) []byte {
 	}
 
 	return res
+}
+
+// GetClearPin extracts a cleartext PIN from a PIN block and PAN.
+func GetClearPin(pinBlock []byte, pan string) ([]byte, error) {
+	result, err := ExtractPINFormat0(pinBlock, pan)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // seedRandom ensures proper entropy for random number generation.
