@@ -232,7 +232,7 @@ func TestParityAndKeyParity(t *testing.T) {
 			parityInput:   0x00,
 			wantParity:    0,
 			keyInput:      "0123456789ABCDEFFEDCBA9876543210",
-			wantKeyParity: false,
+			wantKeyParity: true,
 		},
 		{
 			name:          "failing key",
@@ -269,9 +269,9 @@ func TestParityAndKeyParity(t *testing.T) {
 			}
 
 			// Test key parity correction.
-			fixed := ModifyKeyParity(key)
+			fixed := FixKeyParity(key)
 			if !CheckKeyParity(fixed) {
-				t.Error("ModifyKeyParity() failed to correct key parity.")
+				t.Error("FixKeyParity() failed to correct key parity.")
 			}
 		})
 	}

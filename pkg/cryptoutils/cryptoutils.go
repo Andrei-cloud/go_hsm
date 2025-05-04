@@ -344,16 +344,18 @@ func CheckKeyParity(key []byte) bool {
 	return true
 }
 
-// ModifyKeyParity adjusts each byte so that its parity is even.
-func ModifyKeyParity(key []byte) []byte {
+// FixKeyParity sets each byte to have ODD parity (as required by DES).
+func FixKeyParity(key []byte) []byte {
 	res := make([]byte, len(key))
 	for i, b := range key {
-		if ParityOf(int(b)) == -1 {
-			cand := int(b) + 1
-			for ParityOf(cand) == -1 {
-				cand = (cand + 1) % 256
-			}
-			res[i] = byte(cand)
+		parity := 0
+		for x := b; x != 0; x &= x - 1 {
+			parity ^= 1
+		}
+		// parity == 1 -> already odd, leave as-is
+		// parity == 0 -> even, flip the lowest bit
+		if parity == 0 {
+			res[i] = b ^ 1
 		} else {
 			res[i] = b
 		}
@@ -421,7 +423,7 @@ func GenerateRandomKey(length int) ([]byte, error) {
 
 	// Adjust parity for DES keys.
 	if !CheckKeyParity(finalKey) {
-		finalKey = ModifyKeyParity(finalKey)
+		finalKey = FixKeyParity(finalKey)
 	}
 
 	return finalKey, nil
