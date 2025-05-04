@@ -333,10 +333,10 @@ func ParityOf(x int) int {
 	return parity
 }
 
-// CheckKeyParity returns true if every byte in key has even parity.
+// CheckKeyParity returns true if every byte in key has ODD parity.
 func CheckKeyParity(key []byte) bool {
 	for _, b := range key {
-		if ParityOf(int(b)) == -1 {
+		if ParityOf(int(b)) != -1 {
 			return false
 		}
 	}
