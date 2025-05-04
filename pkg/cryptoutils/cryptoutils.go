@@ -34,7 +34,12 @@ func Raw2B(raw []byte) []byte {
 
 // B2Raw decodes a hex-encoded byte slice into raw binary data.
 func B2Raw(hexData []byte) ([]byte, error) {
-	return hex.DecodeString(string(hexData))
+	result, err := hex.DecodeString(string(hexData))
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 // XOR takes two equal-length hex-encoded byte slices, XORs their raw bytes, and
@@ -62,7 +67,7 @@ func XOR(block1, block2 []byte) ([]byte, error) {
 // Hexify converts a non-negative integer to an even-length uppercase hex string.
 func Hexify(n int) (string, error) {
 	if n < 0 {
-		return "", fmt.Errorf("hexify: negative value %d", n)
+		return "", errors.New("hexify: negative value")
 	}
 	s := strings.ToUpper(fmt.Sprintf("%X", n))
 	if len(s)%2 == 1 {
@@ -90,8 +95,8 @@ func (x *ecbEncrypter) CryptBlocks(dst, src []byte) {
 	}
 }
 
-// newECBDecrypter returns a BlockMode which decrypts in ECB.
-func newECBDecrypter(b cipher.Block) cipher.BlockMode {
+// NewECBDecrypter returns a BlockMode which decrypts in ECB.
+func NewECBDecrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbDecrypter)(&ecb{b: b})
 }
 
@@ -130,7 +135,7 @@ func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	case 24: // Triple length
 		fullKey = rawKey
 	default:
-		return nil, fmt.Errorf("KeyCV: invalid key length %d", len(rawKey))
+		return nil, fmt.Errorf("keycv: invalid key length %d", len(rawKey))
 	}
 
 	block, err := des.NewTripleDESCipher(fullKey)
@@ -145,7 +150,7 @@ func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	mode.CryptBlocks(dst, zero)
 	hv := Raw2B(dst)
 	if kcvLen > len(hv) {
-		return nil, fmt.Errorf("KeyCV: kcv_length %d too large", kcvLen)
+		return nil, fmt.Errorf("keycv: kcv_length %d too large", kcvLen)
 	}
 
 	return hv[:kcvLen], nil
@@ -179,6 +184,7 @@ func GetDigitsFromString(ct string, length int) string {
 			}
 		}
 	}
+
 	return digits.String()
 }
 
@@ -202,6 +208,7 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 	dst := make([]byte, len(rawTSP))
 	newECBEncrypter(block).CryptBlocks(dst, rawTSP)
 	digits := GetDigitsFromString(Raw2Str(dst), 4)
+
 	return []byte(digits), nil
 }
 
@@ -249,7 +256,7 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 // GetClearPin recovers the clear PIN from a PIN block and PAN.
 func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
 	if len(pinBlockHex) == 0 || accountNumber == "" {
-		return nil, errors.New("pinBlock and pan must not be empty")
+		return nil, errors.New("pinblock and pan must not be empty")
 	}
 	rawPin, err := hex.DecodeString(string(pinBlockHex))
 	if err != nil {
@@ -261,7 +268,7 @@ func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
 		return nil, err
 	}
 	if len(rawPin) != len(rawAcct) {
-		return nil, errors.New("GetClearPin: length mismatch")
+		return nil, errors.New("getclearpin: length mismatch")
 	}
 	xorBytes := make([]byte, len(rawPin))
 	for i := range rawPin {
@@ -275,13 +282,13 @@ func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
 	if pinLen >= 4 && pinLen < 9 {
 		pin := pinHex[2 : 2+pinLen]
 		if _, err := strconv.Atoi(pin); err != nil {
-			return nil, fmt.Errorf("GetClearPin: PIN contains non-numeric characters")
+			return nil, errors.New("getclearpin: pin contains non-numeric characters")
 		}
 
 		return []byte(pin), nil
 	}
 
-	return nil, fmt.Errorf("GetClearPin: incorrect PIN length %d", pinLen)
+	return nil, fmt.Errorf("getclearpin: incorrect pin length %d", pinLen)
 }
 
 // GetPINBlock constructs an ISO-0 PIN block from the PIN and PAN.
@@ -305,7 +312,7 @@ func GetPINBlock(pin, pan string) (string, error) {
 		return "", err
 	}
 	if len(raw1) != len(raw2) {
-		return "", fmt.Errorf("GetPINBlock: length mismatch")
+		return "", errors.New("getpinblock: length mismatch")
 	}
 	xorBytes := make([]byte, len(raw1))
 	for i := range raw1 {
@@ -320,8 +327,9 @@ func ParityOf(x int) int {
 	parity := 0
 	for x != 0 {
 		parity = ^parity
-		x = x & (x - 1)
+		x &= (x - 1)
 	}
+
 	return parity
 }
 
@@ -383,7 +391,7 @@ func seedRandom() error {
 // GenerateRandomKey generates a cryptographically secure random key of specified length.
 // Length must be 8 (single), 16 (double), or 24 (triple) bytes.
 func GenerateRandomKey(length int) ([]byte, error) {
-	// Seed the random generator on every call
+	// Seed the random generator on every call.
 	if err := seedRandom(); err != nil {
 		return nil, fmt.Errorf("failed to seed random generator: %w", err)
 	}
@@ -392,7 +400,7 @@ func GenerateRandomKey(length int) ([]byte, error) {
 		return nil, errors.New("invalid key length: must be 8, 16, or 24 bytes")
 	}
 
-	// Generate two separate random values
+	// Generate two separate random values.
 	key1 := make([]byte, length)
 	key2 := make([]byte, length)
 
@@ -403,15 +411,15 @@ func GenerateRandomKey(length int) ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate second random key: %w", err)
 	}
 
-	// Mix the two random values
+	// Mix the two random values.
 	finalKey := make([]byte, length)
-	for i := 0; i < length; i++ {
-		// Use XOR to mix the values and add timestamp byte for extra entropy
+	for i := range length {
+		// Use XOR to mix the values and add timestamp byte for extra entropy.
 		timeByte := byte(time.Now().UnixNano() >> uint((i%8)*8))
 		finalKey[i] = key1[i] ^ key2[i] ^ timeByte
 	}
 
-	// Adjust parity for DES keys
+	// Adjust parity for DES keys.
 	if !CheckKeyParity(finalKey) {
 		finalKey = ModifyKeyParity(finalKey)
 	}

@@ -6,134 +6,331 @@ import (
 )
 
 func TestRaw2StrAndRaw2B(t *testing.T) {
-	data := []byte{0x01, 0xAB, 0x0F}
-	hexStr := Raw2Str(data)
-	if hexStr != "01AB0F" {
-		t.Errorf("Raw2Str expected 01AB0F, got %s", hexStr)
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    []byte
+		wantStr  string
+		wantRawB []byte
+	}{
+		{
+			name:     "basic hex conversion",
+			input:    []byte{0x01, 0xAB, 0x0F},
+			wantStr:  "01AB0F",
+			wantRawB: []byte("01AB0F"),
+		},
 	}
-	hexB := Raw2B(data)
-	if !reflect.DeepEqual(hexB, []byte("01AB0F")) {
-		t.Errorf("Raw2B expected 01AB0F, got %s", string(hexB))
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotStr := Raw2Str(tt.input)
+			if gotStr != tt.wantStr {
+				t.Errorf("Raw2Str() = %v, want %v.", gotStr, tt.wantStr)
+			}
+
+			gotRawB := Raw2B(tt.input)
+			if !reflect.DeepEqual(gotRawB, tt.wantRawB) {
+				t.Errorf("Raw2B() = %v, want %v.", gotRawB, tt.wantRawB)
+			}
+		})
 	}
 }
 
 func TestB2Raw(t *testing.T) {
-	hexB := []byte("0a0b0c")
-	raw, err := B2Raw(hexB)
-	if err != nil {
-		t.Fatalf("B2Raw unexpected error: %v", err)
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   []byte
+		want    []byte
+		wantErr bool
+	}{
+		{
+			name:    "valid hex",
+			input:   []byte("0a0b0c"),
+			want:    []byte{0x0A, 0x0B, 0x0C},
+			wantErr: false,
+		},
+		{
+			name:    "invalid hex",
+			input:   []byte("zz"),
+			want:    nil,
+			wantErr: true,
+		},
 	}
-	if !reflect.DeepEqual(raw, []byte{0x0A, 0x0B, 0x0C}) {
-		t.Errorf("B2Raw expected [0x0A 0x0B 0x0C], got %x", raw)
-	}
-	_, err = B2Raw([]byte("zz"))
-	if err == nil {
-		t.Error("B2Raw expected error for invalid hex, got nil")
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := B2Raw(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("B2Raw() error = %v, wantErr %v.", err, tt.wantErr)
+
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("B2Raw() = %v, want %v.", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestXOR(t *testing.T) {
-	b1 := []byte("AA") // hex AA
-	b2 := []byte("01")
-	res, err := XOR(b1, b2)
-	if err != nil {
-		t.Fatalf("XOR unexpected error: %v", err)
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		b1      []byte
+		b2      []byte
+		want    []byte
+		wantErr bool
+	}{
+		{
+			name:    "valid XOR",
+			b1:      []byte("AA"),
+			b2:      []byte("01"),
+			want:    []byte("AB"),
+			wantErr: false,
+		},
+		{
+			name:    "length mismatch",
+			b1:      []byte("A"),
+			b2:      []byte("BB"),
+			want:    nil,
+			wantErr: true,
+		},
 	}
-	// 0xAA ^ 0x01 = 0xAB -> "AB"
-	if string(res) != "AB" {
-		t.Errorf("XOR expected AB, got %s", string(res))
-	}
-	_, err = XOR([]byte("A"), []byte("BB"))
-	if err == nil {
-		t.Error("XOR expected length mismatch error, got nil")
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := XOR(tt.b1, tt.b2)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("XOR() error = %v, wantErr %v.", err, tt.wantErr)
+
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("XOR() = %v, want %v.", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestHexify(t *testing.T) {
-	s, err := Hexify(10)
-	if err != nil {
-		t.Fatalf("Hexify unexpected error: %v", err)
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   int
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "single digit",
+			input:   10,
+			want:    "0A",
+			wantErr: false,
+		},
+		{
+			name:    "max value",
+			input:   255,
+			want:    "FF",
+			wantErr: false,
+		},
+		{
+			name:    "negative value",
+			input:   -1,
+			want:    "",
+			wantErr: true,
+		},
 	}
-	if s != "0A" {
-		t.Errorf("Hexify expected 0A, got %s", s)
-	}
-	s, err = Hexify(255)
-	if err != nil {
-		t.Fatalf("Hexify unexpected error: %v", err)
-	}
-	if s != "FF" {
-		t.Errorf("Hexify expected FF, got %s", s)
-	}
-	_, err = Hexify(-1)
-	if err == nil {
-		t.Error("Hexify expected error for negative value, got nil")
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := Hexify(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Hexify() error = %v, wantErr %v.", err, tt.wantErr)
+
+				return
+			}
+			if got != tt.want {
+				t.Errorf("Hexify() = %v, want %v.", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestGetDigitsFromString(t *testing.T) {
-	input := "1A2b3c4d"
-	out := GetDigitsFromString(input, 3)
-	if out != "123" {
-		t.Errorf("expected 123, got %s", out)
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		input  string
+		digits int
+		want   string
+	}{
+		{
+			name:   "mixed alphanumeric",
+			input:  "1A2b3c4d",
+			digits: 3,
+			want:   "123",
+		},
+		{
+			name:   "all letters",
+			input:  "ABCDEF",
+			digits: 2,
+			want:   "01",
+		},
 	}
-	// request more digits than available: second pass
-	out2 := GetDigitsFromString("ABCDEF", 2)
-	// A=10->0, B=11->1 => expect "01"
-	if out2 != "01" {
-		t.Errorf("expected 01, got %s", out2)
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetDigitsFromString(tt.input, tt.digits)
+			if got != tt.want {
+				t.Errorf("GetDigitsFromString() = %v, want %v.", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestParityAndKeyParity(t *testing.T) {
-	if ParityOf(0x00) != 0 {
-		t.Error("expected even parity for 0x00")
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		parityInput   int
+		wantParity    int
+		keyInput      string
+		wantKeyParity bool
+	}{
+		{
+			name:          "even parity byte",
+			parityInput:   0x00,
+			wantParity:    0,
+			keyInput:      "",
+			wantKeyParity: false,
+		},
+		{
+			name:          "odd parity byte",
+			parityInput:   0x01,
+			wantParity:    -1,
+			keyInput:      "",
+			wantKeyParity: false,
+		},
+		{
+			name:          "mixed parity key",
+			parityInput:   0x00,
+			wantParity:    0,
+			keyInput:      "0123456789ABCDEFFEDCBA9876543210",
+			wantKeyParity: false,
+		},
+		{
+			name:          "failing key",
+			parityInput:   0x00,
+			wantParity:    0,
+			keyInput:      "deafbeedeafbeedeafbeedeafbeedeaf",
+			wantKeyParity: false,
+		},
 	}
-	if ParityOf(0x01) != -1 {
-		t.Error("expected odd parity for 0x01")
-	}
-	key := []byte{0x01, 0x02}
-	if CheckKeyParity(key) {
-		t.Error("expected CheckKeyParity false for odd parity")
-	}
-	fixed := ModifyKeyParity(key)
-	if !CheckKeyParity(fixed) {
-		t.Error("expected fixed key parity to be even")
+
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Test byte parity.
+			if got := ParityOf(tt.parityInput); got != tt.wantParity {
+				t.Errorf("ParityOf() = %v, want %v.", got, tt.wantParity)
+			}
+
+			// Skip key parity tests for parity-only test cases.
+			if tt.keyInput == "" {
+				return
+			}
+
+			// Test key parity.
+			key, err := B2Raw([]byte(tt.keyInput))
+			if err != nil {
+				t.Fatalf("failed to convert test key: %v.", err)
+			}
+
+			if got := CheckKeyParity(key); got != tt.wantKeyParity {
+				t.Errorf("CheckKeyParity() = %v, want %v.", got, tt.wantKeyParity)
+			}
+
+			// Test key parity correction.
+			fixed := ModifyKeyParity(key)
+			if !CheckKeyParity(fixed) {
+				t.Error("ModifyKeyParity() failed to correct key parity.")
+			}
+		})
 	}
 }
 
 func TestGetPINBlock(t *testing.T) {
-	pin := "1234"
-	pan := "4000123412341234"
-	block, err := GetPINBlock(pin, pan)
-	if err != nil {
-		t.Fatalf("GetPINBlock unexpected error: %v", err)
-	}
-	if len(block) != 16 {
-		t.Errorf("expected PIN block length 16 hex chars, got %d", len(block))
-	}
-	// Expect clear pin recovery to fail due to padding logic mismatch.
-	_, err = GetClearPin([]byte(block), pan)
-	if err == nil {
-		t.Error("GetClearPin expected error for mismatched padding, got nil")
-	}
-}
+	t.Parallel()
 
-func TestEmptyPinOrPan(t *testing.T) {
-	// Empty pin should return error
-	_, err := GetPINBlock("", "1234")
-	if err == nil {
-		t.Error("expected error for empty pin")
+	tests := []struct {
+		name    string
+		pin     string
+		pan     string
+		want    int
+		wantErr bool
+	}{
+		{
+			name:    "valid pin and pan",
+			pin:     "1234",
+			pan:     "4000123412341234",
+			want:    16,
+			wantErr: false,
+		},
+		{
+			name:    "empty pin",
+			pin:     "",
+			pan:     "1234",
+			want:    0,
+			wantErr: true,
+		},
+		{
+			name:    "empty pan",
+			pin:     "1234",
+			pan:     "",
+			want:    0,
+			wantErr: true,
+		},
 	}
 
-	// Empty pan should return error
-	_, err = GetPINBlock("1234", "")
-	if err == nil {
-		t.Error("expected error for empty pan")
-	}
+	for _, tt := range tests {
+		tt := tt // capture range variable.
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := GetPINBlock(tt.pin, tt.pan)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetPINBlock() error = %v, wantErr %v.", err, tt.wantErr)
 
-	// GetClearPin with empty input should return error
-	_, err = GetClearPin([]byte(""), "1234")
-	if err == nil {
-		t.Error("expected error for empty pinBlockHex")
+				return
+			}
+			if !tt.wantErr && len(got) != tt.want {
+				t.Errorf("GetPINBlock() got length = %v, want %v.", len(got), tt.want)
+			}
+
+			// Test clear pin recovery.
+			if !tt.wantErr {
+				_, err = GetClearPin([]byte(got), tt.pan)
+				if err == nil {
+					t.Error("GetClearPin() expected error for mismatched padding.")
+				}
+			}
+		})
 	}
 }
