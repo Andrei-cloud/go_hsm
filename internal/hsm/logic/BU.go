@@ -63,6 +63,13 @@ func ExecuteBU(
 
 	logFn(fmt.Sprintf("BU clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
 
+	// Verify key parity after decryption
+	if !cryptoutils.CheckKeyParity(clearKey) {
+		logFn("BU key parity check failed")
+
+		return nil, errorcodes.Err01
+	}
+
 	// Calculate 16-byte KCV using clear key
 	kcv, err := cryptoutils.KeyCV(cryptoutils.Raw2B(clearKey), 16)
 	if err != nil {
@@ -71,11 +78,9 @@ func ExecuteBU(
 
 	logFn(fmt.Sprintf("BU calculated KCV: %s", string(kcv)))
 
-	// Format response: BV + error code + KCV
+	// Format successful response
 	resp := []byte("BV00")
 	resp = append(resp, kcv...)
-
-	logFn(fmt.Sprintf("BU response: %s", string(resp)))
 
 	return resp, nil
 }
