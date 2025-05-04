@@ -5,30 +5,35 @@ import (
 	"testing"
 )
 
-// mockLMK provides a no-op implementation for tests.
+// mockLMK provides a triple-length key for tests
 func mockLMK(data []byte) ([]byte, error) {
-	return data, nil
+	// Return triple-length key for proper DES operations
+	result := make([]byte, 24)
+	for i := range result {
+		result[i] = byte(i + 1) // Predictable non-zero bytes
+	}
+	return result, nil
 }
 
-// TestExecuteA0ShortInput verifies that ExecuteA0 returns an error for inputs shorter than 5 bytes.
+func mockLog(_ string) {}
+
 func TestExecuteA0ShortInput(t *testing.T) {
 	t.Parallel()
-	_, err := ExecuteA0([]byte{1, 2, 3, 4}, mockLMK, mockLMK)
+	_, err := ExecuteA0([]byte{1, 2, 3, 4}, mockLMK, mockLMK, mockLog)
 	if err == nil {
 		t.Fatal("expected error for short input")
 	}
 }
 
-// TestExecuteA0NoZMK verifies ExecuteA0 returns a valid response without a ZMK field.
 func TestExecuteA0NoZMK(t *testing.T) {
 	t.Parallel()
-	// mode='0', keyType(3 bytes) and keyScheme.
-	input := []byte{'0', 'K', 'T', 'Y', 'X'}
-	resp, err := ExecuteA0(input, mockLMK, mockLMK)
+	// mode='0', keyType='000', keyScheme='U' (double-length key)
+	input := []byte{'0', '0', '0', '0', 'U'}
+	resp, err := ExecuteA0(input, mockLMK, mockLMK, mockLog)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// "4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43".
+	// 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
 	if len(resp) != 43 {
 		t.Errorf("expected length 43, got %d", len(resp))
 	}
@@ -44,20 +49,23 @@ func TestExecuteA0NoZMK(t *testing.T) {
 	}
 }
 
-// TestExecuteA0WithZMK verifies ExecuteA0 handles a ZMK field and still appends a single KCV.
 func TestExecuteA0WithZMK(t *testing.T) {
 	t.Parallel()
-	// dummy ZMK: 'U' + 32 'A'
-	hexZmk := make([]byte, 32)
+	// Create triple-length hex ZMK (24 bytes -> 48 hex chars)
+	hexZmk := make([]byte, 48)
 	for i := range hexZmk {
-		hexZmk[i] = 'A'
+		hexZmk[i] = 'F'
 	}
-	zmkField := append([]byte{'U'}, hexZmk...)
-	input := append([]byte{'1', 'K', 'T', 'Y', 'Z'}, zmkField...)
-	resp, err := ExecuteA0(input, mockLMK, mockLMK)
+
+	// Construct input: mode='1', keyType='000', keyScheme='U'
+	// Followed by ZMK field: scheme='T' (triple-length) + 48 hex chars
+	input := append([]byte{'1', '0', '0', '0', 'U', 'T'}, hexZmk...)
+
+	resp, err := ExecuteA0(input, mockLMK, mockLMK, mockLog)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+
 	// 4 + 1 + 32 (under LMK) + 1 + 32 (under ZMK) + 6 (KCV) = 76
 	if len(resp) != 76 {
 		t.Errorf("expected length 76, got %d", len(resp))
