@@ -428,3 +428,17 @@ func GenerateRandomKey(length int) ([]byte, error) {
 
 	return finalKey, nil
 }
+
+// ExtendToDouble extends a single length key to double length by concatenating it with itself.
+func ExtendToDouble(singleKey []byte) []byte {
+	doubleKey := make([]byte, len(singleKey)*2)
+	copy(doubleKey[:len(singleKey)], singleKey)
+	copy(doubleKey[len(singleKey):], singleKey)
+
+	return doubleKey
+}
+
+// TruncateToSingle takes the first half of a double length key.
+func TruncateToSingle(doubleKey []byte) []byte {
+	return doubleKey[:len(doubleKey)/2]
+}
