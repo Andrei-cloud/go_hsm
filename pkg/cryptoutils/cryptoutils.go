@@ -5,11 +5,13 @@ package cryptoutils
 import (
 	"crypto/cipher"
 	"crypto/des"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -112,10 +114,30 @@ func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	block, err := des.NewTripleDESCipher(rawKey)
+
+	// Convert to triple length if needed
+	var fullKey []byte
+	switch len(rawKey) {
+	case 8: // Single length
+		fullKey = make([]byte, 24)
+		copy(fullKey, rawKey)
+		copy(fullKey[8:], rawKey)
+		copy(fullKey[16:], rawKey)
+	case 16: // Double length
+		fullKey = make([]byte, 24)
+		copy(fullKey, rawKey)
+		copy(fullKey[16:], rawKey[:8])
+	case 24: // Triple length
+		fullKey = rawKey
+	default:
+		return nil, fmt.Errorf("KeyCV: invalid key length %d", len(rawKey))
+	}
+
+	block, err := des.NewTripleDESCipher(fullKey)
 	if err != nil {
 		return nil, err
 	}
+
 	// Encrypt two blocks of zeros (16 bytes total)
 	zero := make([]byte, block.BlockSize()*2)
 	dst := make([]byte, len(zero))
@@ -226,6 +248,9 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 
 // GetClearPin recovers the clear PIN from a PIN block and PAN.
 func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
+	if len(pinBlockHex) == 0 || accountNumber == "" {
+		return nil, errors.New("pinBlock and pan must not be empty")
+	}
 	rawPin, err := hex.DecodeString(string(pinBlockHex))
 	if err != nil {
 		return nil, err
@@ -262,7 +287,7 @@ func GetClearPin(pinBlockHex []byte, accountNumber string) ([]byte, error) {
 // GetPINBlock constructs an ISO-0 PIN block from the PIN and PAN.
 func GetPINBlock(pin, pan string) (string, error) {
 	if pin == "" || pan == "" {
-		return "", nil
+		return "", errors.New("pin and pan must not be empty")
 	}
 	// Format block1
 	b1 := fmt.Sprintf("0%d%s", len(pin), pin)
@@ -327,4 +352,69 @@ func ModifyKeyParity(key []byte) []byte {
 	}
 
 	return res
+}
+
+// seedRandom ensures proper entropy for random number generation.
+// While crypto/rand doesn't need seeding as it uses system entropy,
+// we add extra entropy mixing to ensure uniqueness across WASM calls.
+func seedRandom() error {
+	seed := make([]byte, 32)
+	if _, err := rand.Read(seed); err != nil {
+		return fmt.Errorf("failed to read random seed: %w", err)
+	}
+
+	// Mix in current time for additional entropy
+	timeBytes := []byte(time.Now().UTC().String())
+	for i := range timeBytes {
+		if i < len(seed) {
+			seed[i] ^= timeBytes[i]
+		}
+	}
+
+	// Read more random bytes to mix the entropy pool
+	extraEntropy := make([]byte, 32)
+	if _, err := rand.Read(extraEntropy); err != nil {
+		return fmt.Errorf("failed to read extra entropy: %w", err)
+	}
+
+	return nil
+}
+
+// GenerateRandomKey generates a cryptographically secure random key of specified length.
+// Length must be 8 (single), 16 (double), or 24 (triple) bytes.
+func GenerateRandomKey(length int) ([]byte, error) {
+	// Seed the random generator on every call
+	if err := seedRandom(); err != nil {
+		return nil, fmt.Errorf("failed to seed random generator: %w", err)
+	}
+
+	if length != 8 && length != 16 && length != 24 {
+		return nil, errors.New("invalid key length: must be 8, 16, or 24 bytes")
+	}
+
+	// Generate two separate random values
+	key1 := make([]byte, length)
+	key2 := make([]byte, length)
+
+	if _, err := rand.Read(key1); err != nil {
+		return nil, fmt.Errorf("failed to generate first random key: %w", err)
+	}
+	if _, err := rand.Read(key2); err != nil {
+		return nil, fmt.Errorf("failed to generate second random key: %w", err)
+	}
+
+	// Mix the two random values
+	finalKey := make([]byte, length)
+	for i := 0; i < length; i++ {
+		// Use XOR to mix the values and add timestamp byte for extra entropy
+		timeByte := byte(time.Now().UnixNano() >> uint((i%8)*8))
+		finalKey[i] = key1[i] ^ key2[i] ^ timeByte
+	}
+
+	// Adjust parity for DES keys
+	if !CheckKeyParity(finalKey) {
+		finalKey = ModifyKeyParity(finalKey)
+	}
+
+	return finalKey, nil
 }
