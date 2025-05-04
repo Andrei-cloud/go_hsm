@@ -4,6 +4,7 @@ package logic
 import (
 	"crypto/des"
 	"errors"
+	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
@@ -27,7 +28,14 @@ func ExecuteA0(
 	keyScheme := input[4]
 	remainder := input[5:]
 
-	_ = keyType // Unused in this implementation
+	logFn(
+		fmt.Sprintf(
+			"A0 command input - mode: %c, key type: %s, scheme: %c",
+			mode,
+			keyType,
+			keyScheme,
+		),
+	)
 
 	// Validate mode (0=under LMK only, 1=under ZMK/TMK)
 	if mode != '0' && mode != '1' {
@@ -45,13 +53,15 @@ func ExecuteA0(
 		keyLength = 24 // 'T' scheme = triple length
 	}
 
+	logFn(fmt.Sprintf("A0 generating random key of length: %d", keyLength))
+
 	// Generate random key with proper length
 	clearKey, err := cryptoutils.GenerateRandomKey(keyLength)
 	if err != nil {
 		return nil, errors.Join(errors.New("generate random key"), err)
 	}
 
-	logFn("A0 clear key: " + cryptoutils.Raw2Str(clearKey))
+	logFn(fmt.Sprintf("A0 generated clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
 
 	// Calculate KCV using hex-encoded key
 	kcv, err := cryptoutils.KeyCV([]byte(cryptoutils.Raw2Str(clearKey)), 6)
@@ -59,13 +69,15 @@ func ExecuteA0(
 		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
 
-	logFn("A0 kcv: " + string(kcv))
+	logFn(fmt.Sprintf("A0 calculated KCV: %s", string(kcv)))
 
 	// Encrypt key under LMK
 	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
 	if err != nil {
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}
+
+	logFn(fmt.Sprintf("A0 key encrypted under LMK (hex): %s", cryptoutils.Raw2Str(lmkEncryptedKey)))
 
 	// Build response
 	resp := []byte("A100")
@@ -75,6 +87,8 @@ func ExecuteA0(
 
 	// Handle mode 1 - encrypt under ZMK/TMK if provided
 	if mode == '1' {
+		logFn("A0 processing ZMK encryption mode")
+
 		idx := 0
 		if idx < len(remainder) && remainder[idx] == ';' {
 			idx++
@@ -96,6 +110,8 @@ func ExecuteA0(
 		}
 
 		hexZmk := remainder[idx : idx+hexLen]
+		logFn(fmt.Sprintf("A0 processing ZMK (hex): %s", string(hexZmk)))
+
 		zmkBytes, err := cryptoutils.B2Raw(hexZmk)
 		if err != nil {
 			return nil, errors.Join(errors.New("zmk to binary"), err)
@@ -105,6 +121,8 @@ func ExecuteA0(
 		if err != nil {
 			return nil, errors.Join(errors.New("decrypt zmk"), err)
 		}
+
+		logFn(fmt.Sprintf("A0 decrypted ZMK length: %d", len(rawZmk)))
 
 		// Create ZMK cipher - use only actual key length for triple DES
 		var fullZmk []byte
@@ -127,6 +145,13 @@ func ExecuteA0(
 			zmkBlock.Encrypt(zmkEncryptedKey[i:i+8], clearKey[i:i+8])
 		}
 
+		logFn(
+			fmt.Sprintf(
+				"A0 key encrypted under ZMK (hex): %s",
+				cryptoutils.Raw2Str(zmkEncryptedKey),
+			),
+		)
+
 		resp = append(resp, keyScheme)
 		// Only use original key length bytes for hex encoding
 		resp = append(resp, cryptoutils.Raw2B(zmkEncryptedKey[:keyLength])...)
@@ -134,6 +159,8 @@ func ExecuteA0(
 
 	// Append KCV
 	resp = append(resp, kcv...)
+
+	logFn(fmt.Sprintf("A0 final response: %s", string(resp)))
 
 	return resp, nil
 }

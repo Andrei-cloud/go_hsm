@@ -5,13 +5,14 @@ import (
 	"testing"
 )
 
-// mockLMK provides a triple-length key for tests
-func mockLMK(data []byte) ([]byte, error) {
+// mockLMK provides a triple-length key for tests.
+func mockLMK(_ []byte) ([]byte, error) {
 	// Return triple-length key for proper DES operations
 	result := make([]byte, 24)
 	for i := range result {
 		result[i] = byte(i + 1) // Predictable non-zero bytes
 	}
+
 	return result, nil
 }
 
@@ -33,7 +34,7 @@ func TestExecuteA0NoZMK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
+	// response format: 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
 	if len(resp) != 43 {
 		t.Errorf("expected length 43, got %d", len(resp))
 	}
