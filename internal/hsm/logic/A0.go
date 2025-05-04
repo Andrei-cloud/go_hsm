@@ -3,7 +3,6 @@ package logic
 
 import (
 	"crypto/des"
-	"crypto/rand"
 	"errors"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
@@ -40,65 +39,63 @@ func ExecuteA0(
 		return nil, errorcodes.Err26
 	}
 
-	// Determine key length based on scheme.
-	keyLength := 16 // 'U' scheme = double length.
+	// Determine key length based on scheme
+	keyLength := 16 // 'U' scheme = double length
 	if keyScheme == 'T' {
-		keyLength = 24 // 'T' scheme = triple length.
+		keyLength = 24 // 'T' scheme = triple length
 	}
-	// Generate random key.
-	clearKey := make([]byte, keyLength)
-	if n, err := rand.Read(clearKey); err != nil {
-		return nil, errors.Join(errors.New("generate random key"), err)
-	} else if n != keyLength {
-		return nil, errors.New("random read incomplete")
-	}
-	// If double-length key, extend to 24 bytes by appending first 8 bytes to the end.
-	if keyScheme == 'U' {
-		clearKey = append(clearKey, clearKey[:8]...)
-	}
-	// Fix key parity using cryptoutils.
-	if !cryptoutils.CheckKeyParity(clearKey) {
-		clearKey = cryptoutils.ModifyKeyParity(clearKey)
-	}
-	logFn("A0 clear key: " + cryptoutils.Raw2Str(clearKey[:keyLength]))
 
-	// Calculate KCV using cryptoutils
-	kcv, err := cryptoutils.KeyCV(cryptoutils.Raw2B(clearKey), 6)
+	// Generate random key with proper length
+	clearKey, err := cryptoutils.GenerateRandomKey(keyLength)
+	if err != nil {
+		return nil, errors.Join(errors.New("generate random key"), err)
+	}
+
+	logFn("A0 clear key: " + cryptoutils.Raw2Str(clearKey))
+
+	// Calculate KCV using hex-encoded key
+	kcv, err := cryptoutils.KeyCV([]byte(cryptoutils.Raw2Str(clearKey)), 6)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
 
 	logFn("A0 kcv: " + string(kcv))
 
-	// Handle mode 1 - encrypt under ZMK/TMK
-	var zmkEncryptedKey []byte
+	// Encrypt key under LMK
+	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
+	if err != nil {
+		return nil, errors.Join(errors.New("encrypt under lmk"), err)
+	}
+
+	// Build response
+	resp := []byte("A100")
+	resp = append(resp, keyScheme)
+	// Only use original key length bytes for hex encoding
+	resp = append(resp, cryptoutils.Raw2B(lmkEncryptedKey[:keyLength])...)
+
+	// Handle mode 1 - encrypt under ZMK/TMK if provided
 	if mode == '1' {
 		idx := 0
-		// Optional delimiter
 		if idx < len(remainder) && remainder[idx] == ';' {
 			idx++
 		}
 		if idx >= len(remainder) {
 			return nil, errorcodes.Err15
 		}
-		// ZMK/TMK scheme flag
 		zmkScheme := remainder[idx]
 		if zmkScheme != 'U' && zmkScheme != 'T' {
 			return nil, errorcodes.Err05
 		}
 		idx++
-		// Determine expected hex length
 		hexLen := 32 // Double length
 		if zmkScheme == 'T' {
 			hexLen = 48 // Triple length
 		}
-
 		if len(remainder) < idx+hexLen {
 			return nil, errorcodes.Err15
 		}
 
 		hexZmk := remainder[idx : idx+hexLen]
-		// Decode and decrypt ZMK/TMK
 		zmkBytes, err := cryptoutils.B2Raw(hexZmk)
 		if err != nil {
 			return nil, errors.Join(errors.New("zmk to binary"), err)
@@ -109,12 +106,7 @@ func ExecuteA0(
 			return nil, errors.Join(errors.New("decrypt zmk"), err)
 		}
 
-		// Verify ZMK parity using cryptoutils
-		if !cryptoutils.CheckKeyParity(rawZmk) {
-			return []byte("A1" + errorcodes.Err01.CodeOnly()), nil
-		}
-
-		// Create ZMK cipher
+		// Create ZMK cipher - use only actual key length for triple DES
 		var fullZmk []byte
 		if len(rawZmk) == 16 {
 			fullZmk = make([]byte, 24)
@@ -130,26 +122,14 @@ func ExecuteA0(
 		}
 
 		// Encrypt under ZMK
-		zmkEncryptedKey = make([]byte, len(clearKey[:keyLength]))
+		zmkEncryptedKey := make([]byte, len(clearKey))
 		for i := 0; i < len(clearKey); i += 8 {
 			zmkBlock.Encrypt(zmkEncryptedKey[i:i+8], clearKey[i:i+8])
 		}
-	}
 
-	// Encrypt key under LMK
-	lmkEncryptedKey, err := encryptUnderLMK(clearKey[:keyLength])
-	if err != nil {
-		return nil, errors.Join(errors.New("encrypt under lmk"), err)
-	}
-
-	// Build response
-	resp := []byte("A100")
-	resp = append(resp, 'U')
-	resp = append(resp, cryptoutils.Raw2B(lmkEncryptedKey)...)
-
-	if zmkEncryptedKey != nil {
-		resp = append(resp, 'U')
-		resp = append(resp, cryptoutils.Raw2B(zmkEncryptedKey)...)
+		resp = append(resp, keyScheme)
+		// Only use original key length bytes for hex encoding
+		resp = append(resp, cryptoutils.Raw2B(zmkEncryptedKey[:keyLength])...)
 	}
 
 	// Append KCV
