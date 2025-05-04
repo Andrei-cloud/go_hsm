@@ -82,16 +82,27 @@ func unpackResult(val uint64) (uint32, uint32) {
 	return ptr, length
 }
 
-// WriteError allocates and writes an error code for the specified command and returns a Buffer containing the packed result.
-func WriteError(cmd string) Buffer {
-	b := cmd[1]
-	if b == 'Z' {
-		b = 'A'
+// WriteError allocates and writes an error response for the specified command.
+// If err is of type HSMError, formats response as "<cmd><code>", otherwise uses generic error 68.
+func WriteError(cmd string, err error) Buffer {
+	var errCode string
+	if hsmErr, ok := err.(errorcodes.HSMError); ok {
+		errCode = hsmErr.CodeOnly()
 	} else {
-		b++
+		errCode = errorcodes.Err68.CodeOnly()
 	}
 
-	errCode := "Err: " + cmd[:1] + string(b) + errorcodes.Err68.CodeOnly()
+	// Format error response: increment command code + error code
+	nextCmd := cmd[0:1]
+	if len(cmd) > 1 {
+		b := cmd[1]
+		if b == 'Z' {
+			b = 'A'
+		} else {
+			b++
+		}
+		nextCmd += string(b)
+	}
 
-	return ToBuffer([]byte(errCode))
+	return ToBuffer([]byte(nextCmd + errCode))
 }

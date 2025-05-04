@@ -84,7 +84,7 @@ func Execute(buf hsmplugin.Buffer) uint64 {
     out, err := logic.Execute{{.Cmd}}(in, decryptUnderLMK, encryptUnderLMK, logToHost)
     if err != nil {
         LogToHost("{{.Cmd}} execution failed: " + err.Error())
-        return uint64(hsmplugin.WriteError("{{.Cmd}} "))
+        return uint64(hsmplugin.WriteError("{{.Cmd}}", err))
     }
 
     LogToHost("{{.Cmd}} command output: " + string(out))
