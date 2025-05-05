@@ -260,5 +260,5 @@ func ExecuteEC(
 
 	logFn("EC: PIN verified successfully")
 
-	return []byte("DD" + errorcodes.Err00.CodeOnly()), nil
+	return []byte("ED" + errorcodes.Err00.CodeOnly()), nil
 }
