@@ -2,9 +2,9 @@
 package logic
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
@@ -17,7 +17,7 @@ func ExecuteNC(input []byte,
 	logFn(fmt.Sprintf("NC command input length: %d", len(input)))
 
 	if len(input) < 9 {
-		return nil, errors.New("input too short")
+		return nil, errorcodes.Err15
 	}
 
 	logFn("NC calculating KCV using zero block.")
@@ -26,7 +26,7 @@ func ExecuteNC(input []byte,
 	zeros := make([]byte, 16)
 	kcvRaw, err := encryptUnderLMK(zeros)
 	if err != nil {
-		return nil, errors.Join(errors.New("calculate kcv"), err)
+		return nil, errorcodes.Err68
 	}
 
 	logFn(fmt.Sprintf("NC calculated KCV (hex): %s", cryptoutils.Raw2Str(kcvRaw[:8])))

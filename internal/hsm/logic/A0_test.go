@@ -3,83 +3,147 @@ package logic
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 )
 
-// mockLMK provides a triple-length key for tests.
-func mockLMK(_ []byte) ([]byte, error) {
-	// Return triple-length key for proper DES operations
+// mockLMKForA0 provides a triple-length key for A0 tests.
+func mockLMKForA0(_ []byte) ([]byte, error) {
+	// Return triple-length key for proper DES operations.
 	result := make([]byte, 24)
 	for i := range result {
-		result[i] = byte(i + 1) // Predictable non-zero bytes
+		result[i] = byte(i + 1) // Predictable non-zero bytes.
 	}
 
 	return result, nil
 }
 
-func mockLog(_ string) {}
+func mockLogFnA0(_ string) {}
 
-func TestExecuteA0ShortInput(t *testing.T) {
+func TestExecuteA0(t *testing.T) {
 	t.Parallel()
-	_, err := ExecuteA0([]byte{1, 2, 3, 4}, mockLMK, mockLMK, mockLog)
-	if err == nil {
-		t.Fatal("expected error for short input")
-	}
-}
 
-func TestExecuteA0NoZMK(t *testing.T) {
-	t.Parallel()
-	// mode='0', keyType='000', keyScheme='U' (double-length key)
-	input := []byte{'0', '0', '0', '0', 'U'}
-	resp, err := ExecuteA0(input, mockLMK, mockLMK, mockLog)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	// --- Test Cases. ---
+	testCases := []struct {
+		name             string
+		input            []byte
+		mockDecrypt      func([]byte) ([]byte, error)
+		mockEncrypt      func([]byte) ([]byte, error)
+		mockLog          func(string)
+		expectedResponse []byte // Use byte slice for easier comparison.
+		expectedError    error
+	}{
+		{
+			name:             "Short Input",
+			input:            []byte{1, 2, 3, 4},
+			mockDecrypt:      mockLMKForA0,
+			mockEncrypt:      mockLMKForA0,
+			mockLog:          mockLogFnA0,
+			expectedResponse: nil,
+			expectedError:    errorcodes.Err15,
+		},
+		{
+			name: "Invalid Key Scheme",
+			input: []byte{
+				'0',
+				'0',
+				'0',
+				'0',
+				'X',
+			}, // mode='0', keyType='000', keyScheme='X'.
+			mockDecrypt:      mockLMKForA0,
+			mockEncrypt:      mockLMKForA0,
+			mockLog:          mockLogFnA0,
+			expectedResponse: nil,
+			expectedError:    errorcodes.Err26,
+		},
+		{
+			name: "No ZMK",
+			input: []byte{
+				'0',
+				'0',
+				'0',
+				'0',
+				'U',
+			}, // mode='0', keyType='000', keyScheme='U'.
+			mockDecrypt: mockLMKForA0,
+			mockEncrypt: mockLMKForA0,
+			mockLog:     mockLogFnA0,
+			expectedResponse: []byte(
+				"A100U" + "0102030405060708090a0b0c0d0e0f10" + "010203040506",
+			), // Placeholder response.
+			expectedError: nil,
+		},
+		{
+			name: "With ZMK",
+			input: append(
+				[]byte{
+					'1',
+					'0',
+					'0',
+					'0',
+					'U',
+					'T',
+				}, // mode='1', keyType='000', keyScheme='U', ZMK scheme='T'.
+				[]byte( // 48 hex chars for ZMK.
+					"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+				)...),
+			mockDecrypt: mockLMKForA0,
+			mockEncrypt: mockLMKForA0,
+			mockLog:     mockLogFnA0,
+			expectedResponse: []byte(
+				"A100U" + "0102030405060708090a0b0c0d0e0f10" + "U" + "0102030405060708090a0b0c0d0e0f10" + "010203040506",
+			), // Placeholder response.
+			expectedError: nil,
+		},
 	}
-	// response format: 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
-	if len(resp) != 43 {
-		t.Errorf("expected length 43, got %d", len(resp))
-	}
-	if string(resp[:4]) != "A100" {
-		t.Errorf("expected prefix A100, got %q", resp[:4])
-	}
-	if resp[4] != 'U' {
-		t.Errorf("expected 'U' at position 4, got %q", resp[4])
-	}
-	// verify the last 6 bytes are valid hex for the KCV
-	if _, err := hex.DecodeString(string(resp[len(resp)-6:])); err != nil {
-		t.Errorf("expected valid 6-hex-digit KCV, got %q", resp[len(resp)-6:])
-	}
-}
 
-func TestExecuteA0WithZMK(t *testing.T) {
-	t.Parallel()
-	// Create triple-length hex ZMK (24 bytes -> 48 hex chars)
-	hexZmk := make([]byte, 48)
-	for i := range hexZmk {
-		hexZmk[i] = 'F'
-	}
+	// --- Run Tests. ---
+	for _, tc := range testCases {
+		tc := tc // Capture range variable.
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	// Construct input: mode='1', keyType='000', keyScheme='U'
-	// Followed by ZMK field: scheme='T' (triple-length) + 48 hex chars
-	input := append([]byte{'1', '0', '0', '0', 'U', 'T'}, hexZmk...)
+			resp, err := ExecuteA0(tc.input, tc.mockDecrypt, tc.mockEncrypt, tc.mockLog)
 
-	resp, err := ExecuteA0(input, mockLMK, mockLMK, mockLog)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+			if err != tc.expectedError {
+				t.Errorf("expected error %v, got %v", tc.expectedError, err)
+			}
 
-	// 4 + 1 + 32 (under LMK) + 1 + 32 (under ZMK) + 6 (KCV) = 76
-	if len(resp) != 76 {
-		t.Errorf("expected length 76, got %d", len(resp))
-	}
-	if string(resp[:4]) != "A100" {
-		t.Errorf("expected prefix A100, got %q", resp[:4])
-	}
-	// verify the second 'U' at offset 37 (4+1+32)
-	if resp[37] != 'U' {
-		t.Errorf("expected 'U' at position 37, got %q", resp[37])
-	}
-	// verify final 6-hex KCV
-	if _, err := hex.DecodeString(string(resp[len(resp)-6:])); err != nil {
-		t.Errorf("expected valid KCV at end, got %q", resp[len(resp)-6:])
+			// Specific checks for successful cases
+			if tc.expectedError == nil {
+				if tc.name == "No ZMK" {
+					// Response format: 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
+					if len(resp) != 43 {
+						t.Errorf("expected length 43, got %d", len(resp))
+					}
+					if string(resp[:4]) != "A100" {
+						t.Errorf("expected prefix A100, got %q", resp[:4])
+					}
+					if resp[4] != 'U' {
+						t.Errorf("expected 'U' at position 4, got %q", resp[4])
+					}
+					kcv := resp[len(resp)-6:]
+					if _, hexErr := hex.DecodeString(string(kcv)); hexErr != nil {
+						t.Errorf("expected valid 6-hex-digit KCV, got %q", kcv)
+					}
+				} else if tc.name == "With ZMK" {
+					// Response format: 4 + 1 + 32 (under LMK) + 1 + 32 (under ZMK) + 6 (KCV) = 76
+					if len(resp) != 76 {
+						t.Errorf("expected length 76, got %d", len(resp))
+					}
+					if string(resp[:4]) != "A100" {
+						t.Errorf("expected prefix A100, got %q", resp[:4])
+					}
+					if resp[37] != 'U' {
+						t.Errorf("expected 'U' at position 37, got %q", resp[37])
+					}
+					kcv := resp[len(resp)-6:]
+					if _, hexErr := hex.DecodeString(string(kcv)); hexErr != nil {
+						t.Errorf("expected valid KCV hex format, got %q", kcv)
+					}
+				}
+			}
+		})
 	}
 }
