@@ -28,12 +28,12 @@ func TestRaw2StrAndRaw2B(t *testing.T) {
 			t.Parallel()
 			gotStr := Raw2Str(tt.input)
 			if gotStr != tt.wantStr {
-				t.Errorf("Raw2Str() = %v, want %v.", gotStr, tt.wantStr)
+				t.Errorf("Raw2Str() = %v, want %v", gotStr, tt.wantStr)
 			}
 
 			gotRawB := Raw2B(tt.input)
 			if !reflect.DeepEqual(gotRawB, tt.wantRawB) {
-				t.Errorf("Raw2B() = %v, want %v.", gotRawB, tt.wantRawB)
+				t.Errorf("Raw2B() = %v, want %v", gotRawB, tt.wantRawB)
 			}
 		})
 	}
@@ -68,12 +68,12 @@ func TestB2Raw(t *testing.T) {
 			t.Parallel()
 			got, err := B2Raw(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("B2Raw() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("B2Raw() error = %v, wantErr %v", err, tt.wantErr)
 
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("B2Raw() = %v, want %v.", got, tt.want)
+				t.Errorf("B2Raw() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -111,12 +111,12 @@ func TestXOR(t *testing.T) {
 			t.Parallel()
 			got, err := XOR(tt.b1, tt.b2)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("XOR() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("XOR() error = %v, wantErr %v", err, tt.wantErr)
 
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("XOR() = %v, want %v.", got, tt.want)
+				t.Errorf("XOR() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -157,12 +157,12 @@ func TestHexify(t *testing.T) {
 			t.Parallel()
 			got, err := Hexify(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Hexify() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("Hexify() error = %v, wantErr %v", err, tt.wantErr)
 
 				return
 			}
 			if got != tt.want {
-				t.Errorf("Hexify() = %v, want %v.", got, tt.want)
+				t.Errorf("Hexify() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -197,7 +197,7 @@ func TestGetDigitsFromString(t *testing.T) {
 			t.Parallel()
 			got := GetDigitsFromString(tt.input, tt.digits)
 			if got != tt.want {
-				t.Errorf("GetDigitsFromString() = %v, want %v.", got, tt.want)
+				t.Errorf("GetDigitsFromString() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -250,7 +250,7 @@ func TestParityAndKeyParity(t *testing.T) {
 
 			// Test byte parity.
 			if got := ParityOf(tt.parityInput); got != tt.wantParity {
-				t.Errorf("ParityOf() = %v, want %v.", got, tt.wantParity)
+				t.Errorf("ParityOf() = %v, want %v", got, tt.wantParity)
 			}
 
 			// Skip key parity tests for parity-only test cases.
@@ -261,17 +261,17 @@ func TestParityAndKeyParity(t *testing.T) {
 			// Test key parity.
 			key, err := B2Raw([]byte(tt.keyInput))
 			if err != nil {
-				t.Fatalf("failed to convert test key: %v.", err)
+				t.Fatalf("failed to convert test key: %v", err)
 			}
 
 			if got := CheckKeyParity(key); got != tt.wantKeyParity {
-				t.Errorf("CheckKeyParity() = %v, want %v.", got, tt.wantKeyParity)
+				t.Errorf("CheckKeyParity() = %v, want %v", got, tt.wantKeyParity)
 			}
 
 			// Test key parity correction.
 			fixed := FixKeyParity(key)
 			if !CheckKeyParity(fixed) {
-				t.Error("FixKeyParity() failed to correct key parity.")
+				t.Error("FixKeyParity() failed to correct key parity")
 			}
 		})
 	}
@@ -323,22 +323,22 @@ func TestComputePINBlockFormat0(t *testing.T) {
 			t.Parallel()
 			got, err := ComputePINBlockFormat0(tt.pin, tt.pan)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ComputePINBlockFormat0() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("ComputePINBlockFormat0() error = %v, wantErr %v", err, tt.wantErr)
 
 				return
 			}
 			if !tt.wantErr && len(got) != tt.want {
-				t.Errorf("ComputePINBlockFormat0() length = %v, want %v.", len(got), tt.want)
+				t.Errorf("ComputePINBlockFormat0() length = %v, want %v", len(got), tt.want)
 			}
 
 			// Verify PIN block can be decrypted
 			if !tt.wantErr {
 				pin, err := ExtractPINFormat0(got, tt.pan)
 				if err != nil {
-					t.Errorf("ExtractPINFormat0() error = %v.", err)
+					t.Errorf("ExtractPINFormat0() error = %v", err)
 				}
 				if string(pin) != tt.pin {
-					t.Errorf("ExtractPINFormat0() = %v, want %v.", string(pin), tt.pin)
+					t.Errorf("ExtractPINFormat0() = %v, want %v", string(pin), tt.pin)
 				}
 			}
 		})
@@ -397,7 +397,7 @@ func TestExtractPINFormat0(t *testing.T) {
 			pinBlockBytes, err := B2Raw([]byte(tt.pinBlock))
 			if err != nil &&
 				!tt.wantErr { // Allow B2Raw error if wantErr is true (e.g., invalid length).
-				t.Fatalf("failed to convert pinBlock: %v.", err)
+				t.Fatalf("failed to convert pinBlock: %v", err)
 			}
 
 			// Handle cases where B2Raw itself should fail (like invalid length).
@@ -407,12 +407,12 @@ func TestExtractPINFormat0(t *testing.T) {
 
 			got, err := ExtractPINFormat0(pinBlockBytes, tt.pan)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ExtractPINFormat0() error = %v, wantErr %v.", err, tt.wantErr)
+				t.Errorf("ExtractPINFormat0() error = %v, wantErr %v", err, tt.wantErr)
 
 				return
 			}
 			if !tt.wantErr && string(got) != tt.wantPin {
-				t.Errorf("ExtractPINFormat0() = %v, want %v.", string(got), tt.wantPin)
+				t.Errorf("ExtractPINFormat0() = %v, want %v", string(got), tt.wantPin)
 			}
 		})
 	}

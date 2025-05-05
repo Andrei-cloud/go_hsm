@@ -77,8 +77,8 @@ func Hexify(n int) (string, error) {
 	return s, nil
 }
 
-// newECBEncrypter returns a BlockMode which encrypts in ECB.
-func newECBEncrypter(b cipher.Block) cipher.BlockMode {
+// NewECBEncrypter returns a BlockMode which encrypts in ECB.
+func NewECBEncrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbEncrypter)(&ecb{b: b})
 }
 
@@ -146,7 +146,7 @@ func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	// Encrypt two blocks of zeros (16 bytes total)
 	zero := make([]byte, block.BlockSize()*2)
 	dst := make([]byte, len(zero))
-	mode := newECBEncrypter(block)
+	mode := NewECBEncrypter(block)
 	mode.CryptBlocks(dst, zero)
 	hv := Raw2B(dst)
 	if kcvLen > len(hv) {
@@ -190,23 +190,26 @@ func GetDigitsFromString(ct string, length int) string {
 
 // GetVisaPVV generates a 4-digit PIN Verification Value (PVV) using 3DES ECB.
 func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, error) {
-	// Build TSP: 11 PAN digits + keyIndex + PIN
-	tspHex := accountNumber[len(accountNumber)-12:len(accountNumber)-1] + keyIndex + pin
-	rawKey, err := B2Raw(pvkHex)
+	// Build TSP: 11 PAN digits + PVKeyIndex + PIN (only first 4 digits)
+	tspHex := keyIndex + accountNumber[len(accountNumber)-12:len(accountNumber)-1] + pin[:4]
+
+	if len(pvkHex) == 16 {
+		// Extend to tripple length
+		pvkHex = append(pvkHex, pvkHex[:8]...)
+	}
+
+	block, err := des.NewTripleDESCipher(pvkHex)
 	if err != nil {
 		return nil, err
 	}
-	block, err := des.NewTripleDESCipher(rawKey)
-	if err != nil {
-		return nil, err
-	}
-	rawTSP, err := hex.DecodeString(tspHex)
+
+	rawTsp, err := B2Raw([]byte(tspHex))
 	if err != nil {
 		return nil, err
 	}
 	// 3DES-ECB encrypt TSP
-	dst := make([]byte, len(rawTSP))
-	newECBEncrypter(block).CryptBlocks(dst, rawTSP)
+	dst := make([]byte, len(rawTsp))
+	NewECBEncrypter(block).CryptBlocks(dst, rawTsp)
 	digits := GetDigitsFromString(Raw2Str(dst), 4)
 
 	return []byte(digits), nil
@@ -248,7 +251,7 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 		return nil, err
 	}
 	dst := make([]byte, len(rawB))
-	newECBEncrypter(des3Block).CryptBlocks(dst, rawB)
+	NewECBEncrypter(des3Block).CryptBlocks(dst, rawB)
 
 	return []byte(GetDigitsFromString(Raw2Str(dst), 3)), nil
 }
@@ -257,20 +260,22 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 // returning the decoded PIN as a string.
 func ExtractPINFormat0(pinBlock []byte, pan string) ([]byte, error) {
 	var rawPinBlock []byte
-	if len(pinBlock) == 16 { // Hex string input.
+
+	switch len(pinBlock) {
+	case 16:
 		var err error
 		rawPinBlock, err = hex.DecodeString(string(pinBlock))
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode PIN block hex: %v", err)
+			return nil, fmt.Errorf("failed to decode pin block hex: %v", err)
 		}
-	} else if len(pinBlock) == 8 { // Raw bytes input.
+	case 8: // Raw bytes input.
 		rawPinBlock = pinBlock
-	} else {
+	default:
 		return nil, errors.New("pinBlock must be either 8 bytes or 16 hex chars")
 	}
 
 	// Validate PAN.
-	if len(pan) < 13 {
+	if len(pan) < 12 {
 		return nil, errors.New("PAN must be at least 13 digits")
 	}
 	for _, r := range pan {
@@ -281,9 +286,10 @@ func ExtractPINFormat0(pinBlock []byte, pan string) ([]byte, error) {
 
 	// Build PAN field (8 bytes).
 	// Take 12 rightmost PAN digits excluding the check digit.
-	panWithoutCheck := pan[:len(pan)-1] // remove last digit.
+	panWithoutCheck := pan
 	panDigits := panWithoutCheck
 	if len(panWithoutCheck) > 12 {
+		panWithoutCheck = pan[:len(pan)-1] // remove last digit.
 		panDigits = panWithoutCheck[len(panWithoutCheck)-12:]
 	} else if len(panWithoutCheck) < 12 {
 		panDigits = fmt.Sprintf("%012s", panWithoutCheck) // pad left with zeros.
