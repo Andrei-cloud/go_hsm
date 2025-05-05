@@ -32,24 +32,32 @@ func Raw2B(raw []byte) []byte {
 	return []byte(Raw2Str(raw))
 }
 
-// B2Raw decodes a hex-encoded byte slice into raw binary data.
-func B2Raw(hexData []byte) ([]byte, error) {
-	result, err := hex.DecodeString(string(hexData))
-	if err != nil {
-		return nil, err
+// StringToBCD converts a byte slice in BCD format to a string.
+func StringToBCD(s string) ([]byte, error) {
+	if len(s)%2 != 0 {
+		s = "0" + s // pad if not even length
+	}
+	bcd := make([]byte, len(s)/2)
+	for i := 0; i < len(s); i += 2 {
+		hi := s[i] - '0'
+		lo := s[i+1] - '0'
+		if hi > 9 || lo > 9 {
+			return nil, fmt.Errorf("invalid digit in string: %s", s)
+		}
+		bcd[i/2] = (hi << 4) | lo
 	}
 
-	return result, nil
+	return bcd, nil
 }
 
 // XOR takes two equal-length hex-encoded byte slices, XORs their raw bytes, and
 // returns the result as uppercase hex bytes.
 func XOR(block1, block2 []byte) ([]byte, error) {
-	r1, err := B2Raw(block1)
+	r1, err := StringToBCD(string(block1))
 	if err != nil {
 		return nil, err
 	}
-	r2, err := B2Raw(block2)
+	r2, err := StringToBCD(string(block2))
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +85,7 @@ func Hexify(n int) (string, error) {
 	return s, nil
 }
 
-// NewECBEncrypter returns a BlockMode which encrypts in ECB.
+// NewECBEncrypter returns a cipher.BlockMode for ECB encryption.
 func NewECBEncrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbEncrypter)(&ecb{b: b})
 }
@@ -86,7 +94,11 @@ func (x *ecbEncrypter) BlockSize() int { return x.b.BlockSize() }
 
 func (x *ecbEncrypter) CryptBlocks(dst, src []byte) {
 	if len(src)%x.BlockSize() != 0 {
-		panic("cryptoutils: input not full blocks")
+		panic(fmt.Sprintf(
+			"cryptoutils: input length %d not a multiple of block size %d",
+			len(src),
+			x.BlockSize(),
+		))
 	}
 	for len(src) > 0 {
 		x.b.Encrypt(dst[:x.BlockSize()], src[:x.BlockSize()])
@@ -95,7 +107,7 @@ func (x *ecbEncrypter) CryptBlocks(dst, src []byte) {
 	}
 }
 
-// NewECBDecrypter returns a BlockMode which decrypts in ECB.
+// NewECBDecrypter returns a cipher.BlockMode for ECB decryption.
 func NewECBDecrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbDecrypter)(&ecb{b: b})
 }
@@ -104,7 +116,11 @@ func (x *ecbDecrypter) BlockSize() int { return x.b.BlockSize() }
 
 func (x *ecbDecrypter) CryptBlocks(dst, src []byte) {
 	if len(src)%x.BlockSize() != 0 {
-		panic("cryptoutils: input not full blocks")
+		panic(fmt.Sprintf(
+			"cryptoutils: input length %d not a multiple of block size %d",
+			len(src),
+			x.BlockSize(),
+		))
 	}
 	for len(src) > 0 {
 		x.b.Decrypt(dst[:x.BlockSize()], src[:x.BlockSize()])
@@ -113,9 +129,8 @@ func (x *ecbDecrypter) CryptBlocks(dst, src []byte) {
 	}
 }
 
-// KeyCV computes the DES key check value (KCV) by encrypting two blocks of zeros.
 func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
-	rawKey, err := B2Raw(keyHex)
+	rawKey, err := StringToBCD(string(keyHex))
 	if err != nil {
 		return nil, err
 	}
@@ -190,8 +205,9 @@ func GetDigitsFromString(ct string, length int) string {
 
 // GetVisaPVV generates a 4-digit PIN Verification Value (PVV) using 3DES ECB.
 func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, error) {
+	pan11 := accountNumber[len(accountNumber)-11:] // last 11 digits before check digit
 	// Build TSP: 11 PAN digits + PVKeyIndex + PIN (only first 4 digits)
-	tspHex := keyIndex + accountNumber[len(accountNumber)-12:len(accountNumber)-1] + pin[:4]
+	tspHex := pan11 + keyIndex + pin[:4]
 
 	if len(pvkHex) == 16 {
 		// Extend to tripple length
@@ -203,7 +219,7 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 		return nil, err
 	}
 
-	rawTsp, err := B2Raw([]byte(tspHex))
+	rawTsp, err := StringToBCD(tspHex)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +233,7 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 
 // GetVisaCVV generates a 3-digit CVV using DES and 3DES operations.
 func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]byte, error) {
-	rawKey, err := B2Raw(cvkHex)
+	rawKey, err := StringToBCD(string(cvkHex))
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +262,7 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 		return nil, err
 	}
 	// Final 3DES ECB encrypt
-	rawB, err := B2Raw(xored)
+	rawB, err := StringToBCD(string(xored))
 	if err != nil {
 		return nil, err
 	}

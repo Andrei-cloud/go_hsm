@@ -112,7 +112,7 @@ func ExecuteA0(
 		hexZmk := remainder[idx : idx+hexLen]
 		logFn(fmt.Sprintf("A0 processing ZMK (hex): %s", string(hexZmk)))
 
-		zmkBytes, err := cryptoutils.B2Raw(hexZmk)
+		zmkBytes, err := cryptoutils.StringToBCD(string(hexZmk))
 		if err != nil {
 			return nil, errors.Join(errors.New("zmk to binary"), err)
 		}

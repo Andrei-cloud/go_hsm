@@ -94,7 +94,7 @@ func TestExecuteDC(t *testing.T) {
 		{
 			name: "Successful Verification with Default LMK",
 			input: []byte(
-				"U1A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB33568D267B408C2D4D90134551380493716469",
+				"U1A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB33568D267B408C2D4D90134551380493719375",
 			),
 			mockDecrypt:      mockDecryptWithDefaultLMK, // Use default LMK mock.
 			mockEncrypt:      mockEncryptWithDefaultLMK, // Use default LMK mock.

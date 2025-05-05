@@ -50,7 +50,7 @@ func ExecuteBU(
 	logFn(fmt.Sprintf("BU processing encrypted key (hex): %s", string(keyHex)))
 
 	// Convert encrypted key from hex to binary
-	encryptedKey, err := cryptoutils.B2Raw(keyHex)
+	encryptedKey, err := cryptoutils.StringToBCD(string(keyHex))
 	if err != nil {
 		return nil, errors.Join(errors.New("invalid key format"), err)
 	}

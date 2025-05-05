@@ -66,7 +66,7 @@ func TestB2Raw(t *testing.T) {
 		tt := tt // capture range variable.
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := B2Raw(tt.input)
+			got, err := StringToBCD(string(tt.input))
 			if (err != nil) != tt.wantErr {
 				t.Errorf("B2Raw() error = %v, wantErr %v", err, tt.wantErr)
 
@@ -259,7 +259,7 @@ func TestParityAndKeyParity(t *testing.T) {
 			}
 
 			// Test key parity.
-			key, err := B2Raw([]byte(tt.keyInput))
+			key, err := StringToBCD(tt.keyInput)
 			if err != nil {
 				t.Fatalf("failed to convert test key: %v", err)
 			}
@@ -394,7 +394,7 @@ func TestExtractPINFormat0(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			// Convert pinBlock hex string to byte array.
-			pinBlockBytes, err := B2Raw([]byte(tt.pinBlock))
+			pinBlockBytes, err := StringToBCD(tt.pinBlock)
 			if err != nil &&
 				!tt.wantErr { // Allow B2Raw error if wantErr is true (e.g., invalid length).
 				t.Fatalf("failed to convert pinBlock: %v", err)
