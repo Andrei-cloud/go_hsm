@@ -2,5 +2,4 @@
 *.wasm
 go_hsm.code-workspace
 
-.github/copilot-instructions.md
-.github/copilot-instructions.md
+.github/
