@@ -6,7 +6,9 @@ import (
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
+	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
 )
 
 // ExecuteEC processes the EC (Verify PIN) command and returns response bytes.
@@ -24,7 +26,7 @@ func ExecuteEC(
 		return nil, errorcodes.Err15
 	}
 
-	var clearPIN []byte
+	var clearPINString string
 	firstByte := data[0]
 	var decryptedTPK []byte
 
@@ -145,28 +147,28 @@ func ExecuteEC(
 	}
 
 	// Extract encrypted PIN block
-	encryptedPinBlock := data[:pinBlockSize]
+	encryptedPinBlockHex := string(data[:pinBlockSize])
 	data = data[pinBlockSize:]
-	logFn(fmt.Sprintf("EC: parsed encrypted PIN block: %s", string(encryptedPinBlock)))
+	logFn(fmt.Sprintf("EC: parsed encrypted PIN block: %s", encryptedPinBlockHex))
 
 	// Skip format code
-	formatCode := data[:fmtCodeSize]
+	formatCode := string(data[:fmtCodeSize])
 	data = data[fmtCodeSize:]
-	logFn(fmt.Sprintf("EC: parsed format code: %s", string(formatCode)))
+	logFn(fmt.Sprintf("EC: parsed format code: %s", formatCode))
 
-	accountNum := data[:accNumSize]
+	accountNum := string(data[:accNumSize])
 	data = data[accNumSize:]
-	logFn(fmt.Sprintf("EC: parsed account number: %s", string(accountNum)))
+	logFn(fmt.Sprintf("EC: parsed account number: %s", accountNum))
 
-	pvki := data[:pvkiSize]
+	pvki := string(data[:pvkiSize])
 	data = data[pvkiSize:]
-	logFn(fmt.Sprintf("EC: parsed PVKI: %s", string(pvki)))
+	logFn(fmt.Sprintf("EC: parsed PVKI: %s", pvki))
 
-	pvv := data[:pvvSize]
-	logFn(fmt.Sprintf("EC: parsed PVV: %s", string(pvv)))
+	pvv := string(data[:pvvSize])
+	logFn(fmt.Sprintf("EC: parsed PVV: %s", pvv))
 
 	// If TPK was present, decrypt the PIN block using TPK
-	var pinBlockForClear []byte
+	var pinBlockForClearHex string
 	if decryptedTPK != nil {
 		logFn(fmt.Sprintf("EC: processing with TPK present, TPK length: %d", len(decryptedTPK)))
 		// Create TPK cipher
@@ -199,7 +201,7 @@ func ExecuteEC(
 		}
 
 		// Convert PIN block from hex to binary
-		pinBlockBin, err := hex.DecodeString(string(encryptedPinBlock))
+		pinBlockBin, err := hex.DecodeString(encryptedPinBlockHex)
 		if err != nil {
 			logFn(fmt.Sprintf("EC: invalid PIN block hex format: %v", err))
 
@@ -210,37 +212,38 @@ func ExecuteEC(
 		// Decrypt PIN block using TPK
 		decryptedPinBlock := make([]byte, len(pinBlockBin))
 		tpkCipher.Decrypt(decryptedPinBlock, pinBlockBin)
-		pinBlockForClear = []byte(cryptoutils.Raw2Str(decryptedPinBlock))
-		logFn(fmt.Sprintf("EC: decrypted PIN block length: %d", len(pinBlockForClear)))
-		logFn(fmt.Sprintf("EC: decrypted PIN block hex: %s", string(pinBlockForClear)))
-		logFn(fmt.Sprintf("EC: account number for PIN extraction: %s", string(accountNum)))
+		pinBlockForClearHex = hex.EncodeToString(decryptedPinBlock)
+		logFn(fmt.Sprintf("EC: decrypted PIN block hex: %s", pinBlockForClearHex))
+		logFn(fmt.Sprintf("EC: account number for PIN extraction: %s", accountNum))
 	} else {
-		pinBlockForClear = encryptedPinBlock
-		logFn(fmt.Sprintf("EC: using encrypted PIN block as is: %s", string(pinBlockForClear)))
-		logFn(fmt.Sprintf("EC: account number for PIN extraction: %s", string(accountNum)))
+		pinBlockForClearHex = encryptedPinBlockHex
+		logFn(fmt.Sprintf("EC: using encrypted PIN block as is: %s", pinBlockForClearHex))
+		logFn(fmt.Sprintf("EC: account number for PIN extraction: %s", accountNum))
 	}
 
 	// Extract clear PIN from decrypted PIN block
-	// Use the injected getClearPin function.
-	clearPIN, err := cryptoutils.GetClearPin(
-		pinBlockForClear,
-		string(accountNum),
-	)
+	pinBlockFormat, err := hsm.GetPinBlockFormatFromThalesCode(formatCode)
+	if err != nil {
+		logFn(fmt.Sprintf("EC: invalid pin block format code %s: %v", formatCode, err))
+
+		return nil, errorcodes.Err23
+	}
+
+	clearPINString, err = pinblock.DecodePinBlock(pinBlockForClearHex, accountNum, pinBlockFormat)
 	if err != nil {
 		logFn(fmt.Sprintf("EC: failed to extract clear PIN: %v", err))
 
 		return nil, errorcodes.Err20
 	}
-	logFn(fmt.Sprintf("EC: clear PIN length: %d", len(clearPIN)))
-	logFn(fmt.Sprintf("EC: account number used: %s", string(accountNum)))
-	logFn(fmt.Sprintf("EC: PVKI used: %s", string(pvki)))
+	logFn(fmt.Sprintf("EC: clear PIN length: %d", len(clearPINString)))
+	logFn(fmt.Sprintf("EC: account number used: %s", accountNum))
+	logFn(fmt.Sprintf("EC: PVKI used: %s", pvki))
 
 	// Calculate PVV using clear PIN
-	// Use the injected getVisaPVV function.
 	calculatedPVV, err := cryptoutils.GetVisaPVV(
-		string(accountNum),
-		string(pvki),
-		string(clearPIN),
+		accountNum,
+		pvki,
+		clearPINString,
 		decryptedPVK,
 	)
 	if err != nil {
@@ -249,10 +252,10 @@ func ExecuteEC(
 		return nil, errorcodes.Err68
 	}
 	logFn(fmt.Sprintf("EC: calculated PVV: %s", string(calculatedPVV)))
-	logFn(fmt.Sprintf("EC: received PVV: %s", string(pvv)))
+	logFn(fmt.Sprintf("EC: received PVV: %s", pvv))
 
 	// Validate calculated PVV against received PVV
-	if string(calculatedPVV) != string(pvv) {
+	if string(calculatedPVV) != pvv {
 		logFn("EC: PVV verification failed")
 
 		return nil, errorcodes.Err01
