@@ -25,14 +25,7 @@ type LMKPair struct {
 	Right []byte
 }
 
-type LMKSet [20]LMKPair // Changed from [40]LMKPair
-
-type KeyType struct {
-	Name      string
-	Code      string
-	LMKPair   int
-	VariantID int
-}
+type LMKSet [20]LMKPair
 
 func (lmk LMKPair) ApplyVariant(variantID int) (LMKPair, error) {
 	v, ok := VariantMap[variantID]
@@ -98,4 +91,47 @@ func LoadLMKFromHex(leftHex, rightHex string) (LMKPair, error) {
 	}
 
 	return LMKPair{Left: left, Right: right}, nil
+}
+
+// DecryptUnderVariantLMK decrypts an input key that was encrypted under a variant LMK pair using a specific scheme.
+// The provided LMKPair should already have the key-type specific variant applied.
+func DecryptUnderVariantLMK(encryptedKey []byte, pair LMKPair, schemeTag byte) ([]byte, error) {
+	var variants []byte
+	switch schemeTag {
+	case 'U':
+		if len(encryptedKey) != 16 {
+			return nil, errors.New("double-length encrypted key required for scheme U")
+		}
+		variants = []byte{0xA6, 0x5A}
+	case 'T':
+		if len(encryptedKey) != 24 {
+			return nil, errors.New("triple-length encrypted key required for scheme T")
+		}
+		variants = []byte{0x6A, 0xDE, 0x2B}
+	default:
+		return nil, fmt.Errorf("unknown scheme tag: %c", schemeTag)
+	}
+
+	decrypted := make([]byte, 0, len(encryptedKey))
+	for i, v := range variants {
+		// Create the specific LMK for this part of the key.
+		variantLMKForKeyPart := make([]byte, 16)
+		copy(variantLMKForKeyPart, pair.Left)
+		copy(variantLMKForKeyPart[8:], pair.Right)
+		variantLMKForKeyPart[8] ^= v // Apply scheme variant to the first byte of the right half.
+
+		// Prepare 3DES key (K1K2K1).
+		desKey := append(variantLMKForKeyPart, variantLMKForKeyPart[:8]...)
+		block, err := des.NewTripleDESCipher(desKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create 3DES cipher for decryption: %w", err)
+		}
+
+		segment := encryptedKey[i*8 : (i+1)*8]
+		dst := make([]byte, 8)
+		block.Decrypt(dst, segment)
+		decrypted = append(decrypted, dst...)
+	}
+
+	return decrypted, nil
 }
