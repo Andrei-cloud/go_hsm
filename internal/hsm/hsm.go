@@ -6,6 +6,9 @@ import (
 	"crypto/des"
 	"encoding/hex"
 	"errors"
+	"fmt"
+
+	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
 )
 
 // HSM represents the hardware security module server holding the LMK, firmware version, and cipher for encryption operations.
@@ -14,6 +17,8 @@ type HSM struct {
 	FirmwareVersion string
 	cipher          cipher.Block
 }
+
+var errUnknownThalesPinBlockFormat = errors.New("unknown thales pin block format code")
 
 // NewHSM creates a new HSM instance with the given LMK key in hex and firmware version.
 // keyHex must be 16, 32, or 48 hex characters; shorter lengths are expanded automatically.
@@ -70,4 +75,37 @@ func (h *HSM) DecryptUnderLMK(key []byte) ([]byte, error) {
 	}
 
 	return plaintext, nil
+}
+
+// GetPinBlockFormatFromThalesCode maps a Thales PIN block format code string
+// to the corresponding pinblock.PinBlockFormat.
+// The Thales codes are based on common interpretations of their documentation.
+func GetPinBlockFormatFromThalesCode(thalesCode string) (pinblock.PinBlockFormat, error) {
+	switch thalesCode {
+	case "01": // Typically ISO 9564-1 Format 0.
+		return pinblock.ISO0, nil
+	case "02": // Docutel.
+		return pinblock.DOCUTEL, nil
+	case "03": // Diebold / IBM 3624.
+		return pinblock.DIEBOLD, nil
+	case "04": // PLUS Network.
+		return pinblock.PLUSNETWORK, nil
+	case "05": // Typically ISO 9564-1 Format 1.
+		return pinblock.ISO1, nil
+	case "34": // Typically ISO 9564-1 Format 2. (Decimal 34 from prompt).
+		return pinblock.ISO2, nil
+	case "35": // Mastercard Pay Now & Pay Later. (Decimal 35 from prompt).
+		return pinblock.MASTERCARDPAYNOWPAYLATER, nil
+	case "41": // Visa PIN-only change. (Decimal 41 from prompt).
+		return pinblock.VISANEWPINONLY, nil
+	case "42": // Visa old+new PIN change. (Decimal 42 from prompt).
+		return pinblock.VISANEWOLDIN, nil
+	case "47": // Typically ISO 9564-1 Format 3. (Decimal 47 from prompt).
+		return pinblock.ISO3, nil
+	case "48": // Typically ISO 9564-1 Format 4. (Decimal 48 from prompt).
+		return pinblock.ISO4, nil
+	default:
+		// Return zero value for format and an error.
+		return 0, fmt.Errorf("%w: %s", errUnknownThalesPinBlockFormat, thalesCode)
+	}
 }
