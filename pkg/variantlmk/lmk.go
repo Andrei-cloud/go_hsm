@@ -26,7 +26,7 @@ var defaultLMKHex = map[int][2]string{
 	38: {"0101010101010101", "0101010101010101"},
 }
 
-// DefaultLMKSet returns the default test LMK set with 40 entries.
+// DefaultLMKSet returns the default test LMK set with 20 LMK pairs.
 func DefaultLMKSet() (LMKSet, error) {
 	var set LMKSet
 	for code, hexPair := range defaultLMKHex {

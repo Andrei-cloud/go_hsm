@@ -25,7 +25,7 @@ type LMKPair struct {
 	Right []byte
 }
 
-type LMKSet [40]LMKPair
+type LMKSet [20]LMKPair // Changed from [40]LMKPair
 
 type KeyType struct {
 	Name      string
