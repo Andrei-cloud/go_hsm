@@ -423,7 +423,6 @@ func decodeISO3(pinBlockHex, pan string) (string, error) {
 func encodeISO4(_, _ string) (string, error) {
 	// ISO4 is more complex and typically involves a key exchange mechanism or a pre-shared secret
 	// to encrypt/wrap the PIN block or parts of it. The standard is not freely available.
-	// The reference URL does not provide enough detail for a full implementation.
 	// Returning not implemented.
 
 	return "", errFormatNotImplemented

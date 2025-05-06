@@ -27,7 +27,11 @@ const (
 	VISA4                         // VISA VTS PIN Block Format 4.
 	DOCUTEL                       // Docutel PIN Block Format.
 	NCR                           // NCR PIN Block Format.
-	// ... add other formats from the reference URL as needed, e.g., ECI1, DIEBOLD, IBM3624.
+	// Added based on Thales specification.
+	PLUSNETWORK              // Thales Format 04 (PLUS Network).
+	MASTERCARDPAYNOWPAYLATER // Thales Format 35 (Mastercard Pay Now & Pay Later).
+	VISANEWPINONLY           // Thales Format 41 (Visa new PIN only).
+	VISANEWOLDIN             // Thales Format 42 (Visa new & old PIN).
 	// Each requires its specific encoding/decoding algorithm from standard documents.
 )
 
@@ -109,6 +113,18 @@ func EncodePinBlock(pin, pan string, format PinBlockFormat) (string, error) {
 	case NCR:
 
 		return encodeNCR(pin, pan)
+	case PLUSNETWORK:
+
+		return encodePLUSNETWORK(pin, pan)
+	case MASTERCARDPAYNOWPAYLATER:
+
+		return encodeMASTERCARDPAYNOWPAYLATER(pin, pan)
+	case VISANEWPINONLY:
+
+		return encodeVISANEWPINONLY(pin, pan) // pan is udkHex here
+	case VISANEWOLDIN:
+
+		return encodeVISANEWOLDIN(pin, pan) // pan is oldPin|udkHex here
 	// Add cases for other implemented formats here.
 	default:
 
@@ -177,6 +193,18 @@ func DecodePinBlock(pinBlockHex, pan string, format PinBlockFormat) (string, err
 	case NCR:
 
 		return decodeNCR(pinBlockHex, pan)
+	case PLUSNETWORK:
+
+		return decodePLUSNETWORK(pinBlockHex, pan)
+	case MASTERCARDPAYNOWPAYLATER:
+
+		return decodeMASTERCARDPAYNOWPAYLATER(pinBlockHex, pan)
+	case VISANEWPINONLY:
+
+		return decodeVISANEWPINONLY(pinBlockHex, pan) // pan is udkHex here
+	case VISANEWOLDIN:
+
+		return decodeVISANEWOLDIN(pinBlockHex, pan) // pan is oldPin|udkHex here
 	// Add cases for other implemented formats here.
 	default:
 
