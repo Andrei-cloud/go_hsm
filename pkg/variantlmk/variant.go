@@ -109,6 +109,7 @@ func DecryptUnderVariantLMK(encryptedKey []byte, pair LMKPair, schemeTag byte) (
 		}
 		variants = []byte{0x6A, 0xDE, 0x2B}
 	default:
+
 		return nil, fmt.Errorf("unknown scheme tag: %c", schemeTag)
 	}
 
@@ -121,7 +122,8 @@ func DecryptUnderVariantLMK(encryptedKey []byte, pair LMKPair, schemeTag byte) (
 		variantLMKForKeyPart[8] ^= v // Apply scheme variant to the first byte of the right half.
 
 		// Prepare 3DES key (K1K2K1).
-		desKey := append(variantLMKForKeyPart, variantLMKForKeyPart[:8]...)
+		variantLMKForKeyPart = append(variantLMKForKeyPart, variantLMKForKeyPart[:8]...)
+		desKey := variantLMKForKeyPart
 		block, err := des.NewTripleDESCipher(desKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create 3DES cipher for decryption: %w", err)

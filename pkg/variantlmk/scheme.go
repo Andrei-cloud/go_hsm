@@ -1,6 +1,9 @@
 package variantlmk
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // EncryptKeyUnderScheme encrypts inputKey under the correct LMK based on keyTypeCode and schemeTag.
 // If isKeyComponent is true, an additional 0xFF variant is applied to the LMK after the key-type variant.
@@ -28,13 +31,11 @@ func EncryptKeyUnderScheme(
 	if err != nil {
 		return nil, fmt.Errorf("apply variant to lmk: %w", err)
 	}
-
 	if isKeyComponent {
-		if len(variantLMK.Left) > 0 {
-			variantLMK.Left[0] ^= 0xFF
-		} else {
-			return nil, fmt.Errorf("LMK left part is empty, cannot apply component variant")
+		if len(variantLMK.Left) == 0 {
+			return nil, errors.New("lmk left part is empty cannot apply component variant")
 		}
+		variantLMK.Left[0] ^= 0xFF
 	}
 
 	encrypted, err := EncryptUnderVariantLMK(inputKey, variantLMK, schemeTag)
@@ -74,11 +75,10 @@ func DecryptKeyUnderScheme(
 	}
 
 	if isKeyComponent {
-		if len(variantLMK.Left) > 0 {
-			variantLMK.Left[0] ^= 0xFF
-		} else {
-			return nil, fmt.Errorf("LMK left part is empty, cannot apply component variant")
+		if len(variantLMK.Left) == 0 {
+			return nil, errors.New("lmk left part is empty cannot apply component variant")
 		}
+		variantLMK.Left[0] ^= 0xFF
 	}
 
 	decrypted, err := DecryptUnderVariantLMK(encryptedKey, variantLMK, schemeTag)
