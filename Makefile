@@ -1,4 +1,4 @@
-.PHONY: help run run-human build test fmt lint clean plugins
+.PHONY: help run run-human build test fmt lint clean plugins cli install
 
 help: ## Display this help screen.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } ' $(MAKEFILE_LIST)
@@ -42,4 +42,13 @@ plugins: ## compile Go WASM plugins using TinyGo
 			fi; \
 		fi; \
 	done
+
+# CLI-specific targets.
+.PHONY: cli install
+
+cli: ## Build CLI binary.
+	go build -o bin/go_hsm ./cmd/go_hsm
+
+install: cli ## Install CLI to GOPATH/bin.
+	cp bin/go_hsm $(GOPATH)/bin/
 
