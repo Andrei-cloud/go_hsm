@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 )
 
 // Mock functions that simulate actual HSM encryption/decryption.
@@ -34,19 +35,11 @@ func TestExecuteBU(t *testing.T) {
 	t.Parallel()
 
 	// --- Helper Data. ---
-	goodKeyBytes := make([]byte, 16) // 16 bytes = 32 hex chars.
-	for i := range goodKeyBytes {
-		goodKeyBytes[i] = 0xAA // Good parity bytes.
-	}
-	goodKeyHex := hex.EncodeToString(goodKeyBytes)
+	goodKeyHex := "001U1A4D672DCA6CB3351FD1B02B237AF9AE"
 
 	badKeyBytes := make([]byte, 16) // All zeros have even parity.
 	badKeyHex := hex.EncodeToString(badKeyBytes)
 
-	// --- Mock Functions. ---
-	mockDecryptGoodParity := func(_ []byte) ([]byte, error) {
-		return goodKeyBytes, nil
-	}
 	mockDecryptBadParity := func(_ []byte) ([]byte, error) {
 		return badKeyBytes, nil
 	}
@@ -74,7 +67,8 @@ func TestExecuteBU(t *testing.T) {
 			name: "Invalid Key Scheme",
 			input: append(
 				[]byte{'0', '0', '0', 'X'},
-				[]byte(goodKeyHex)...), // X is invalid.
+				[]byte(goodKeyHex)...,
+			),
 			mockDecrypt:      mockDecryptUnderLMKForBU,
 			mockEncrypt:      mockEncryptUnderLMKForBU,
 			mockLog:          mockLogFnBU,
@@ -85,7 +79,8 @@ func TestExecuteBU(t *testing.T) {
 			name: "Invalid Key Parity",
 			input: append(
 				[]byte{'0', '0', '0', 'U'},
-				[]byte(badKeyHex)...), // Valid scheme U, bad key.
+				[]byte(badKeyHex)...,
+			),
 			mockDecrypt:      mockDecryptBadParity,
 			mockEncrypt:      mockEncryptUnderLMKForBU,
 			mockLog:          mockLogFnBU,
@@ -93,14 +88,20 @@ func TestExecuteBU(t *testing.T) {
 			expectedError:    errorcodes.Err01,
 		},
 		{
-			name: "Successful",
-			input: append(
-				[]byte{'0', '0', '0', 'U'},
-				[]byte(goodKeyHex)...), // Valid scheme U, good key.
-			mockDecrypt:      mockDecryptGoodParity,
+			name:  "Successful with Actual HSM Decrypt",
+			input: []byte(goodKeyHex),
+			mockDecrypt: func(input []byte) ([]byte, error) {
+				// Instantiate HSM and use its actual decrypt function.
+				hsmInstance, err := hsm.NewHSM("0123456789ABCDEFFEDCBA9876543210", "0007-E000")
+				if err != nil {
+					return nil, err
+				}
+
+				return hsmInstance.DecryptUnderLMK(input)
+			},
 			mockEncrypt:      mockEncryptUnderLMKForBU,
 			mockLog:          mockLogFnBU,
-			expectedResponse: "BV00" + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // Placeholder KCV.
+			expectedResponse: "BV00" + goodKeyHex,
 			expectedError:    nil,
 		},
 	}

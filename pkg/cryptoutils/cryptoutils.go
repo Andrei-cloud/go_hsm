@@ -32,24 +32,6 @@ func Raw2B(raw []byte) []byte {
 	return []byte(Raw2Str(raw))
 }
 
-// StringToBCD converts a string of decimal digits to a BCD byte slice.
-func StringToBCD(s string) ([]byte, error) {
-	if len(s)%2 != 0 {
-		s = "0" + s // pad if not even length
-	}
-	bcd := make([]byte, len(s)/2)
-	for i := 0; i < len(s); i += 2 {
-		hi := s[i] - '0'
-		lo := s[i+1] - '0'
-		if hi > 9 || lo > 9 {
-			return nil, fmt.Errorf("invalid digit in string: %s", s)
-		}
-		bcd[i/2] = (hi << 4) | lo
-	}
-
-	return bcd, nil
-}
-
 // XOR takes two equal-length hex-encoded byte slices, XORs their raw bytes, and
 // returns the result as uppercase hex bytes.
 func XOR(block1, block2 []byte) ([]byte, error) {
@@ -219,7 +201,7 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 		return nil, err
 	}
 
-	rawTsp, err := StringToBCD(tspHex)
+	rawTsp, err := hex.DecodeString(tspHex)
 	if err != nil {
 		return nil, err
 	}
