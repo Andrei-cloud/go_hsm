@@ -4,7 +4,6 @@ package pinblock
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -99,7 +98,10 @@ func xorHexStrings(s1, s2 string) (string, error) {
 	return strings.ToUpper(hex.EncodeToString(resultBytes)), nil
 }
 
-// Helper to get 12 digits from PAN (left or right).
+// get12PanDigits returns 12 pan digits from left or right.
+// If fromLeft is true, returns the leftmost 12 digits.
+// If fromLeft is false, returns the rightmost 12 digits excluding check digit.
+// Accepts pans already provided as 12 digits excluding check digit.
 func get12PanDigits(pan string, fromLeft bool) (string, error) {
 	panDigits := ""
 	for _, r := range pan {
@@ -107,26 +109,27 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 			panDigits += string(r)
 		}
 	}
+
 	if len(panDigits) < 12 {
 		return "", fmt.Errorf("%w: pan must contain at least 12 digits", errInvalidPanLength)
 	}
+
 	if fromLeft {
 		return panDigits[:12], nil
 	}
-	// from right, excluding check digit (standard interpretation for "rightmost 12 excluding check digit")
-	if panDigits != "" { // panDigits has already been filtered for digits.
-		panWithoutCheckDigit := panDigits[:len(panDigits)-1]
-		if len(panWithoutCheckDigit) < 12 {
-			return "", fmt.Errorf(
-				"%w: pan (after excluding check digit) must contain at least 12 digits",
-				errInvalidPanLength,
-			)
-		}
 
-		return panWithoutCheckDigit[len(panWithoutCheckDigit)-12:], nil
+	// handle case where panDigits is already the 12 rightmost excluding check digit.
+	if len(panDigits) == 12 {
+		return panDigits, nil
 	}
 
-	return "", errors.New(
-		"pan contains no processable digits",
-	) // Should be caught by len(panDigits) < 12 earlier.
+	panWithoutCheckDigit := panDigits[:len(panDigits)-1]
+	if len(panWithoutCheckDigit) < 12 {
+		return "", fmt.Errorf(
+			"%w: pan (after excluding check digit) must contain at least 12 digits",
+			errInvalidPanLength,
+		)
+	}
+
+	return panWithoutCheckDigit[len(panWithoutCheckDigit)-12:], nil
 }
