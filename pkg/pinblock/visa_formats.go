@@ -27,7 +27,7 @@ func encodeVISA1(pin, pan string) (string, error) {
 	}
 
 	// Block 2 (PAN data): '0000' + 11 rightmost digits of PAN (excluding check digit) + check digit.
-	relevantPan, err := get12PanDigits(pan, false) // PAN validation done here.
+	relevantPan, err := getVisa1PanComponent(pan) // PAN validation done here.
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +59,7 @@ func decodeVISA1(pinBlockHex, pan string) (string, error) {
 	}
 
 	// Prepare PAN field (same as in encoding).
-	relevantPan, err := get12PanDigits(pan, false)
+	relevantPan, err := getVisa1PanComponent(pan)
 	if err != nil {
 		return "", err
 	}

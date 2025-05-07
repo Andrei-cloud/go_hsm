@@ -36,6 +36,42 @@ func GetRandomHexDigitAF() string {
 	return fmt.Sprintf("%X", (b[0]%6)+10)
 }
 
+// getVisa1PanComponent extracts the PAN component for VISA1 format.
+// It takes the 11 rightmost digits of the PAN (excluding the check digit)
+// and appends the check digit itself.
+func getVisa1PanComponent(pan string) (string, error) {
+	panDigits := ""
+	for _, r := range pan {
+		if r >= '0' && r <= '9' {
+			panDigits += string(r)
+		}
+	}
+
+	// VISA1 requires at least 11 digits for the main part + 1 check digit.
+	if len(panDigits) < 12 {
+		return "", fmt.Errorf(
+			"%w: pan must contain at least 12 digits for visa1 format",
+			errInvalidPanLength,
+		)
+	}
+
+	checkDigit := string(panDigits[len(panDigits)-1])
+	panWithoutCheckDigit := panDigits[:len(panDigits)-1]
+
+	if len(panWithoutCheckDigit) < 11 {
+		// This case should ideally be caught by the len(panDigits) < 12 check,
+		// but it's good for robustness.
+		return "", fmt.Errorf(
+			"%w: pan (after excluding check digit) must contain at least 11 digits for visa1 format",
+			errInvalidPanLength,
+		)
+	}
+
+	elevenRightmost := panWithoutCheckDigit[len(panWithoutCheckDigit)-11:]
+
+	return elevenRightmost + checkDigit, nil
+}
+
 // Helper to XOR two hex strings. Result is uppercase hex.
 func xorHexStrings(s1, s2 string) (string, error) {
 	b1, err := hex.DecodeString(s1)

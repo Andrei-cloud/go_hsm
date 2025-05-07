@@ -9,7 +9,7 @@ import (
 )
 
 // ANSI X9.8 (also known as Format 0 or ECI-2 or DIEBOLD-0).
-// PIN: 4-14 digits.
+// PIN: 4-12 digits.
 // PAN: The 12 rightmost digits of the PAN (excluding the check digit) are used.
 func encodeANSIX98(pin, pan string) (string, error) {
 	if pan == "" {
@@ -74,7 +74,7 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 	}
 	clearPinFieldHex := strings.ToUpper(hex.EncodeToString(clearPinFieldBytes))
 
-	// Validate format "0LPPPP...". First char must be '0', L is PIN length (0x4-0xE).
+	// Validate format "0LPPPP...". First char must be '0', L is PIN length (0x4-0xC).
 	if clearPinFieldHex[0] != '0' {
 		return "", fmt.Errorf(
 			"%w: decoded ansix98 pin block has invalid format",
@@ -83,7 +83,7 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 	}
 	pinLenHex := string(clearPinFieldHex[1])
 	pinLen, err := strconv.ParseInt(pinLenHex, 16, 64)
-	if err != nil || pinLen < 4 || pinLen > 14 {
+	if err != nil || pinLen < 4 || pinLen > 12 {
 		return "", fmt.Errorf(
 			"%w: decoded ansix98 pin block has invalid pin length",
 			errPinBlockDecoding,
