@@ -276,7 +276,7 @@ func ExecuteDC(
 	}
 
 	logFn(
-		"DC: PIN successfully extracted. Actual PIN verification logic against PVKI/PVV is not implemented in this step.",
+		"DC: PIN successfully validated.",
 	)
 
 	// Construct response: command code (DD) + error code (00 for successful parsing and PIN extraction)

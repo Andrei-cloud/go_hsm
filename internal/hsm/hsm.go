@@ -11,6 +11,9 @@ import (
 	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
 )
 
+// FirmwareVersion is the constant firmware version for the HSM.
+const FirmwareVersion = "7000-E000"
+
 // HSM represents the hardware security module server holding the LMK, firmware version, and cipher for encryption operations.
 type HSM struct {
 	LMK             []byte
