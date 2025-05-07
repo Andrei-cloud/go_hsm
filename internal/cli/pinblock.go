@@ -23,5 +23,5 @@ func GeneratePinBlock(pin, pan, formatCode string) (string, error) {
 		return "", fmt.Errorf("unsupported format code: %s", formatCode)
 	}
 
-	return generator.Encode(pin, pan)
+	return generator(pin, pan)
 }
