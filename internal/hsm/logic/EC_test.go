@@ -51,7 +51,7 @@ func TestExecuteEC(t *testing.T) {
 			mockDecrypt:      mockDecryptWithDefaultLMK, // Use default LMK mock.
 			mockEncrypt:      mockEncryptWithDefaultLMK, // Use default LMK mock.
 			mockLog:          mockLogFnDC,
-			expectedResponse: "DD" + errorcodes.Err00.CodeOnly(),
+			expectedResponse: "ED" + errorcodes.Err00.CodeOnly(),
 			expectedError:    nil,
 		},
 	}

@@ -32,7 +32,7 @@ func Raw2B(raw []byte) []byte {
 	return []byte(Raw2Str(raw))
 }
 
-// StringToBCD converts a byte slice in BCD format to a string.
+// StringToBCD converts a string of decimal digits to a BCD byte slice.
 func StringToBCD(s string) ([]byte, error) {
 	if len(s)%2 != 0 {
 		s = "0" + s // pad if not even length
@@ -53,13 +53,13 @@ func StringToBCD(s string) ([]byte, error) {
 // XOR takes two equal-length hex-encoded byte slices, XORs their raw bytes, and
 // returns the result as uppercase hex bytes.
 func XOR(block1, block2 []byte) ([]byte, error) {
-	r1, err := StringToBCD(string(block1))
+	r1, err := hex.DecodeString(string(block1))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode block1 for XOR: %w", err)
 	}
-	r2, err := StringToBCD(string(block2))
+	r2, err := hex.DecodeString(string(block2))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode block2 for XOR: %w", err)
 	}
 	if len(r1) != len(r2) {
 		return nil, fmt.Errorf("xor: length mismatch %d vs %d", len(r1), len(r2))
@@ -130,9 +130,9 @@ func (x *ecbDecrypter) CryptBlocks(dst, src []byte) {
 }
 
 func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
-	rawKey, err := StringToBCD(string(keyHex))
+	rawKey, err := hex.DecodeString(string(keyHex))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode keyHex for KeyCV: %w", err)
 	}
 
 	// Convert to triple length if needed
@@ -233,9 +233,9 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 
 // GetVisaCVV generates a 3-digit CVV using DES and 3DES operations.
 func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]byte, error) {
-	rawKey, err := StringToBCD(string(cvkHex))
+	rawKey, err := hex.DecodeString(string(cvkHex))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode cvkHex for GetVisaCVV: %w", err)
 	}
 	// Single DES on account number
 	desBlock, err := des.NewCipher(rawKey[:8])
@@ -262,9 +262,9 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 		return nil, err
 	}
 	// Final 3DES ECB encrypt
-	rawB, err := StringToBCD(string(xored))
+	rawB, err := hex.DecodeString(string(xored))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode XORed result for GetVisaCVV: %w", err)
 	}
 	dst := make([]byte, len(rawB))
 	NewECBEncrypter(des3Block).CryptBlocks(dst, rawB)
