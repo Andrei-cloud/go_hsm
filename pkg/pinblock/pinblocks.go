@@ -1,3 +1,4 @@
+// Package pinblock implements various PIN block encoding and decoding formats.
 package pinblock
 
 import (
@@ -69,65 +70,44 @@ func EncodePinBlock(pin, pan string, format PinBlockFormat) (string, error) {
 
 	switch format {
 	case ISO0:
-
 		return encodeISO0(pin, pan)
 	case ISO1:
-
-		return encodeISO1(pin)
+		return encodeISO1(pin, pan)
 	case ISO2:
-
-		return encodeISO2(pin)
+		return encodeISO2(pin, pan)
 	case ISO3:
-
 		return encodeISO3(pin, pan)
 	case ISO4:
-
 		return encodeISO4(pin, pan)
 	case ANSIX98:
-
 		return encodeANSIX98(pin, pan)
 	case VISA1:
-
 		return encodeVISA1(pin, pan)
 	case ECI1:
-
 		return encodeECI1(pin, pan)
 	case DIEBOLD:
-
 		return encodeDIEBOLD(pin, pan)
 	case IBM3624:
-
 		return encodeIBM3624(pin, pan)
 	case VISA2:
-
 		return encodeVISA2(pin, pan)
 	case VISA3:
-
 		return encodeVISA3(pin, pan)
 	case VISA4:
-
 		return encodeVISA4(pin, pan)
 	case DOCUTEL:
-
 		return encodeDOCUTEL(pin, pan)
 	case NCR:
-
 		return encodeNCR(pin, pan)
 	case PLUSNETWORK:
-
 		return encodePLUSNETWORK(pin, pan)
 	case MASTERCARDPAYNOWPAYLATER:
-
 		return encodeMASTERCARDPAYNOWPAYLATER(pin, pan)
 	case VISANEWPINONLY:
-
-		return encodeVISANEWPINONLY(pin, pan) // pan is udkHex here
+		return encodeVISANEWPINONLY(pin, pan)
 	case VISANEWOLDIN:
-
-		return encodeVISANEWOLDIN(pin, pan) // pan is oldPin|udkHex here
-	// Add cases for other implemented formats here.
+		return encodeVISANEWOLDIN(pin, pan)
 	default:
-
 		return "", errInvalidPinBlockFormat
 	}
 }
@@ -149,65 +129,44 @@ func DecodePinBlock(pinBlockHex, pan string, format PinBlockFormat) (string, err
 
 	switch format {
 	case ISO0:
-
 		return decodeISO0(pinBlockHex, pan)
 	case ISO1:
-
-		return decodeISO1(pinBlockHex)
+		return decodeISO1(pinBlockHex, pan)
 	case ISO2:
-
-		return decodeISO2(pinBlockHex)
+		return decodeISO2(pinBlockHex, pan)
 	case ISO3:
-
 		return decodeISO3(pinBlockHex, pan)
 	case ISO4:
-
 		return decodeISO4(pinBlockHex, pan)
 	case ANSIX98:
-
 		return decodeANSIX98(pinBlockHex, pan)
 	case VISA1:
-
 		return decodeVISA1(pinBlockHex, pan)
 	case ECI1:
-
 		return decodeECI1(pinBlockHex, pan)
 	case DIEBOLD:
-
 		return decodeDIEBOLD(pinBlockHex, pan)
 	case IBM3624:
-
 		return decodeIBM3624(pinBlockHex, pan)
 	case VISA2:
-
 		return decodeVISA2(pinBlockHex, pan)
 	case VISA3:
-
 		return decodeVISA3(pinBlockHex, pan)
 	case VISA4:
-
 		return decodeVISA4(pinBlockHex, pan)
 	case DOCUTEL:
-
 		return decodeDOCUTEL(pinBlockHex, pan)
 	case NCR:
-
 		return decodeNCR(pinBlockHex, pan)
 	case PLUSNETWORK:
-
 		return decodePLUSNETWORK(pinBlockHex, pan)
 	case MASTERCARDPAYNOWPAYLATER:
-
 		return decodeMASTERCARDPAYNOWPAYLATER(pinBlockHex, pan)
 	case VISANEWPINONLY:
-
-		return decodeVISANEWPINONLY(pinBlockHex, pan) // pan is udkHex here
+		return decodeVISANEWPINONLY(pinBlockHex, pan)
 	case VISANEWOLDIN:
-
-		return decodeVISANEWOLDIN(pinBlockHex, pan) // pan is oldPin|udkHex here
-	// Add cases for other implemented formats here.
+		return decodeVISANEWOLDIN(pinBlockHex, pan)
 	default:
-
 		return "", errInvalidPinBlockFormat
 	}
 }
