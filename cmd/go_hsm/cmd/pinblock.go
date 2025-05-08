@@ -1,9 +1,10 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/andrei-cloud/go_hsm/internal/cli"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -25,14 +26,15 @@ Supported formats can be listed using the --list-formats flag.`,
 
   # List supported formats
   go_hsm pinblock --list-formats`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		if listFormats {
 			cli.PrintSupportedFormats()
+
 			return nil
 		}
 
 		if pin == "" || pan == "" || formatCode == "" {
-			return fmt.Errorf("pin, pan, and format are required")
+			return errors.New("pin, pan, and format are required")
 		}
 
 		result, err := cli.GeneratePinBlock(pin, pan, formatCode)
@@ -40,7 +42,10 @@ Supported formats can be listed using the --list-formats flag.`,
 			return err
 		}
 
-		fmt.Printf("PIN Block (%s): %s\n", formatCode, result)
+		log.Info().
+			Str("format_code", formatCode).
+			Str("pin_block", result).
+			Msg("pin block generated")
 
 		return nil
 	},
