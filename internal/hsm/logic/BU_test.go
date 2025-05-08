@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	"github.com/andrei-cloud/go_hsm/internal/hsm"
 )
 
 // Mock functions that simulate actual HSM encryption/decryption.
@@ -40,26 +39,16 @@ func TestExecuteBU(t *testing.T) {
 	badKeyBytes := make([]byte, 16) // All zeros have even parity.
 	badKeyHex := hex.EncodeToString(badKeyBytes)
 
-	mockDecryptBadParity := func(_ []byte) ([]byte, error) {
-		return badKeyBytes, nil
-	}
-
 	// --- Test Cases. ---
 	testCases := []struct {
 		name             string
 		input            []byte
-		mockDecrypt      func([]byte) ([]byte, error)
-		mockEncrypt      func([]byte) ([]byte, error)
-		mockLog          func(string)
 		expectedResponse string
 		expectedError    error
 	}{
 		{
 			name:             "Short Input",
 			input:            []byte{1, 2},
-			mockDecrypt:      mockDecryptUnderLMKForBU,
-			mockEncrypt:      mockEncryptUnderLMKForBU,
-			mockLog:          mockLogFnBU,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err15,
 		},
@@ -69,9 +58,6 @@ func TestExecuteBU(t *testing.T) {
 				[]byte{'0', '0', '0', 'X'},
 				[]byte(goodKeyHex)...,
 			),
-			mockDecrypt:      mockDecryptUnderLMKForBU,
-			mockEncrypt:      mockEncryptUnderLMKForBU,
-			mockLog:          mockLogFnBU,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err26,
 		},
@@ -81,26 +67,12 @@ func TestExecuteBU(t *testing.T) {
 				[]byte{'0', '0', '0', 'U'},
 				[]byte(badKeyHex)...,
 			),
-			mockDecrypt:      mockDecryptBadParity,
-			mockEncrypt:      mockEncryptUnderLMKForBU,
-			mockLog:          mockLogFnBU,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err01,
 		},
 		{
-			name:  "Successful with Actual HSM Decrypt",
-			input: []byte(goodKeyHex),
-			mockDecrypt: func(input []byte) ([]byte, error) {
-				// Instantiate HSM and use its actual decrypt function.
-				hsmInstance, err := hsm.NewHSM("0123456789ABCDEFFEDCBA9876543210", "0007-E000")
-				if err != nil {
-					return nil, err
-				}
-
-				return hsmInstance.DecryptUnderLMK(input)
-			},
-			mockEncrypt:      mockEncryptUnderLMKForBU,
-			mockLog:          mockLogFnBU,
+			name:             "Successful with Actual HSM Decrypt",
+			input:            []byte(goodKeyHex),
 			expectedResponse: "BV00" + goodKeyHex,
 			expectedError:    nil,
 		},
@@ -112,7 +84,7 @@ func TestExecuteBU(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp, err := ExecuteBU(tc.input, tc.mockDecrypt, tc.mockEncrypt, tc.mockLog)
+			resp, err := ExecuteBU(tc.input)
 
 			if err != tc.expectedError {
 				t.Errorf("expected error %v, got %v", tc.expectedError, err)

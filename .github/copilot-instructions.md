@@ -1,126 +1,282 @@
-###Coding Rules:
-* All coments must end in a period.
-* ```return``` and ```continue``` should have an empty line before.
-* follow declaration order as: ```const```, ```var```, ```type``` and only after their methods.
-* type must not be placed after func (desired order: const,var,type,func)
-* error-strings: error strings should not be capitalized or end with punctuation or a newline.
-* empty-lines: shoud not be an extra empty line at the start of a block
-* use-any: since Go 1.18 'interface{}' can be replaced by 'any' (revive)
+# Copilot Instructions
 
-# copilot_instructions.md
+## Coding Rules:
+* All comments must end in a period.  
+* `return` and `continue` should have an empty line before.  
+* Declaration order: `const`, `var`, `type`, then `func`.  
+* `type` declarations must not come after functions.  
+* error strings should not be capitalized or end with punctuation or a newline.  
+* No extra empty line at the start of a block.  
+* Replace `interface{}` with `any` when possible (Go 1.18+).
 
-## Overview  
-These instructions guide a GitHub Copilot–style agent to refactor the **go_hsm** repo for reusable WASM-plugin scaffolding. You will:
+# Development Plan for CLI Implementation
 
-1. Extract common memory-management and helper routines into a shared package.  
-2. Pull business-logic out into `internal/hsm/logic`.  
-3. Create a `plugingen` CLI to emit boilerplate wrappers.  
-4. Wire up `//go:generate` in each plugin directory.  
-5. Update build scripts and tests.  
+## Project Structure
 
----
-
-## Coding Standards  
-- **Formatting**: Run `go fmt` on every file.  
-- **Linting**: Ensure `go vet` and `golangci-lint run` pass zero errors.  
-- **Error Handling**: Return `error` values; never log or panic inside library code.  
-- **Naming**:  
-  - Shared helpers package: `pkg/hsmplugin`  
-  - Business logic: `internal/hsm/logic/Execute<Cmd>`  
-  - Generator CLI: `cmd/plugingen`  
-- **Documentation**: Every public function must have a GoDoc comment.  
-- **Testing**:  
-  - Unit tests for `pkg/hsmplugin`  
-  - Validate generated wrapper compiles  
-
----
+```
+go_hsm/
+├── cmd/
+│   └── go_hsm/
+│       ├── main.go                  # CLI entry point
+│       └── cmd/                     # CLI commands package
+│           ├── root.go              # Root command definition
+│           ├── serve.go             # Server command (existing functionality)  
+│           └── pinblock.go          # PIN block generation command
+├── internal/
+│   ├── cli/                         # CLI-specific utilities
+│   │   ├── format.go                # Output formatting helpers
+│   │   └── pinblock.go              # PIN block CLI operations
+│   ├── hsm/                         # Existing HSM implementation
+│   ├── logging/                     # Existing logging functionality
+│   ├── plugins/                     # Plugin system
+│   └── server/                      # Server implementation
+└── pkg/
+    └── pinblock/                    # Existing PIN block implementation
+```
 
 ## Implementation Steps
 
-### 1. Extract shared WASM-helper package  
-- **Create** directory `pkg/hsmplugin`.  
-- **Implement** in `allocator.go`:  
-  ```go
-  var nextPtr uint32
-  func ResetAllocator() { nextPtr = 8 }
-  func Alloc(n uint32) uint32 { /* bump-allocate with 8-byte alignment */ }
-  func Free(ptr uint32) { /* no-op or future reclaim logic */ }
-  ```
-- **Implement** in `memory.go`:
+### 1. Set Up Project Structure and Dependencies
+
+1. Add Cobra dependency:
+   ```bash
+   go get -u github.com/spf13/cobra@latest
+   ```
+
+2. Create directory structure:
+   ```bash
+   mkdir -p cmd/go_hsm/cmd internal/cli
+   ```
+
+### 2. Implement Root Command
+
+Create `cmd/go_hsm/cmd/root.go`:
 ```go
-func ReadBytes(ptr, len uint32) []byte { /* unsafe slice */ }
-func WriteBytes(ptr uint32, data []byte) { /* copy into linear memory */ }
-```
-- **Implement** in `result.go`:
-```go
-func PackResult(ptr, len uint32) uint64 { /* high<<32 | low */ }
-func WriteError(cmd string) uint64 { /* alloc + write “<cmd>86” */ }
-```
-	Write unit tests covering allocator, Read/Write, PackResult, WriteError.
-
-### 2. Isolate business logic
-	•	Create internal/hsm/logic directory.
-	•	For each command (e.g. NC):
-	•	File NC.go with:
-    ```go
-    // ExecuteNC processes the NC payload and returns response bytes.
-        func ExecuteNC(input []byte) ([]byte, error) {
-        // parse, compute KCV, append firmware
-        }
-    ```
-    •	Doc the function with a GoDoc comment.
-	•	Test each logic function in _test.go files.
-
-### 3. Build the plugingen tool
-	•	Create cmd/plugingen with its own go.mod.
-	•	Write main.go that:
-	•	Parses flags: -cmd, -logic, -out.
-	•	Uses text/template to render a main.go wrapper from this template:
-
-    ```gotemplate
-    package main
+// Package cmd provides the CLI commands for the go_hsm application.
+package cmd
 
 import (
-  "github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
-  "{{.LogicImport}}"
+    "github.com/spf13/cobra"
 )
 
-//export Alloc
-func Alloc(size uint32) uint32 { return hsmplugin.Alloc(size) }
-//export Free
-func Free(ptr uint32) { hsmplugin.Free(ptr) }
-//export Execute
-func Execute(ptr, length uint32) uint64 {
-  hsmplugin.ResetAllocator()
-  in := hsmplugin.ReadBytes(ptr, length)
-  out, err := logic.Execute{{.Cmd}}(in)
-  if err != nil {
-    return hsmplugin.WriteError("{{.Cmd}}")
-  }
-  p := hsmplugin.Alloc(uint32(len(out)))
-  hsmplugin.WriteBytes(p, out)
-  return hsmplugin.PackResult(p, uint32(len(out)))
+// rootCmd represents the base command when called without any subcommands.
+var rootCmd = &cobra.Command{
+    Use:   "go_hsm",
+    Short: "Hardware Security Module server and utilities",
+    Long:  `A flexible HSM server and utility tool for PIN block operations and other cryptographic functions for payment card processing.`,
 }
-func main() {}
-    ```
 
-Install it via go install.
+// Execute adds all child commands to the root command and sets flags appropriately.
+func Execute() error {
+    return rootCmd.Execute()
+}
+```
 
-### 4. Wire up go:generate in each plugin
-	•	In commands/<Cmd>/gen.go, add:
-    ```go
-    //go:generate plugingen \
-    //    -cmd=<Cmd> \
-    //    -logic=github.com/andrei-cloud/go_hsm/internal/hsm/logic/<Cmd> \
-    //    -out=.
-    package main
-    ```
-	Remove any existing boilerplate main.go in that directory.
-	•	Run go generate ./commands/<Cmd> to produce a fresh main.go.
+### 3. Implement Serve Command (Existing Functionality)
 
-### 5. Documentation
-	•	Add a “Plugin Authoring” section to the root README.md:
-	•	Describe pkg/hsmplugin API.
-	•	Show sample gen.go and usage.
-	•	Explain internal/hsm/logic convention.
-	•	Ensure all code samples and import paths are correct.
+Move existing functionality from `cmd/go_hsm/main.go` to `serve.go`.
+
+### 4. Implement CLI Helper Functions
+
+Create `internal/cli/format.go`:
+```go
+// Package cli contains utilities for CLI operations.
+package cli
+
+import (
+    "fmt"
+    "github.com/andrei-cloud/go_hsm/internal/hsm"
+)
+
+// GetSupportedPinBlockFormats returns a map of Thales format codes to readable format descriptions.
+func GetSupportedPinBlockFormats() map[string]string {
+    return map[string]string{
+        "01": "ISO 9564-1 Format 0 (ANSI X9.8)",
+        "02": "Docutel Format",
+        "03": "Diebold/IBM 3624 Format",
+        "04": "PLUS Network Format",
+        "05": "ISO 9564-1 Format 1",
+        "34": "ISO 9564-1 Format 2",
+        "35": "Mastercard Pay Now & Pay Later Format",
+        "41": "Visa PIN-only Change Format",
+        "42": "Visa Old+New PIN Change Format",
+        "47": "ISO 9564-1 Format 3",
+        "48": "ISO 9564-1 Format 4",
+    }
+}
+
+// PrintSupportedFormats prints the supported PIN block formats in a readable format.
+func PrintSupportedFormats() {
+    formats := GetSupportedPinBlockFormats()
+    fmt.Println("Supported PIN block formats:")
+    fmt.Println("----------------------------")
+    for code, desc := range formats {
+        fmt.Printf("%s: %s\n", code, desc)
+    }
+}
+```
+
+### 5. Implement PinBlock Command
+
+Create `cmd/go_hsm/cmd/pinblock.go`:
+```go
+package cmd
+
+import (
+    "fmt"
+    "github.com/andrei-cloud/go_hsm/internal/cli"
+    "github.com/spf13/cobra"
+)
+
+var (
+    pin         string
+    pan         string
+    formatCode  string
+    listFormats bool
+)
+
+// pinblockCmd represents the pinblock command.
+var pinblockCmd = &cobra.Command{
+    Use:   "pinblock",
+    Short: "Generate PIN block in specified format",
+    Long: `Generate PIN block using specified PIN, PAN, and Thales format code.
+Supported formats can be listed using the --list-formats flag.`,
+    Example: `  # Generate ISO Format 0 PIN block
+  go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
+
+  # List supported formats
+  go_hsm pinblock --list-formats`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        if listFormats {
+            cli.PrintSupportedFormats()
+            return nil
+        }
+
+        if pin == "" || pan == "" || formatCode == "" {
+            return fmt.Errorf("pin, pan, and format are required")
+        }
+
+        result, err := cli.GeneratePinBlock(pin, pan, formatCode)
+        if err != nil {
+            return err
+        }
+
+        fmt.Printf("PIN Block (%s): %s\n", formatCode, result)
+        return nil
+    },
+}
+
+func init() {
+    rootCmd.AddCommand(pinblockCmd)
+
+    pinblockCmd.Flags().StringVar(&pin, "pin", "", "PIN number (4-12 digits)")
+    pinblockCmd.Flags().StringVar(&pan, "pan", "", "Primary Account Number (card number)")
+    pinblockCmd.Flags().StringVar(&formatCode, "format", "", "Thales format code (e.g., 01 for ISO 0)")
+    pinblockCmd.Flags().BoolVar(&listFormats, "list-formats", false, "List supported PIN block formats")
+}
+```
+
+### 6. Update Main Entry Point
+
+Update `cmd/go_hsm/main.go`:
+```go
+package main
+
+import (
+    "os"
+    "github.com/andrei-cloud/go_hsm/cmd/go_hsm/cmd"
+)
+
+func main() {
+    if err := cmd.Execute(); err != nil {
+        os.Exit(1)
+    }
+}
+```
+
+### 7. Add Makefile Targets
+
+Update the Makefile with CLI-specific targets:
+```makefile
+.PHONY: cli install
+
+cli: ## Build CLI binary.
+	go build -o bin/go_hsm ./cmd/go_hsm
+
+install: cli ## Install CLI to GOPATH/bin.
+	cp bin/go_hsm $(GOPATH)/bin/
+```
+
+### 8. Testing Plan
+
+1. Create unit tests for CLI functionality:
+   - PIN block generation.
+   - Format listing.
+   - Flag validation.
+
+2. Create integration tests for CLI commands:
+   - Test `serve` command startup.
+   - Test `pinblock` command with various formats.
+   - Test error handling.
+
+### 9. Documentation Updates
+
+Update `README.md` with CLI usage examples:
+```markdown
+## CLI Usage
+
+### HSM Server
+
+Start the HSM server:
+
+```bash
+go_hsm serve
+```
+
+Options:
+- `--port, -p`: Server port (default: 1500).
+- `--lmk`: LMK hex value (default: from HSM_LMK environment variable).
+- `--debug`: Enable debug logging.
+- `--human`: Enable human-readable logs.
+
+### PIN Block Generation
+
+Generate a PIN block:
+
+```bash
+go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
+```
+
+List supported PIN block formats:
+
+```bash
+go_hsm pinblock --list-formats
+```
+
+### 10. Implementation Schedule
+
+1. **Day 1**: Set up project structure and dependencies.
+   - Add Cobra dependency.
+   - Create directory structure.
+   - Implement root command structure.
+
+2. **Day 2**: Implement serve command.
+   - Move server code from `main.go` to `serve.go`.
+   - Add command-specific flags.
+   - Test server startup and operation.
+
+3. **Day 3**: Implement pinblock command.
+   - Create CLI helper utilities.
+   - Implement PIN block generation logic.
+   - Implement format listing.
+
+4. **Day 4**: Testing and refinement.
+   - Write unit tests for CLI functionality.
+   - Write integration tests for CLI commands.
+   - Debug and fix issues.
+
+5. **Day 5**: Documentation and finalization.
+   - Update `README.md` with CLI usage examples.
+   - Add examples for `serve` and `pinblock` commands.
+   - Perform final testing and validation.
+

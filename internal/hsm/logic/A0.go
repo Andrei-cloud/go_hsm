@@ -13,12 +13,7 @@ import (
 
 // ExecuteA0 processes the A0 payload and returns response bytes.
 // It always returns: "A1" + "00" + U|hex(newkey under lmk) [+ U|hex(neyKey under ZMK)] + 6-hex-digit KCV of new clear key.
-func ExecuteA0(
-	input []byte,
-	decryptUnderLMK func([]byte) ([]byte, error),
-	encryptUnderLMK func([]byte) ([]byte, error),
-	logFn func(string),
-) ([]byte, error) {
+func ExecuteA0(input []byte) ([]byte, error) {
 	// Validate minimum input length: mode(1) + keytype(3) + scheme(1)
 	if len(input) < 5 {
 		return nil, errorcodes.Err15
@@ -29,12 +24,9 @@ func ExecuteA0(
 	keyScheme := input[4]
 	remainder := input[5:]
 
-	logFn(
+	logDebug(
 		fmt.Sprintf(
-			"A0 command input - mode: %c, key type: %s, scheme: %c",
-			mode,
-			keyType,
-			keyScheme,
+			"A0 command input - mode: %c, key type: %s, scheme: %c", mode, keyType, keyScheme,
 		),
 	)
 
@@ -54,7 +46,7 @@ func ExecuteA0(
 		keyLength = 24 // 'T' scheme = triple length
 	}
 
-	logFn(fmt.Sprintf("A0 generating random key of length: %d", keyLength))
+	logDebug(fmt.Sprintf("A0 generating random key of length: %d", keyLength))
 
 	// Generate random key with proper length
 	clearKey, err := cryptoutils.GenerateRandomKey(keyLength)
@@ -62,7 +54,7 @@ func ExecuteA0(
 		return nil, errors.Join(errors.New("generate random key"), err)
 	}
 
-	logFn(fmt.Sprintf("A0 generated clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
+	logDebug(fmt.Sprintf("A0 generated clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
 
 	// Calculate KCV using hex-encoded key
 	kcv, err := cryptoutils.KeyCV([]byte(cryptoutils.Raw2Str(clearKey)), 6)
@@ -70,7 +62,7 @@ func ExecuteA0(
 		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
 
-	logFn(fmt.Sprintf("A0 calculated KCV: %s", string(kcv)))
+	logDebug(fmt.Sprintf("A0 calculated KCV: %s", string(kcv)))
 
 	// Encrypt key under LMK
 	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
@@ -78,7 +70,9 @@ func ExecuteA0(
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}
 
-	logFn(fmt.Sprintf("A0 key encrypted under LMK (hex): %s", cryptoutils.Raw2Str(lmkEncryptedKey)))
+	logDebug(
+		fmt.Sprintf("A0 key encrypted under LMK (hex): %s", cryptoutils.Raw2Str(lmkEncryptedKey)),
+	)
 
 	// Build response
 	resp := []byte("A100")
@@ -88,7 +82,7 @@ func ExecuteA0(
 
 	// Handle mode 1 - encrypt under ZMK/TMK if provided
 	if mode == '1' {
-		logFn("A0 processing ZMK encryption mode")
+		logDebug("A0 processing ZMK encryption mode")
 
 		idx := 0
 		if idx < len(remainder) && remainder[idx] == ';' {
@@ -111,7 +105,7 @@ func ExecuteA0(
 		}
 
 		hexZmk := remainder[idx : idx+hexLen]
-		logFn(fmt.Sprintf("A0 processing ZMK (hex): %s", string(hexZmk)))
+		logDebug(fmt.Sprintf("A0 processing ZMK (hex): %s", string(hexZmk)))
 
 		zmkBytes, err := hex.DecodeString(string(hexZmk))
 		if err != nil {
@@ -123,7 +117,7 @@ func ExecuteA0(
 			return nil, errors.Join(errors.New("decrypt zmk"), err)
 		}
 
-		logFn(fmt.Sprintf("A0 decrypted ZMK length: %d", len(rawZmk)))
+		logDebug(fmt.Sprintf("A0 decrypted ZMK length: %d", len(rawZmk)))
 
 		// Create ZMK cipher - use only actual key length for triple DES
 		var fullZmk []byte
@@ -146,10 +140,9 @@ func ExecuteA0(
 			zmkBlock.Encrypt(zmkEncryptedKey[i:i+8], clearKey[i:i+8])
 		}
 
-		logFn(
+		logDebug(
 			fmt.Sprintf(
-				"A0 key encrypted under ZMK (hex): %s",
-				cryptoutils.Raw2Str(zmkEncryptedKey),
+				"A0 key encrypted under ZMK (hex): %s", cryptoutils.Raw2Str(zmkEncryptedKey),
 			),
 		)
 
@@ -158,10 +151,10 @@ func ExecuteA0(
 		resp = append(resp, cryptoutils.Raw2B(zmkEncryptedKey[:keyLength])...)
 	}
 
-	// Append KCV
+	// Append KCV.
 	resp = append(resp, kcv...)
 
-	logFn(fmt.Sprintf("A0 final response: %s", string(resp)))
+	logDebug(fmt.Sprintf("A0 final response: %s", string(resp)))
 
 	return resp, nil
 }

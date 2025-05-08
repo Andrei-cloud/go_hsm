@@ -170,3 +170,29 @@ func DecodePinBlock(pinBlockHex, pan string, format PinBlockFormat) (string, err
 		return "", errInvalidPinBlockFormat
 	}
 }
+
+// GetGenerator returns a function to encode a PIN block based on the format code.
+func GetGenerator(formatCode string) func(pin, pan string) (string, error) {
+	formatMap := map[string]PinBlockFormat{
+		"01": ISO0,
+		"02": DOCUTEL,
+		"03": IBM3624,
+		"04": PLUSNETWORK,
+		"05": ISO1,
+		"34": ISO2,
+		"35": MASTERCARDPAYNOWPAYLATER,
+		"41": VISANEWPINONLY,
+		"42": VISANEWOLDIN,
+		"47": ISO3,
+		"48": ISO4,
+	}
+
+	format, exists := formatMap[formatCode]
+	if !exists {
+		return nil
+	}
+
+	return func(pin, pan string) (string, error) {
+		return EncodePinBlock(pin, pan, format)
+	}
+}

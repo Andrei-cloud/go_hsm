@@ -36,27 +36,20 @@ func TestExecuteNC(t *testing.T) {
 	testCases := []struct {
 		name             string
 		input            []byte
-		mockDecrypt      func([]byte) ([]byte, error)
-		mockEncrypt      func([]byte) ([]byte, error)
-		mockLog          func(string)
 		expectedResponse string
 		expectedError    error
 	}{
 		{
 			name:             "Short Input",
 			input:            []byte{1, 2, 3},
-			mockDecrypt:      mockDecryptUnderLMKForNC,
-			mockEncrypt:      mockEncryptUnderLMKForNC,
-			mockLog:          mockLogFnNC,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err15, // Assuming short input is an error.
 		},
 		{
-			name:             "Successful",
-			input:            []byte("0007-E000"), // 9 bytes long.
-			mockDecrypt:      mockDecryptUnderLMKForNC,
-			mockEncrypt:      mockEncryptUnderLMKForNC,
-			mockLog:          mockLogFnNC,
+			name: "Successful",
+			input: []byte(
+				"0007-E000",
+			), // 9 bytes long.
 			expectedResponse: "ND00" + "0102030405060708090a0b0c0d0e0f10" + "0007-E000", // Placeholder KCV.
 			expectedError:    nil,
 		},
@@ -68,7 +61,7 @@ func TestExecuteNC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp, err := ExecuteNC(tc.input, tc.mockDecrypt, tc.mockEncrypt, tc.mockLog)
+			resp, err := ExecuteNC(tc.input)
 
 			if err != tc.expectedError {
 				t.Errorf("expected error %v, got %v", tc.expectedError, err)

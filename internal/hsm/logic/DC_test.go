@@ -61,18 +61,12 @@ func TestExecuteDC(t *testing.T) {
 	testCases := []struct {
 		name             string
 		input            []byte
-		mockDecrypt      func([]byte) ([]byte, error)
-		mockEncrypt      func([]byte) ([]byte, error)
-		mockLog          func(string)
 		expectedResponse string
 		expectedError    error
 	}{
 		{
 			name:             "Short Input",
 			input:            []byte{1, 2, 3},
-			mockDecrypt:      mockDecryptUnderLMKGoodParity,
-			mockEncrypt:      mockEncryptUnderLMKDC,
-			mockLog:          mockLogFnDC,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err15,
 		},
@@ -85,9 +79,6 @@ func TestExecuteDC(t *testing.T) {
 				"123456789012" + // Account Number.
 				"1" + // PVKI.
 				"1234"), // PVV.
-			mockDecrypt:      mockDecryptWithDefaultLMK,
-			mockEncrypt:      mockEncryptUnderLMKDC,
-			mockLog:          mockLogFnDC,
 			expectedResponse: "",
 			expectedError:    errorcodes.Err11,
 		},
@@ -96,9 +87,6 @@ func TestExecuteDC(t *testing.T) {
 			input: []byte(
 				"U1A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB3351A4D672DCA6CB33568D267B408C2D4D90134551380493719375",
 			),
-			mockDecrypt:      mockDecryptWithDefaultLMK, // Use default LMK mock.
-			mockEncrypt:      mockEncryptWithDefaultLMK, // Use default LMK mock.
-			mockLog:          mockLogFnDC,
 			expectedResponse: "DD" + errorcodes.Err00.CodeOnly(),
 			expectedError:    nil,
 		},
@@ -110,12 +98,7 @@ func TestExecuteDC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp, err := ExecuteDC(
-				tc.input,
-				tc.mockDecrypt,
-				tc.mockEncrypt,
-				tc.mockLog,
-			)
+			resp, err := ExecuteDC(tc.input)
 
 			if err != tc.expectedError {
 				t.Errorf("expected error %v, got %v", tc.expectedError, err)
