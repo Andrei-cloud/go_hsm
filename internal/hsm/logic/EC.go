@@ -37,18 +37,23 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		data = data[tpkSize:]
 
 		// Decrypt and validate TPK
-		decryptedTPK, err := decryptUnderLMK(tpkRaw)
+		clearTPK, err := decryptUnderLMK(tpkRaw)
 		if err != nil {
 			logDebug(fmt.Sprintf("EC: failed to decrypt TPK: %v", err))
 
 			return nil, errorcodes.Err68
 		}
 
+		logDebug(fmt.Sprintf("EC: decrypted TPK length: %d", len(decryptedTPK)))
+		logDebug(fmt.Sprintf("EC: decrypted TPK hex: %s", cryptoutils.Raw2Str(decryptedTPK)))
+
 		if !cryptoutils.CheckKeyParity(decryptedTPK) {
 			logDebug("EC: decrypted TPK parity error")
 
 			return nil, errorcodes.Err10
 		}
+
+		decryptedTPK = append(decryptedTPK, clearTPK...)
 	}
 
 	// Handle PVK extraction and validation
@@ -111,6 +116,9 @@ func ExecuteEC(input []byte) ([]byte, error) {
 
 			return nil, errorcodes.Err68
 		}
+
+		logDebug(fmt.Sprintf("EC: decrypted PVK A + B length: %d", len(decryptedPVKAB)))
+		logDebug(fmt.Sprintf("EC: decrypted PVK A + B hex: %s", cryptoutils.Raw2Str(decryptedPVKAB)))
 
 		// Check PVK A parity after decryption
 		if !cryptoutils.CheckKeyParity(decryptedPVKAB[:pvkSingleSize/2]) {
@@ -216,6 +224,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		logDebug(fmt.Sprintf("EC: account number for PIN extraction: %s", accountNum))
 	}
 
+	logDebug(fmt.Sprintf("EC: decrypted PIN block hex: %s", pinBlockForClearHex))
 	// Extract clear PIN from decrypted PIN block
 	pinBlockFormat, err := hsm.GetPinBlockFormatFromThalesCode(formatCode)
 	if err != nil {

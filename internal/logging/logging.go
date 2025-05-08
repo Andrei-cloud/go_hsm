@@ -2,6 +2,7 @@ package logging
 
 import (
 	"encoding/hex"
+	"fmt"
 	"os"
 	"time"
 
@@ -14,10 +15,16 @@ func InitLogger(debug, human bool) {
 	zerolog.TimeFieldFormat = time.RFC3339Nano                 // always initialize base logger with timestamp.
 	base := zerolog.New(os.Stdout).With().Timestamp().Logger() // initialize base logger.
 	if human {
-		log.Logger = base.Output(zerolog.ConsoleWriter{
+		// use console writer for human-friendly output
+		cw := zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339Nano,
-		}) // select output format.
+			NoColor:    false,
+		}
+		cw.FormatMessage = func(m interface{}) string {
+			return fmt.Sprint(m)
+		}
+		log.Logger = base.Output(cw)
 	} else {
 		log.Logger = base // use JSON logger.
 	}

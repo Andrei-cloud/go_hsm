@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
+	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/internal/server"
 	"github.com/spf13/cobra"
@@ -33,6 +34,9 @@ var serveCmd = &cobra.Command{
 
 		// Notify starting server.
 		fmt.Printf("starting HSM server on port %s\n", port)
+
+		// Initialize logger.
+		logging.InitLogger(debug, human)
 
 		// Initialize the HSM instance.
 		hsmInstance, err := hsm.NewHSM(lmk, hsm.FirmwareVersion)
