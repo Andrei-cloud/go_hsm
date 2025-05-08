@@ -27,18 +27,12 @@ func TestExecuteA0(t *testing.T) {
 	testCases := []struct {
 		name             string
 		input            []byte
-		mockDecrypt      func([]byte) ([]byte, error)
-		mockEncrypt      func([]byte) ([]byte, error)
-		mockLog          func(string)
 		expectedResponse []byte // Use byte slice for easier comparison.
 		expectedError    error
 	}{
 		{
 			name:             "Short Input",
 			input:            []byte{1, 2, 3, 4},
-			mockDecrypt:      mockLMKForA0,
-			mockEncrypt:      mockLMKForA0,
-			mockLog:          mockLogFnA0,
 			expectedResponse: nil,
 			expectedError:    errorcodes.Err15,
 		},
@@ -51,9 +45,6 @@ func TestExecuteA0(t *testing.T) {
 				'0',
 				'X',
 			}, // mode='0', keyType='000', keyScheme='X'.
-			mockDecrypt:      mockLMKForA0,
-			mockEncrypt:      mockLMKForA0,
-			mockLog:          mockLogFnA0,
 			expectedResponse: nil,
 			expectedError:    errorcodes.Err26,
 		},
@@ -66,9 +57,6 @@ func TestExecuteA0(t *testing.T) {
 				'0',
 				'U',
 			}, // mode='0', keyType='000', keyScheme='U'.
-			mockDecrypt: mockLMKForA0,
-			mockEncrypt: mockLMKForA0,
-			mockLog:     mockLogFnA0,
 			expectedResponse: []byte(
 				"A100U" + "0102030405060708090a0b0c0d0e0f10" + "010203040506",
 			), // Placeholder response.
@@ -88,9 +76,6 @@ func TestExecuteA0(t *testing.T) {
 				[]byte( // 48 hex chars for ZMK.
 					"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
 				)...),
-			mockDecrypt: mockLMKForA0,
-			mockEncrypt: mockLMKForA0,
-			mockLog:     mockLogFnA0,
 			expectedResponse: []byte(
 				"A100U" + "0102030405060708090a0b0c0d0e0f10" + "U" + "0102030405060708090a0b0c0d0e0f10" + "010203040506",
 			), // Placeholder response.
@@ -104,7 +89,7 @@ func TestExecuteA0(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			resp, err := ExecuteA0(tc.input, tc.mockDecrypt, tc.mockEncrypt, tc.mockLog)
+			resp, err := ExecuteA0(tc.input)
 
 			if err != tc.expectedError {
 				t.Errorf("expected error %v, got %v", tc.expectedError, err)

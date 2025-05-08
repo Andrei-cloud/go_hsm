@@ -92,8 +92,10 @@ func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 	old, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
 	if !ok {
 		log.Error().Msg("failed to load old plugin manager")
+
 		return
 	}
+
 	s.pluginManagerHolder.Store(newPM)
 
 	if err := old.Close(); err != nil {
@@ -181,6 +183,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 				Str("client_ip", client).
 				Str("command", cmd).
 				Msg("Command not recognized, responding with error code")
+
 		} else {
 			log.Error().
 				Str("event", "plugin_error").
@@ -188,6 +191,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 				Str("command", cmd).
 				Err(execErr).
 				Msg("Plugin execution failed")
+
 			resp = s.errorResponse(cmd)
 		}
 	}
