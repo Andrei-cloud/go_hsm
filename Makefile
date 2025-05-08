@@ -15,24 +15,28 @@ build: ## Build HSM binary.
 test: ## Run tests.
 	go test ./... -v
 
-clean: ## Clean built binaries.
-	rm -rf bin
+clean: ## Clean built binaries and plugins.
+	rm -rf bin $(WASM_OUT_DIR)
 
 all: ## Build, test and clean.
 	make gen && make plugins && make run
+
+# define output directory for wasm plugins
+WASM_OUT_DIR := build/plugins
 
 # build wasm plugin commands.
 .PHONY: plugins
 
 plugins: ## compile Go WASM plugins using TinyGo
 	@echo "Building wasm plugins with TinyGo..."
-	@rm -f commands/*.wasm
+	@rm -rf $(WASM_OUT_DIR)
+	@mkdir -p $(WASM_OUT_DIR)
 	@for d in commands/*; do \
 		if [ -d $$d ]; then \
 			name=$$(basename $$d); \
 			echo "  - $$name.wasm"; \
 			if [ -f ./commands/$$name/main.go ]; then \
-				tinygo build -o ./commands/$$name.wasm -target=wasi -scheduler=none \
+				tinygo build -o $(WASM_OUT_DIR)/$$name.wasm -target=wasi -scheduler=none \
 				-opt=z \
 				-no-debug \
 				./commands/$$name/main.go; \
