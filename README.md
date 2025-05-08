@@ -13,9 +13,14 @@ Table of Contents
   - [Build WASM Plugins](#build-wasm-plugins)
   - [Generate Plugin Wrappers](#generate-plugin-wrappers)
   - [Build the Server](#build-the-server)
+  - [Build the CLI](#build-the-cli)
+  - [Install the CLI](#install-the-cli)
   - [Run the Server](#run-the-server)
   - [Testing](#testing)
   - [Cleaning](#cleaning)
+- [CLI Usage](#cli-usage)
+  - [HSM Server](#hsm-server)
+  - [PIN Block Generation](#pin-block-generation)
 - [Writing a New Command](#writing-a-new-command)
   - [1. Implement Business Logic](#1-implement-business-logic)
   - [2. Add go:generate Stub](#2-add-generate-stub)
@@ -40,21 +45,42 @@ go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individu
 
 ```
 ├── cmd
-│   ├── go_hsm         # Main HSM server
-│   └── plugingen      # CLI to generate wrappers
-├── commands          # Individual command plugins
-│   ├── A0            # Command A0 source + go:generate
-│   ├── NC            # Command NC source + go:generate
-│   └── *.wasm        # Compiled WASM plugins
-├── internal          # Server, plugins, logic, logging, errorcodes
-│   ├── hsm
-│   ├── logic
-│   ├── plugins
-│   └── server
-├── pkg
-│   ├── hsmplugin     # WASM helper utilities
-│   └── cryptoutils
-└── README.md
+│   ├── go_hsm
+│   │   ├── main.go          # CLI entry point
+│   │   └── cmd              # Cobra commands
+│   │       ├── root.go      # Root command
+│   │       ├── serve.go     # Start HSM server
+│   │       └── pinblock.go  # PIN block generation command
+│   └── plugingen
+│       └── main.go          # CLI tool for plugin wrapper generation
+├── commands             # WASM plugin sources and binaries
+│   ├── A0
+│   ├── BU
+│   ├── DC
+│   ├── EC
+│   ├── NC
+│   ├── A0.wasm
+│   ├── BU.wasm
+│   ├── DC.wasm
+│   ├── EC.wasm
+│   └── NC.wasm
+├── internal             # Internal server and HSM implementations
+│   ├── cli              # CLI utilities (formatting, operations)
+│   ├── errorcodes       # HSM error codes
+│   ├── hsm              # HSM core and command logic
+│   │   └── logic        # Command implementations
+│   ├── logging          # Structured logging
+│   ├── plugins          # Plugin manager
+│   └── server           # Server implementation
+├── pkg                  # Public packages
+│   ├── cryptoutils      # Cryptographic utilities
+│   ├── hsmplugin        # WASM plugin helpers
+│   ├── pinblock         # PIN block algorithms and formats
+│   └── variantlmk       # LMK handling utilities
+├── Makefile
+├── README.md
+├── go.mod
+└── go.sum
 ```
 
 ## Getting Started
@@ -103,6 +129,22 @@ Compile the server binary:
 make build
 ```
 
+### Build the CLI
+
+Compile the CLI binary:
+
+```bash
+make cli
+```
+
+### Install the CLI
+
+Install the CLI to your GOPATH/bin:
+
+```bash
+make install
+```
+
 ### Run the Server
 
 Start HSM server (JSON logs by default):
@@ -133,6 +175,36 @@ Remove built binaries:
 make clean
 ```
 
+## CLI Usage
+
+### HSM Server
+
+Start the HSM server:
+
+```bash
+go_hsm serve
+```
+
+Options:
+- `-p, --port`: Server port (default ":1500").
+- `--lmk`: LMK hex value (default "0123456789ABCDEFFEDCBA9876543210").
+- `--debug`: Enable debug logging.
+- `--human`: Enable human-readable logs.
+
+### PIN Block Generation
+
+Generate a PIN block:
+
+```bash
+go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
+```
+
+List supported formats:
+
+```bash
+go_hsm pinblock --list-formats
+```
+
 ## Writing a New Command
 
 Follow the pattern of **A0** and **NC** commands.
@@ -143,14 +215,26 @@ Create a new file in `internal/hsm/logic`, e.g. `FO.go`:
 
 ```go
 // ExecuteFO handles the FO command payload.
-func ExecuteFO(
-  input []byte,
-  decryptUnderLMK func([]byte) ([]byte, error),
-  encryptUnderLMK func([]byte) ([]byte, error),
-  logFn func(string),
-) ([]byte, error) {
-  // parse input, call HSM, format response
+func ExecuteFO(input []byte) ([]byte, error) {
+    // parse input, call HSM, format response
+    // use decryptUnderLMK(data) and encryptUnderLMK(data) functions and logDebug(msg) provided by the logic package.
 }
+```
+
+The following host functions are exported to the WASM module and available in `internal/hsm/logic/host.go`:
+
+```go
+//go:wasm-module env
+//export EncryptUnderLMK
+func wasmEncryptUnderLMK(ptr, length uint32) uint64
+
+//go:wasm-module env
+//export DecryptUnderLMK
+func wasmDecryptUnderLMK(ptr, length uint32) uint64
+
+//go:wasm-module env
+//export log_debug
+func wasmLogToHost(s string)
 ```
 
 Add unit tests in `internal/hsm/logic/FO_test.go`.
