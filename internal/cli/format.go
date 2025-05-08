@@ -2,7 +2,10 @@
 package cli
 
 import (
-	"github.com/rs/zerolog/log"
+	"fmt"
+	"os"
+	"sort"
+	"text/tabwriter"
 )
 
 // GetSupportedPinBlockFormats returns a map of Thales format codes to readable format descriptions.
@@ -25,12 +28,15 @@ func GetSupportedPinBlockFormats() map[string]string {
 // PrintSupportedFormats prints the supported PIN block formats in a readable format.
 func PrintSupportedFormats() {
 	formats := GetSupportedPinBlockFormats()
-	log.Info().Msg("Supported PIN block formats:")
-	log.Info().Msg("----------------------------")
-	for code, desc := range formats {
-		log.Info().
-			Str("format_code", code).
-			Str("description", desc).
-			Msg("supported pin block format")
+	codes := make([]string, 0, len(formats))
+	for code := range formats {
+		codes = append(codes, code)
 	}
+	sort.Strings(codes)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "format\tdescription")
+	for _, code := range codes {
+		_, _ = fmt.Fprintf(w, "%s\t%s\n", code, formats[code])
+	}
+	_ = w.Flush()
 }
