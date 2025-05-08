@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -9,8 +10,6 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/internal/server"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -27,20 +26,19 @@ var serveCmd = &cobra.Command{
 	Short: "Start the HSM server",
 	Long:  `Start the Hardware Security Module (HSM) server to process cryptographic commands over TCP.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Configure human-readable logging if the human flag is set.
-		if human {
-			log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-		}
-
 		// Use default LMK value if not provided.
 		if lmk == "" {
 			lmk = "0123456789ABCDEFFEDCBA9876543210"
 		}
 
+		// Notify starting server.
+		fmt.Printf("starting HSM server on port %s\n", port)
+
 		// Initialize the HSM instance.
 		hsmInstance, err := hsm.NewHSM(lmk, hsm.FirmwareVersion)
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to initialize HSM instance")
+			fmt.Fprintf(os.Stderr, "failed to initialize HSM instance: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Initialize the PluginManager with the HSM instance.
@@ -52,13 +50,15 @@ var serveCmd = &cobra.Command{
 		// Load plugins from the specified directory.
 		pluginDir := "./commands"
 		if err := pluginManager.LoadAll(pluginDir); err != nil {
-			log.Fatal().Err(err).Msg("failed to load plugins")
+			fmt.Fprintf(os.Stderr, "failed to load plugins: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Initialize the server.
 		srv, err := server.NewServer(port, pluginManager)
 		if err != nil {
-			log.Fatal().Err(err).Msg("failed to initialize server")
+			fmt.Fprintf(os.Stderr, "failed to initialize server: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Separate SIGHUP handling from termination signals.
@@ -78,10 +78,10 @@ var serveCmd = &cobra.Command{
 			for range reloadChan {
 				newPM := plugins.NewPluginManager(ctx, hsmInstance)
 				if err := newPM.LoadAll("./commands"); err != nil {
-					log.Error().Err(err).Msg("failed to reload plugins")
+					fmt.Fprintf(os.Stderr, "failed to reload plugins: %v\n", err)
 				} else {
 					srv.SetPluginManager(newPM)
-					log.Info().Msg("plugins reloaded")
+					fmt.Println("plugins reloaded")
 				}
 			}
 		}()
@@ -92,20 +92,21 @@ var serveCmd = &cobra.Command{
 		}()
 
 		if err := srv.Start(); err != nil {
-			log.Fatal().Err(err).Msg("failed to start server")
+			fmt.Fprintf(os.Stderr, "failed to start server: %v\n", err)
+			os.Exit(1)
 		}
 
 		// wait for shutdown signal.
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-stopChan
-		log.Info().Msgf("signal %v received, shutting down server", sig)
+		fmt.Printf("signal %v received, shutting down server\n", sig)
 
 		if err := srv.Stop(); err != nil {
-			log.Error().Err(err).Msg("failed to stop server")
+			fmt.Fprintf(os.Stderr, "failed to stop server: %v\n", err)
 		}
 
-		log.Info().Msg("server stopped gracefully")
+		fmt.Println("server stopped gracefully")
 	},
 }
 

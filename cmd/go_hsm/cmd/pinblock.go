@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/andrei-cloud/go_hsm/internal/cli"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +31,7 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 
   # List supported formats
   go_hsm pinblock --list-formats`,
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		if listFormats {
 			cli.PrintSupportedFormats()
 
@@ -49,10 +48,7 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 				return err
 			}
 
-			log.Info().
-				Str("format_code", formatCode).
-				Str("pin", result).
-				Msg("pin extracted")
+			cmd.Printf("pin extracted (format %s): %s\n", formatCode, result)
 
 			return nil
 		}
@@ -66,10 +62,7 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 			return err
 		}
 
-		log.Info().
-			Str("format_code", formatCode).
-			Str("pin_block", result).
-			Msg("pin block generated")
+		cmd.Printf("pin block generated (format %s): %s\n", formatCode, result)
 
 		return nil
 	},
