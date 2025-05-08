@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -61,29 +61,49 @@ var serveCmd = &cobra.Command{
 			log.Fatal().Err(err).Msg("failed to initialize server")
 		}
 
-		// Ensure the stop channel is closed only once.
-		var stopOnce sync.Once
-		stopChan := make(chan os.Signal, 1)
-		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			sig := <-stopChan
-			log.Info().Msgf("signal %v received, shutting down server", sig)
+		// Separate SIGHUP handling from termination signals.
+		sighupChan := make(chan os.Signal, 1)
+		signal.Notify(sighupChan, syscall.SIGHUP)
 
-			stopOnce.Do(func() {
-				if err := srv.Stop(); err != nil {
-					log.Error().Err(err).Msg("failed to stop server")
+		// Create a context that will be canceled when the server is stopping.
+		ctx, cancel := context.WithCancel(cmd.Context())
+		defer cancel()
+
+		// Ensure sighupChan is continuously monitored and does not block.
+		// reload plugins on SIGHUP.
+		reloadChan := make(chan os.Signal, 1)
+		signal.Notify(reloadChan, syscall.SIGHUP)
+		go func() {
+			// replace reload loop to atomically swap plugin manager on SIGHUP.
+			for range reloadChan {
+				newPM := plugins.NewPluginManager(ctx, hsmInstance)
+				if err := newPM.LoadAll("./commands"); err != nil {
+					log.Error().Err(err).Msg("failed to reload plugins")
+				} else {
+					srv.SetPluginManager(newPM)
+					log.Info().Msg("plugins reloaded")
 				}
-				close(stopChan)
-			})
+			}
 		}()
 
-		// Start the server.
+		// Ensure all goroutines exit when the program quits.
+		defer func() {
+			signal.Stop(reloadChan)
+		}()
+
 		if err := srv.Start(); err != nil {
 			log.Fatal().Err(err).Msg("failed to start server")
 		}
 
-		// Block the main goroutine to keep the server running until a termination signal is received.
-		<-stopChan
+		// wait for shutdown signal.
+		stopChan := make(chan os.Signal, 1)
+		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-stopChan
+		log.Info().Msgf("signal %v received, shutting down server", sig)
+
+		if err := srv.Stop(); err != nil {
+			log.Error().Err(err).Msg("failed to stop server")
+		}
 
 		log.Info().Msg("server stopped gracefully")
 	},

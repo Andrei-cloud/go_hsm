@@ -41,6 +41,7 @@ Supported formats can be listed using the --list-formats flag.`,
 		}
 
 		fmt.Printf("PIN Block (%s): %s\n", formatCode, result)
+
 		return nil
 	},
 }
