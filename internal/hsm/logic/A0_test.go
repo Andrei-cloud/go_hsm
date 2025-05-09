@@ -7,23 +7,9 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 )
 
-// mockLMKForA0 provides a triple-length key for A0 tests.
-func mockLMKForA0(_ []byte) ([]byte, error) {
-	// Return triple-length key for proper DES operations.
-	result := make([]byte, 24)
-	for i := range result {
-		result[i] = byte(i + 1) // Predictable non-zero bytes.
-	}
-
-	return result, nil
-}
-
-func mockLogFnA0(_ string) {}
-
 func TestExecuteA0(t *testing.T) {
 	t.Parallel()
 
-	// --- Test Cases. ---
 	testCases := []struct {
 		name             string
 		input            []byte

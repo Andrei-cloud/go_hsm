@@ -7,29 +7,6 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 )
 
-// Mock functions that simulate actual HSM encryption/decryption.
-func mockDecryptUnderLMKForBU(input []byte) ([]byte, error) {
-	// Simulate decryption by using a test key with good parity.
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = 0xAA // byte with odd parity.
-	}
-
-	return result, nil
-}
-
-func mockEncryptUnderLMKForBU(input []byte) ([]byte, error) {
-	// Simulate encryption similarly to decrypt.
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = 0xAA // byte with odd parity.
-	}
-
-	return result, nil
-}
-
-func mockLogFnBU(_ string) {}
-
 func TestExecuteBU(t *testing.T) {
 	t.Parallel()
 

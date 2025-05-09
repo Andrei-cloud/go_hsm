@@ -7,28 +7,6 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 )
 
-func mockDecryptUnderLMKForNC(input []byte) ([]byte, error) {
-	// Simulate decryption but return predictable bytes.
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = byte(i + 1)
-	}
-
-	return result, nil
-}
-
-func mockEncryptUnderLMKForNC(input []byte) ([]byte, error) {
-	// For KCV calculation, return predictable bytes.
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = byte(i + 1)
-	}
-
-	return result, nil
-}
-
-func mockLogFnNC(_ string) {}
-
 func TestExecuteNC(t *testing.T) {
 	t.Parallel()
 

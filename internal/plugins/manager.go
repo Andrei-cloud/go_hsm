@@ -13,6 +13,7 @@ import (
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/logging"
+	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
@@ -144,7 +145,41 @@ func (pm *PluginManager) LoadAll(dir string) error {
 
 			return packed
 		}).
-		Export("EncryptUnderLMK")
+		Export("EncryptUnderLMK").
+		// RandomKey function to generate a random key. receives length of the key and returns the key.
+		NewFunctionBuilder().
+		WithFunc(func(_ context.Context, m api.Module, length uint32) uint64 {
+			log.Debug().
+				Str("event", "random_key").
+				Uint32("length", length).
+				Msg("calling RandomKey")
+
+			key, err := cryptoutils.GenerateRandomKey(int(length))
+			if err != nil {
+				log.Error().Err(err).Msg("RandomKey failed")
+				return 0
+			}
+			log.Debug().
+				Str("event", "random_key_result").
+				Str("output_hex", hex.EncodeToString(key)).
+				Msg("RandomKey result")
+			// allocate guest memory for random key
+			allocFn := m.ExportedFunction("Alloc")
+			results, err := allocFn.Call(context.Background(), uint64(len(key)))
+			if err != nil || len(results) == 0 {
+				log.Error().Err(err).Msg("failed to alloc guest memory for RandomKey")
+				return 0
+			}
+			packed := results[0]
+			dst := api.DecodeU32(packed >> 32)
+			if !m.Memory().Write(dst, key) {
+				log.Error().Msg("failed to write random key to guest memory")
+				return 0
+			}
+
+			return packed
+		}).
+		Export("RandomKey")
 
 	// Instantiate the env module
 	if _, err := envBuilder.Instantiate(pm.ctx); err != nil {

@@ -5,55 +5,8 @@ import (
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	"github.com/andrei-cloud/go_hsm/internal/hsm" // Added for default LMK.
+	// Added for default LMK.
 )
-
-// mockDecryptUnderLMKGoodParity simulates decryption returning a key with good parity.
-func mockDecryptUnderLMKGoodParity(input []byte) ([]byte, error) {
-	// Return a key known to have good parity (e.g., all 0xAA).
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = 0xAA // byte with odd parity.
-	}
-
-	return result, nil
-}
-
-func mockEncryptUnderLMKDC(input []byte) ([]byte, error) {
-	// Simulate encryption similarly to decrypt.
-	result := make([]byte, len(input))
-	for i := range result {
-		result[i] = 0xAA // byte with odd parity.
-	}
-
-	return result, nil
-}
-
-// mockDecryptWithDefaultLMK simulates decryption using the default LMK.
-func mockDecryptWithDefaultLMK(input []byte) ([]byte, error) {
-	// Use the default LMK from the HSM package.
-	defaultLMKHex := "0123456789ABCDEFFEDCBA9876543210"
-	hsmSvc, err := hsm.NewHSM(defaultLMKHex, "") // Firmware version not needed here.
-	if err != nil {
-		return nil, err
-	}
-
-	return hsmSvc.DecryptUnderLMK(input)
-}
-
-// mockEncryptWithDefaultLMK simulates encryption using the default LMK.
-func mockEncryptWithDefaultLMK(input []byte) ([]byte, error) {
-	// Use the default LMK from the HSM package.
-	defaultLMKHex := "0123456789ABCDEFFEDCBA9876543210"
-	hsmSvc, err := hsm.NewHSM(defaultLMKHex, "") // Firmware version not needed here.
-	if err != nil {
-		return nil, err
-	}
-
-	return hsmSvc.EncryptUnderLMK(input)
-}
-
-func mockLogFnDC(_ string) {}
 
 func TestExecuteDC(t *testing.T) {
 	t.Parallel()

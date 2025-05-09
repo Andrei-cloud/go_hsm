@@ -2,7 +2,6 @@
 package logic
 
 import (
-	"crypto/des"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -26,7 +25,10 @@ func ExecuteA0(input []byte) ([]byte, error) {
 
 	logDebug(
 		fmt.Sprintf(
-			"A0 command input - mode: %c, key type: %s, scheme: %c", mode, keyType, keyScheme,
+			"A0 command input - mode: %c, key type: %s, scheme: %c",
+			mode,
+			keyType,
+			keyScheme,
 		),
 	)
 
@@ -40,16 +42,11 @@ func ExecuteA0(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err26
 	}
 
-	// Determine key length based on scheme
-	keyLength := 16 // 'U' scheme = double length
-	if keyScheme == 'T' {
-		keyLength = 24 // 'T' scheme = triple length
-	}
-
+	keyLength := getKeyLength(keyScheme)
 	logDebug(fmt.Sprintf("A0 generating random key of length: %d", keyLength))
 
 	// Generate random key with proper length
-	clearKey, err := cryptoutils.GenerateRandomKey(keyLength)
+	clearKey, err := randomKey(keyLength)
 	if err != nil {
 		return nil, errors.Join(errors.New("generate random key"), err)
 	}
@@ -76,9 +73,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 
 	// Build response
 	resp := []byte("A100")
-	resp = append(resp, keyScheme)
-	// Only use original key length bytes for hex encoding
-	resp = append(resp, cryptoutils.Raw2B(lmkEncryptedKey[:keyLength])...)
+	resp = appendEncryptedKeyToResponse(resp, keyScheme, lmkEncryptedKey)
 
 	// Handle mode 1 - encrypt under ZMK/TMK if provided
 	if mode == '1' {
@@ -91,15 +86,14 @@ func ExecuteA0(input []byte) ([]byte, error) {
 		if idx >= len(remainder) {
 			return nil, errorcodes.Err15
 		}
+
 		zmkScheme := remainder[idx]
 		if zmkScheme != 'U' && zmkScheme != 'T' {
 			return nil, errorcodes.Err05
 		}
 		idx++
-		hexLen := 32 // Double length
-		if zmkScheme == 'T' {
-			hexLen = 48 // Triple length
-		}
+
+		hexLen := getKeyLength(zmkScheme) * 2 // Convert bytes to hex chars
 		if len(remainder) < idx+hexLen {
 			return nil, errorcodes.Err15
 		}
@@ -112,46 +106,22 @@ func ExecuteA0(input []byte) ([]byte, error) {
 			return nil, errors.Join(errors.New("zmk to binary"), err)
 		}
 
-		rawZmk, err := decryptUnderLMK(zmkBytes)
+		zmkEncryptedKey, err := encryptKeyUnderZMK(clearKey, zmkBytes)
 		if err != nil {
-			return nil, errors.Join(errors.New("decrypt zmk"), err)
-		}
-
-		logDebug(fmt.Sprintf("A0 decrypted ZMK length: %d", len(rawZmk)))
-
-		// Create ZMK cipher - use only actual key length for triple DES
-		var fullZmk []byte
-		if len(rawZmk) == 16 {
-			fullZmk = make([]byte, 24)
-			copy(fullZmk, rawZmk)
-			copy(fullZmk[16:], rawZmk[:8])
-		} else {
-			fullZmk = rawZmk
-		}
-
-		zmkBlock, err := des.NewTripleDESCipher(fullZmk)
-		if err != nil {
-			return nil, errors.Join(errors.New("create zmk cipher"), err)
-		}
-
-		// Encrypt under ZMK
-		zmkEncryptedKey := make([]byte, len(clearKey))
-		for i := 0; i < len(clearKey); i += 8 {
-			zmkBlock.Encrypt(zmkEncryptedKey[i:i+8], clearKey[i:i+8])
+			return nil, err
 		}
 
 		logDebug(
 			fmt.Sprintf(
-				"A0 key encrypted under ZMK (hex): %s", cryptoutils.Raw2Str(zmkEncryptedKey),
+				"A0 key encrypted under ZMK (hex): %s",
+				cryptoutils.Raw2Str(zmkEncryptedKey),
 			),
 		)
 
-		resp = append(resp, keyScheme)
-		// Only use original key length bytes for hex encoding
-		resp = append(resp, cryptoutils.Raw2B(zmkEncryptedKey[:keyLength])...)
+		resp = appendEncryptedKeyToResponse(resp, keyScheme, zmkEncryptedKey)
 	}
 
-	// Append KCV.
+	// Append KCV
 	resp = append(resp, kcv...)
 
 	logDebug(fmt.Sprintf("A0 final response: %s", string(resp)))
