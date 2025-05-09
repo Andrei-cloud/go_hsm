@@ -1,6 +1,65 @@
 # go_hsm
 
-A Go-based, extendable implementation of HSM Module (Thales/Racal), featuring WASM plugin support and a clean command pattern for easy extension.
+A Go-based Hardware Security Module (HSM) implementation compatible with Thales/Racal protocols, featuring WASM-based plugin architecture for command extensibility ### Quick Start
+
+1. Clone and build:
+```bash
+git clone https://github.com/andrei-cloud/go_hsm.git
+cd go_hsm
+make all
+```
+
+2. Build WASM plugins:
+```bash
+make plugins
+```
+
+3. Start the HSM server:
+```bash
+./bin/go_hsm serve --port 1500 --lmk $(cat lmk.key)
+```
+
+4. Generate a PIN block:
+```bash
+./bin/go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
+```
+
+## Development Guide
+
+### Adding a New Command
+
+1. Create command logic in `internal/hsm/logic/`
+2. Generate WASM wrapper using `plugingen`
+3. Implement the command interface
+4. Build and test the WASM plugin
+5. Deploy to the plugins directory
+
+### Testing
+
+```bash
+# Run all tests
+make test
+
+# Test specific command
+make test-cmd CMD=A0
+
+# Run integration tests
+make test-integration
+```
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.raphic operations.
+
+## Overview
+
+The `go_hsm` project provides a modern, secure, and extensible HSM implementation with the following key features:
+
+- **Plugin Architecture**: Commands are implemented as WebAssembly (WASM) modules, providing isolation and flexibility
+- **Cryptographic Operations**: Secure implementation of encryption, key generation, and PIN block operations
+- **Hot Reload Support**: Dynamic command loading without server restart
+- **CLI Interface**: Comprehensive command-line interface for server control and utilities
+- **Standard Compliance**: Implementation of ISO 9564-1 and various PIN block formats
 
 Table of Contents
 -----------------
@@ -29,31 +88,70 @@ Table of Contents
 - [Contributing](#contributing)
 - [License](#license)
 
-## Introduction
+## Core Components
 
-go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individual command handlers into WASM plugins, isolating business logic from WASM scaffolding. This design makes it easy to add new commands and maintain a clean codebase. The server now supports a configurable plugin directory, allowing users to specify custom locations for their WASM plugins.
+### 1. HSM Core (internal/hsm)
+- Secure implementation of Local Master Key (LMK) operations
+- Support for various key lengths and formats
+- Cryptographically secure random key generation
+- PIN block format conversions (ISO, ANSI, Visa, etc.)
 
-## Features
+### 2. Plugin System (internal/plugins)
+- WASM-based command isolation
+- Hot-reload capability via `SIGHUP`
+- Secure memory management for cryptographic operations
+- Dynamic command registration and execution
 
-- Separate package for WASM memory and error helpers (`pkg/hsmplugin`).
-- Business logic in `internal/hsm/logic`—one file per command.
-- CLI tool (`cmd/plugingen`) to generate plugin wrappers.
-- Hot-reload support via `SIGHUP`.
-- Structured logging and error handling.
+### 3. Command Implementation (internal/hsm/logic)
+- Clean separation of business logic per command
+- Standardized error handling
+- Comprehensive logging and debugging support
+- Testable command implementations
+
+### 4. Cryptographic Utilities (pkg/cryptoutils)
+- Secure random key generation
+- Key Check Value (KCV) calculation
+- Various cryptographic operations
+- PIN block format implementations
+
+### 5. CLI Interface
+- Server management commands
+- PIN block generation utilities
+- Key management operations
+- Plugin management tools
+
+## Supported Commands
+
+The HSM supports various commands through its plugin system:
+
+- **A0**: Random key generation with configurable key formats
+- **BU**: PIN block translation between formats
+- **DC**: PIN verification and change operations
+- **EC**: PIN encryption operations
+- **NC**: Network control and status commands
+
+Each command is implemented as a separate WASM module, providing:
+- Isolation of command logic
+- Independent testing
+- Easy deployment and updates
+- Secure memory management
 
 ## Project Structure
 
-```
-├── cmd
-│   ├── go_hsm
-│   │   ├── main.go          # CLI entry point
-│   │   └── cmd              # Cobra commands
-│   │       ├── root.go      # Root command
-│   │       ├── serve.go     # Start HSM server
-│   │       └── pinblock.go  # PIN block generation command
-│   └── plugingen
-│       └── main.go          # CLI tool for plugin wrapper generation
-├── commands             # WASM plugin sources and binaries
+```go
+├── cmd/
+│   ├── go_hsm/           # Main HSM server and CLI
+│   │   ├── main.go      # Entry point
+│   │   └── cmd/         # CLI commands
+│   │       ├── root.go  # Base command
+│   │       ├── serve.go # HSM server
+│   │       └── pinblock.go # PIN utilities
+│   └── plugingen/       # Plugin generator
+├── internal/
+│   ├── hsm/            # Core HSM functionality
+│   │   └── logic/      # Command implementations
+│   ├── plugins/        # Plugin system
+│   └── server/         # Network server
 │   ├── A0
 │   ├── BU
 │   ├── DC
@@ -80,18 +178,48 @@ go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individu
 
 ## Getting Started
 
+## Security Features
+
+1. **Cryptographic Operations**
+   - Secure random key generation using crypto/rand
+   - Triple DES encryption for key protection
+   - Key Check Value (KCV) verification
+
+2. **Memory Protection**
+   - WASM-based isolation of command execution
+   - Secure memory wiping after cryptographic operations
+   - Protected LMK storage
+
+3. **Access Control**
+   - Command-level authorization
+   - Secure logging of operations
+   - Audit trail support
+
+## Getting Started
+
 ### Prerequisites
 
-- Go 1.24+
-- TinyGo for WASM (`brew install tinygo`)
+- Go 1.24 or later
+- TinyGo (for WASM compilation)
 - GNU Make
-- Makefile provides convenient targets (`make help`).
-- Install the `plugingen` code generator:
+- OpenSSL (for key generation)
 
+### Initial Setup
+
+1. Install TinyGo:
+```bash
+brew install tinygo
+```
+
+2. Install the plugin generator:
 ```bash
 go install github.com/andrei-cloud/go_hsm/cmd/plugingen@latest
 ```
-Ensure `$GOPATH/bin` or `$HOME/go/bin` is in your `PATH`.
+
+3. Generate an LMK (for development):
+```bash
+openssl rand -hex 24 > lmk.key
+```
 
 ### Clone Repository
 
