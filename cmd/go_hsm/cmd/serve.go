@@ -15,10 +15,11 @@ import (
 )
 
 var (
-	port  string
-	lmk   string
-	debug bool
-	human bool
+	port      string
+	lmk       string
+	debug     bool
+	human     bool
+	pluginDir string
 )
 
 // serveCmd represents the serve command.
@@ -52,7 +53,10 @@ var serveCmd = &cobra.Command{
 		)
 
 		// Load plugins from the specified directory.
-		pluginDir := "./commands"
+		if pluginDir == "" {
+			pluginDir = "./plugins"
+		}
+
 		if err := pluginManager.LoadAll(pluginDir); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to load plugins: %v\n", err)
 			os.Exit(1)
@@ -121,4 +125,6 @@ func init() {
 	serveCmd.Flags().StringVar(&lmk, "lmk", "", "LMK hex value")
 	serveCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug logging")
 	serveCmd.Flags().BoolVar(&human, "human", false, "Enable human-readable logs")
+	serveCmd.Flags().
+		StringVar(&pluginDir, "plugin-dir", "./plugins", "Directory to load plugins from")
 }

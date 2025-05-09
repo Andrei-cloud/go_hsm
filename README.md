@@ -31,7 +31,7 @@ Table of Contents
 
 ## Introduction
 
-go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individual command handlers into WASM plugins, isolating business logic from WASM scaffolding. This design makes it easy to add new commands and maintain a clean codebase.
+go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individual command handlers into WASM plugins, isolating business logic from WASM scaffolding. This design makes it easy to add new commands and maintain a clean codebase. The server now supports a configurable plugin directory, allowing users to specify custom locations for their WASM plugins.
 
 ## Features
 
@@ -59,11 +59,6 @@ go_hsm is a modular HSM server written in Go. It uses TinyGo to compile individu
 │   ├── DC
 │   ├── EC
 │   ├── NC
-│   ├── A0.wasm
-│   ├── BU.wasm
-│   ├── DC.wasm
-│   ├── EC.wasm
-│   └── NC.wasm
 ├── internal             # Internal server and HSM implementations
 │   ├── cli              # CLI utilities (formatting, operations)
 │   ├── errorcodes       # HSM error codes
@@ -190,6 +185,7 @@ Options:
 - `--lmk`: LMK hex value (default "0123456789ABCDEFFEDCBA9876543210").
 - `--debug`: Enable debug logging.
 - `--human`: Enable human-readable logs.
+- `--plugin-dir`: Directory containing WASM plugins (default: `./plugins`).
 
 ### PIN Block Generation
 

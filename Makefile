@@ -22,7 +22,7 @@ all: ## Build, test and clean.
 	make gen && make plugins && make run
 
 # define output directory for wasm plugins
-WASM_OUT_DIR := build/plugins
+WASM_OUT_DIR := ./plugins
 
 # build wasm plugin commands.
 .PHONY: plugins
