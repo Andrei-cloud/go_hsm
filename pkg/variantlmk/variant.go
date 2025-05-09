@@ -28,6 +28,16 @@ type LMKPair struct {
 type LMKSet [20]LMKPair
 
 func (lmk LMKPair) ApplyVariant(variantID int) (LMKPair, error) {
+	if variantID == 0 {
+		// Variant 0 means no modification to the LMK's first byte.
+		// Return a copy to maintain immutability if desired, or the original if not.
+		copyL := make([]byte, len(lmk.Left))
+		copyR := make([]byte, len(lmk.Right))
+		copy(copyL, lmk.Left)
+		copy(copyR, lmk.Right)
+
+		return LMKPair{Left: copyL, Right: copyR}, nil
+	}
 	v, ok := VariantMap[variantID]
 	if !ok {
 		return LMKPair{}, fmt.Errorf("unknown variant: %d", variantID)

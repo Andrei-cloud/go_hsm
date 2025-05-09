@@ -4,7 +4,7 @@ import "fmt"
 
 // defaultLMKHex holds the Thales test LMK values for codes 00-39 stepping by 2.
 var defaultLMKHex = map[int][2]string{
-	0:  {"0101010101010101", "01017902CD1FD36E"},
+	0:  {"0101010101010101", "7902CD1FD36EF8BA"},
 	2:  {"2020202020202020", "3131313131313131"},
 	4:  {"4040404040404040", "5151515151515151"},
 	6:  {"6161616161616161", "7070707070707070"},
