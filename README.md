@@ -93,7 +93,7 @@ Table of Contents
 ### 1. HSM Core (internal/hsm)
 - Secure implementation of Local Master Key (LMK) operations
 - Support for various key lengths and formats
-- Cryptographically secure random key generation
+- Cryptographically secure random key generation via `RandomKey` function
 - PIN block format conversions (ISO, ANSI, Visa, etc.)
 
 ### 2. Plugin System (internal/plugins)
@@ -122,13 +122,9 @@ Table of Contents
 
 ## Supported Commands
 
-The HSM supports various commands through its plugin system:
+TBA
 
-- **A0**: Random key generation with configurable key formats
-- **BU**: PIN block translation between formats
-- **DC**: PIN verification and change operations
-- **EC**: PIN encryption operations
-- **NC**: Network control and status commands
+---
 
 Each command is implemented as a separate WASM module, providing:
 - Isolation of command logic
@@ -357,11 +353,20 @@ func wasmEncryptUnderLMK(ptr, length uint32) uint64
 func wasmDecryptUnderLMK(ptr, length uint32) uint64
 
 //go:wasm-module env
+//export RandomKey
+func wasmRandomKey(length uint32) uint64
+
+//go:wasm-module env
 //export log_debug
 func wasmLogToHost(s string)
 ```
 
-Add unit tests in `internal/hsm/logic/FO_test.go`.
+The `RandomKey` function is a critical security component that:
+- Generates cryptographically secure random keys of specified length
+- Uses Go's `crypto/rand` for secure random number generation
+- Supports both double-length (16 bytes) and triple-length (24 bytes) keys
+- Returns the key in WASM-compatible memory format
+- Used by commands like A0 for secure key generation
 
 ### 2. Add go:generate Stub
 
