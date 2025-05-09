@@ -1,5 +1,7 @@
 package variantlmk
 
+import "fmt"
+
 var pciHSMComplianceMode bool
 
 // KeyTypes maps key type codes to their LMK pair and variant mappings.
@@ -234,6 +236,17 @@ type KeyType struct {
 	VariantID int
 }
 
+// String returns a string representation of the KeyType.
+func (kt KeyType) String() string {
+	return fmt.Sprintf(
+		"Name: %s, Code: %s, LMKPairIndex: %d, VariantID: %d",
+		kt.Name,
+		kt.Code,
+		kt.LMKPair,
+		kt.VariantID,
+	)
+}
+
 // SetPCIComplianceMode sets the HSM operating mode for key type table selection.
 // If enabled is true, the PCI-HSM compliant key type table will be used.
 func SetPCIComplianceMode(enabled bool) {
@@ -243,4 +256,23 @@ func SetPCIComplianceMode(enabled bool) {
 // GetPCIComplianceMode returns true if the HSM is set to operate in PCI-HSM compliant mode.
 func GetPCIComplianceMode() bool {
 	return pciHSMComplianceMode
+}
+
+// GetKeyTypeDetails returns the LMK pair index and variant ID for a given key type string.
+// It considers the PCI compliance mode to select the correct key type table.
+func GetKeyTypeDetails(keyTypeStr string, pciMode bool) (KeyType, error) {
+	var kt KeyType
+	var ok bool
+
+	if pciMode {
+		kt, ok = KeyTypesPCI[keyTypeStr]
+	} else {
+		kt, ok = KeyTypes[keyTypeStr]
+	}
+
+	if !ok {
+		return KeyType{}, fmt.Errorf("unknown key type: %s (PCI mode: %t)", keyTypeStr, pciMode)
+	}
+
+	return kt, nil
 }

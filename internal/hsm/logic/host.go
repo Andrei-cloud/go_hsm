@@ -10,13 +10,19 @@ import (
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 )
 
+//
 //go:wasm-module env
 //export EncryptUnderLMK
-func wasmEncryptUnderLMK(ptr, length uint32) uint64
+func wasmEncryptUnderLMK(
+	plainKeyPtr, plainKeyLen, keyTypeStrPtr, keyTypeStrLen, schemeTagRaw uint32,
+) uint64
 
+//
 //go:wasm-module env
 //export DecryptUnderLMK
-func wasmDecryptUnderLMK(ptr, length uint32) uint64
+func wasmDecryptUnderLMK(
+	encryptedKeyPtr, encryptedKeyLen, keyTypeStrPtr, keyTypeStrLen, schemeTagRaw uint32,
+) uint64
 
 //go:wasm-module env
 //export log_debug
@@ -42,17 +48,38 @@ func randomKey(length int) ([]byte, error) {
 }
 
 // encryptUnderLMK calls the host export to encrypt data under LMK.
-func encryptUnderLMK(data []byte) ([]byte, error) {
-	buf := hsmplugin.ToBuffer(data)
-	r := wasmEncryptUnderLMK(buf.AddressSize())
+func encryptUnderLMK(plainKey []byte, keyType string, schemeTag byte) ([]byte, error) {
+	plainKeyPtr, plainKeyLen := hsmplugin.ToBuffer(plainKey).AddressSize()
+	keyTypeStrPtr, keyTypeStrLen := hsmplugin.ToBuffer([]byte(keyType)).AddressSize()
+
+	r := wasmEncryptUnderLMK(
+		plainKeyPtr,
+		plainKeyLen,
+		keyTypeStrPtr,
+		keyTypeStrLen,
+		uint32(schemeTag),
+	)
+	if r == 0 {
+		return nil, errors.New("failed to encrypt key under LMK")
+	}
 
 	return hsmplugin.Buffer(r).ToBytes(), nil
 }
 
 // decryptUnderLMK calls the host export to decrypt data under LMK.
-func decryptUnderLMK(data []byte) ([]byte, error) {
-	buf := hsmplugin.ToBuffer(data)
-	r := wasmDecryptUnderLMK(buf.AddressSize())
+func decryptUnderLMK(encryptedKey []byte, keyType string, schemeTag byte) ([]byte, error) {
+	encryptedKeyPtr, encryptedKeyLen := hsmplugin.ToBuffer(encryptedKey).AddressSize()
+	keyTypeStrPtr, keyTypeStrLen := hsmplugin.ToBuffer([]byte(keyType)).AddressSize()
+	r := wasmDecryptUnderLMK(
+		encryptedKeyPtr,
+		encryptedKeyLen,
+		keyTypeStrPtr,
+		keyTypeStrLen,
+		uint32(schemeTag),
+	)
+	if r == 0 {
+		return nil, errors.New("failed to decrypt key under LMK")
+	}
 
 	return hsmplugin.Buffer(r).ToBytes(), nil
 }
@@ -82,8 +109,21 @@ func prepareTripleDESKey(key []byte) []byte {
 }
 
 // encryptKeyUnderZMK encrypts clearKey using the provided ZMK.
+// It assumes the ZMK key type is "000" and derives the scheme ('U' or 'T') from the length of zmkBytes.
 func encryptKeyUnderZMK(clearKey []byte, zmkBytes []byte) ([]byte, error) {
-	rawZmk, err := decryptUnderLMK(zmkBytes)
+	const zmkKeyType = "000" // Standard Thales key type for ZMK.
+	var zmkSchemeTag byte
+
+	switch len(zmkBytes) {
+	case 16: // Double-length key.
+		zmkSchemeTag = 'U'
+	case 24: // Triple-length key.
+		zmkSchemeTag = 'T'
+	default:
+		return nil, errors.New("invalid zmk length, must be 16 or 24 bytes")
+	}
+
+	rawZmk, err := decryptUnderLMK(zmkBytes, zmkKeyType, zmkSchemeTag)
 	if err != nil {
 		return nil, errors.Join(errors.New("decrypt zmk"), err)
 	}

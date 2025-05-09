@@ -3,7 +3,7 @@ package plugins
 
 import "github.com/andrei-cloud/go_hsm/internal/hsm"
 
-// PluginManager defines the interface for managing WASM plugins.
+// PluginManagerInterface defines the interface for managing WASM plugins.
 type PluginManagerInterface interface {
 	// ExecuteCommand executes the given command with input via the corresponding WASM plugin.
 	ExecuteCommand(cmd string, input []byte) ([]byte, error)

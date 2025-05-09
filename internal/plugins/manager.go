@@ -73,21 +73,48 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Msg("wasm")
 		}).
 		Export("log_debug").
-		// Add LMK encryption/decryption functions
+		// DecryptUnderVariantLMK decrypts a key using the Variant LMK scheme.
+		// Parameters:
+		// - encryptedKeyPtr: uint32, pointer to the encrypted key data in guest memory.
+		// - encryptedKeyLen: uint32, length of the encrypted key data.
+		// - keyTypeStrPtr: uint32, pointer to the key type string (e.g., "001", "209") in guest memory.
+		// - keyTypeStrLen: uint32, length of the key type string.
+		// - schemeTag: uint32, the scheme tag ('U' or 'T'). Note: passed as uint32 from WASM, converted to byte.
+		// Returns: uint64, packed pointer and length of the decrypted key in guest memory, or 0 on error.
 		NewFunctionBuilder().
-		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) uint64 {
-			data, ok := m.Memory().Read(ptr, length)
+		WithFunc(func(_ context.Context, m api.Module,
+			encryptedKeyPtr, encryptedKeyLen,
+			keyTypeStrPtr, keyTypeStrLen, schemeTagRaw uint32,
+		) uint64 {
+			encryptedKeyData, ok := m.Memory().Read(encryptedKeyPtr, encryptedKeyLen)
 			if !ok {
-				log.Error().Msg("failed to read memory in DecryptUnderLMK")
+				log.Error().
+					Msg("failed to read encryptedKeyData from guest memory in DecryptUnderVariantLMK")
 				return 0
 			}
+			keyTypeStrBytes, ok := m.Memory().Read(keyTypeStrPtr, keyTypeStrLen)
+			if !ok {
+				log.Error().
+					Msg("failed to read keyTypeStrBytes from guest memory in DecryptUnderVariantLMK")
+				return 0
+			}
+			keyTypeStr := string(keyTypeStrBytes)
+			schemeTag := byte(schemeTagRaw) // schemeTag is a single character like 'U' or 'T'
+
 			log.Debug().
-				Str("event", "decrypt_lmk").
-				Str("input_hex", hex.EncodeToString(data)).
-				Msg("calling DecryptUnderLMK")
-			decrypted, err := pm.hsm.DecryptUnderLMK(data)
+				Str("event", "decrypt_variant_lmk").
+				Str("encrypted_key_hex", hex.EncodeToString(encryptedKeyData)).
+				Str("key_type", keyTypeStr).
+				Str("scheme_tag", string(schemeTag)).
+				Msg("calling DecryptKeyWithVariantScheme")
+
+			decrypted, err := pm.hsm.DecryptKeyWithVariantScheme(
+				encryptedKeyData,
+				keyTypeStr,
+				schemeTag,
+			)
 			if err != nil {
-				log.Error().Err(err).Msg("DecryptUnderLMK failed")
+				log.Error().Err(err).Msg("DecryptKeyWithVariantScheme failed")
 				return 0
 			}
 
@@ -95,51 +122,91 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			allocFn := m.ExportedFunction("Alloc")
 			results, err := allocFn.Call(context.Background(), uint64(len(decrypted)))
 			if err != nil || len(results) == 0 {
-				log.Error().Err(err).Msg("failed to alloc guest memory for DecryptUnderLMK")
+				log.Error().
+					Err(err).
+					Msg("failed to alloc guest memory for DecryptKeyWithVariantScheme result")
+
 				return 0
 			}
 			packed := results[0]
-			dst := api.DecodeU32(packed >> 32)
-			if !m.Memory().Write(dst, decrypted) {
-				log.Error().Msg("failed to write decrypted data to guest memory")
+			dstPtr := api.DecodeU32(packed >> 32)
+			if !m.Memory().Write(dstPtr, decrypted) {
+				log.Error().
+					Msg("failed to write decrypted data to guest memory for DecryptKeyWithVariantScheme")
 				return 0
 			}
 
 			return packed
 		}).
 		Export("DecryptUnderLMK").
+		// Keeping original export name for now, consider renaming to DecryptUnderVariantLMK if feasible for plugins
+		// EncryptUnderVariantLMK encrypts a key using the Variant LMK scheme.
+		// Parameters:
+		// - plainKeyPtr: uint32, pointer to the plaintext key data in guest memory.
+		// - plainKeyLen: uint32, length of the plaintext key data.
+		// - keyTypeStrPtr: uint32, pointer to the key type string (e.g., "001", "209") in guest memory.
+		// - keyTypeStrLen: uint32, length of the key type string.
+		// - schemeTag: uint32, the scheme tag ('U' or 'T'). Note: passed as uint32 from WASM, converted to byte.
+		// Returns: uint64, packed pointer and length of the encrypted key in guest memory, or 0 on error.
 		NewFunctionBuilder().
-		WithFunc(func(_ context.Context, m api.Module, ptr, length uint32) uint64 {
-			data, ok := m.Memory().Read(ptr, length)
+		WithFunc(func(_ context.Context, m api.Module,
+			plainKeyPtr, plainKeyLen,
+			keyTypeStrPtr, keyTypeStrLen, schemeTagRaw uint32,
+		) uint64 {
+			plainKeyData, ok := m.Memory().Read(plainKeyPtr, plainKeyLen)
 			if !ok {
-				log.Error().Msg("failed to read memory in EncryptUnderLMK")
+				log.Error().
+					Msg("failed to read plainKeyData from guest memory in EncryptUnderVariantLMK")
+
 				return 0
 			}
+			keyTypeStrBytes, ok := m.Memory().Read(keyTypeStrPtr, keyTypeStrLen)
+			if !ok {
+				log.Error().
+					Msg("failed to read keyTypeStrBytes from guest memory in EncryptUnderVariantLMK")
+
+				return 0
+			}
+			keyTypeStr := string(keyTypeStrBytes)
+			schemeTag := byte(schemeTagRaw) // schemeTag is a single character like 'U' or 'T'
+
 			log.Debug().
-				Str("event", "encrypt_lmk").
-				Str("input_hex", hex.EncodeToString(data)).
-				Msg("calling EncryptUnderLMK")
-			encrypted, err := pm.hsm.EncryptUnderLMK(data)
+				Str("event", "encrypt_variant_lmk").
+				Str("plain_key_hex", hex.EncodeToString(plainKeyData)).
+				Str("key_type", keyTypeStr).
+				Str("scheme_tag", string(schemeTag)).
+				Msg("calling EncryptKeyWithVariantScheme")
+
+			encrypted, err := pm.hsm.EncryptKeyWithVariantScheme(
+				plainKeyData,
+				keyTypeStr,
+				schemeTag,
+			)
 			if err != nil {
-				log.Error().Err(err).Msg("EncryptUnderLMK failed")
+				log.Error().Err(err).Msg("EncryptKeyWithVariantScheme failed")
 				return 0
 			}
 			log.Debug().
-				Str("event", "encrypt_lmk_result").
+				Str("event", "encrypt_variant_lmk_result").
 				Str("output_hex", hex.EncodeToString(encrypted)).
-				Msg("EncryptUnderLMK result")
+				Msg("EncryptKeyWithVariantScheme result")
 
 			// allocate guest memory for encrypted data
 			allocFn := m.ExportedFunction("Alloc")
 			results, err := allocFn.Call(context.Background(), uint64(len(encrypted)))
 			if err != nil || len(results) == 0 {
-				log.Error().Err(err).Msg("failed to alloc guest memory for EncryptUnderLMK")
+				log.Error().
+					Err(err).
+					Msg("failed to alloc guest memory for EncryptKeyWithVariantScheme result")
+
 				return 0
 			}
 			packed := results[0]
-			dst := api.DecodeU32(packed >> 32)
-			if !m.Memory().Write(dst, encrypted) {
-				log.Error().Msg("failed to write encrypted data to guest memory")
+			dstPtr := api.DecodeU32(packed >> 32)
+			if !m.Memory().Write(dstPtr, encrypted) {
+				log.Error().
+					Msg("failed to write encrypted data to guest memory for EncryptKeyWithVariantScheme")
+
 				return 0
 			}
 
@@ -157,6 +224,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			key, err := cryptoutils.GenerateRandomKey(int(length))
 			if err != nil {
 				log.Error().Err(err).Msg("RandomKey failed")
+
 				return 0
 			}
 			log.Debug().
@@ -174,6 +242,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			dst := api.DecodeU32(packed >> 32)
 			if !m.Memory().Write(dst, key) {
 				log.Error().Msg("failed to write random key to guest memory")
+
 				return 0
 			}
 

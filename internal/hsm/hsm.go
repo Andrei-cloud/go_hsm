@@ -2,82 +2,130 @@
 package hsm
 
 import (
-	"crypto/cipher"
-	"crypto/des"
-	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
+	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
 )
 
 // FirmwareVersion is the constant firmware version for the HSM.
 const FirmwareVersion = "7000-E000"
 
-// HSM represents the hardware security module server holding the LMK, firmware version, and cipher for encryption operations.
+// HSM represents the hardware security module server.
+// It holds the Variant LMK set for scheme-based encryption,
+// firmware version, and PCI compliance mode.
 type HSM struct {
-	LMK             []byte
+	VariantLmkSet   variantlmk.LMKSet
+	PciMode         bool
 	FirmwareVersion string
-	cipher          cipher.Block
 }
 
 var errUnknownThalesPinBlockFormat = errors.New("unknown thales pin block format code")
 
-// NewHSM creates a new HSM instance with the given LMK key in hex and firmware version.
-// keyHex must be 16, 32, or 48 hex characters; shorter lengths are expanded automatically.
-func NewHSM(keyHex, firmwareVersion string) (*HSM, error) {
-	if len(keyHex)%16 != 0 || len(keyHex) > 48 {
-		return nil, errors.New("invalid key hex length: must be 16, 32 or 48 hex characters")
-	}
-	switch len(keyHex) {
-	case 16:
-		keyHex = keyHex + keyHex + keyHex
-	case 32:
-		keyHex = keyHex + keyHex[:16]
+// NewHSM creates a new HSM instance.
+// firmwareVersion is the HSM firmware version string.
+// pciMode determines which set of key type definitions to use for Variant LMK operations.
+func NewHSM(firmwareVersion string, pciMode bool) (*HSM, error) {
+	variantLmkSet, err := variantlmk.LoadDefaultLMKSet()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load default variant lmk set: %w", err)
 	}
 
-	key, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return nil, err
-	}
-	cipherBlock, err := des.NewTripleDESCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	return &HSM{LMK: key, FirmwareVersion: firmwareVersion, cipher: cipherBlock}, nil
+	return &HSM{
+		VariantLmkSet:   variantLmkSet,
+		PciMode:         pciMode,
+		FirmwareVersion: firmwareVersion,
+	}, nil
 }
 
-// EncryptUnderLMK encrypts the provided key under the LMK and returns the ciphertext.
-func (h *HSM) EncryptUnderLMK(key []byte) ([]byte, error) {
-	if len(key) != 16 && len(key) != 24 {
-		return nil, errors.New("key length must be 16 or 24 bytes")
+// EncryptKeyWithVariantScheme encrypts key data under a variant LMK using a specific key type and scheme tag ('U' or 'T').
+// keyData is the plaintext key to be encrypted (16 bytes for 'U', 24 bytes for 'T').
+// keyTypeStr is the string representation of the key type (e.g., "001", "209").
+// schemeTag is 'U' for double-length TDES keys or 'T' for triple-length TDES keys.
+func (h *HSM) EncryptKeyWithVariantScheme(
+	keyData []byte,
+	keyTypeStr string,
+	schemeTag byte,
+) ([]byte, error) {
+	if h == nil {
+		return nil, fmt.Errorf("hsm instance is nil")
 	}
 
-	ciphertext := make([]byte, len(key))
-	h.cipher.Encrypt(ciphertext[:8], key[:8])
-	h.cipher.Encrypt(ciphertext[8:16], key[8:16])
-	if len(key) == 24 {
-		h.cipher.Encrypt(ciphertext[16:], key[16:])
+	keyTypeDetails, err := variantlmk.GetKeyTypeDetails(keyTypeStr, h.PciMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key type details: %w", err)
 	}
 
-	return ciphertext, nil
+	if keyTypeDetails.LMKPair < 0 || keyTypeDetails.LMKPair >= len(h.VariantLmkSet) {
+		return nil, fmt.Errorf(
+			"invalid lmk pair index %d for key type %s",
+			keyTypeDetails.LMKPair,
+			keyTypeStr,
+		)
+	}
+	baseLMKPair := h.VariantLmkSet[keyTypeDetails.LMKPair]
+
+	// Apply the key-type specific variant to the LMK pair.
+	keyTypeVariantedLMK, err := baseLMKPair.ApplyVariant(keyTypeDetails.VariantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply key type variant to lmk: %w", err)
+	}
+
+	// Encrypt the key data using the 'U' or 'T' scheme with the key-type-varianted LMK.
+	encryptedKey, err := variantlmk.EncryptUnderVariantLMK(keyData, keyTypeVariantedLMK, schemeTag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt key under variant lmk scheme: %w", err)
+	}
+
+	return encryptedKey, nil
 }
 
-// DecryptUnderLMK decrypts the provided key under the LMK and returns the plaintext.
-func (h *HSM) DecryptUnderLMK(key []byte) ([]byte, error) {
-	if len(key) != 16 && len(key) != 24 {
-		return nil, errors.New("key length must be 16 or 24 bytes")
+// DecryptKeyWithVariantScheme decrypts key data that was encrypted under a variant LMK
+// using a specific key type and scheme tag ('U' or 'T').
+// encryptedKeyData is the ciphertext key to be decrypted.
+// keyTypeStr is the string representation of the key type (e.g., "001", "209").
+// schemeTag is 'U' for double-length TDES keys or 'T' for triple-length TDES keys.
+func (h *HSM) DecryptKeyWithVariantScheme(
+	encryptedKeyData []byte,
+	keyTypeStr string,
+	schemeTag byte,
+) ([]byte, error) {
+	if h == nil {
+		return nil, fmt.Errorf("hsm instance is nil")
 	}
 
-	plaintext := make([]byte, len(key))
-	h.cipher.Decrypt(plaintext[:8], key[:8])
-	h.cipher.Decrypt(plaintext[8:16], key[8:16])
-	if len(key) == 24 {
-		h.cipher.Decrypt(plaintext[16:], key[16:])
+	keyTypeDetails, err := variantlmk.GetKeyTypeDetails(keyTypeStr, h.PciMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get key type details: %w", err)
 	}
 
-	return plaintext, nil
+	if keyTypeDetails.LMKPair < 0 || keyTypeDetails.LMKPair >= len(h.VariantLmkSet) {
+		return nil, fmt.Errorf(
+			"invalid lmk pair index %d for key type %s",
+			keyTypeDetails.LMKPair,
+			keyTypeStr,
+		)
+	}
+	baseLMKPair := h.VariantLmkSet[keyTypeDetails.LMKPair]
+
+	// Apply the key-type specific variant to the LMK pair.
+	keyTypeVariantedLMK, err := baseLMKPair.ApplyVariant(keyTypeDetails.VariantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply key type variant to lmk: %w", err)
+	}
+
+	// Decrypt the key data using the 'U' or 'T' scheme with the key-type-varianted LMK.
+	decryptedKey, err := variantlmk.DecryptUnderVariantLMK(
+		encryptedKeyData,
+		keyTypeVariantedLMK,
+		schemeTag,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt key under variant lmk scheme: %w", err)
+	}
+
+	return decryptedKey, nil
 }
 
 // GetPinBlockFormatFromThalesCode maps a Thales PIN block format code string

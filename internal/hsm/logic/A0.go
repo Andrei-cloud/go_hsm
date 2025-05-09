@@ -62,7 +62,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 	logDebug(fmt.Sprintf("A0 calculated KCV: %s", string(kcv)))
 
 	// Encrypt key under LMK
-	lmkEncryptedKey, err := encryptUnderLMK(clearKey)
+	lmkEncryptedKey, err := encryptUnderLMK(clearKey, keyType, keyScheme)
 	if err != nil {
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}

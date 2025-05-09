@@ -40,7 +40,7 @@ var serveCmd = &cobra.Command{
 		logging.InitLogger(debug, human)
 
 		// Initialize the HSM instance.
-		hsmInstance, err := hsm.NewHSM(lmk, hsm.FirmwareVersion)
+		hsmInstance, err := hsm.NewHSM(lmk, false)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to initialize HSM instance: %v\n", err)
 			os.Exit(1)

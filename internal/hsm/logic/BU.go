@@ -19,15 +19,26 @@ func ExecuteBU(input []byte) ([]byte, error) {
 	}
 
 	// Parse input fields
-	keyTypeCode := input[0:2]
+	keyTypeCode := string(input[0:2])
 	keyLengthFlag := input[2]
 	remainder := input[3:]
 
 	logDebug(
 		fmt.Sprintf(
-			"BU command input - key type: %s, length flag: %c", string(keyTypeCode), keyLengthFlag,
+			"BU command input - key type: %s, length flag: %c", keyTypeCode, keyLengthFlag,
 		),
 	)
+
+	//ketypecode - '00' – '9E': this field indicates a 2-digit Key Type Code
+	//(identical to the regular 3-digit Key Type Code but without the
+	//middle digit) need to be converted to a 3-digit Key Type Code
+	// by inserting a '0' in the middle.
+	if keyTypeCode[0] < '0' || keyTypeCode[0] > '9' ||
+		keyTypeCode[1] < '0' || keyTypeCode[1] > 'D' {
+		return nil, errorcodes.Err26
+	}
+	keyType := fmt.Sprintf("%c0%c", keyTypeCode[0], keyTypeCode[1])
+	logDebug(fmt.Sprintf("BU key type: %s", keyType))
 
 	// For U scheme, expect key length of 33 (flag + 32 hex chars)
 	if len(remainder) < 33 {
@@ -49,8 +60,10 @@ func ExecuteBU(input []byte) ([]byte, error) {
 		return nil, errors.Join(errors.New("invalid key format"), err)
 	}
 
+	logDebug(fmt.Sprintf("BU encrypted key (hex): %s", cryptoutils.Raw2Str(encryptedKey)))
+
 	// Decrypt key under LMK
-	clearKey, err := decryptUnderLMK(encryptedKey)
+	clearKey, err := decryptUnderLMK(encryptedKey, keyType, keyScheme)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to decrypt key under lmk"), err)
 	}
