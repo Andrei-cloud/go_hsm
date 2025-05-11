@@ -30,7 +30,8 @@ var (
 
 // GenerateKey generates a random cryptographic key of the specified length in bits.
 // Returns the key as a hex string and its KCV, or an error if the length is invalid.
-func GenerateKey(lengthBits int) (string, string, error) {
+// If enforceOddParity is true, each byte in the key will have odd parity.
+func GenerateKey(lengthBits int, enforceOddParity bool) (string, string, error) {
 	// Validate key length
 	if lengthBits != KeyLength64 &&
 		lengthBits != KeyLength128 &&
@@ -45,6 +46,11 @@ func GenerateKey(lengthBits int) (string, string, error) {
 	// Generate random key material
 	if _, err := rand.Read(keyBytes); err != nil {
 		return "", "", fmt.Errorf("failed to generate random key: %w", err)
+	}
+
+	// Adjust parity if requested
+	if enforceOddParity {
+		adjustParity(keyBytes)
 	}
 
 	// Calculate KCV
@@ -272,4 +278,78 @@ func cleanComponentLists(components [][]byte) {
 	for i := range components {
 		cleanBytes(components[i])
 	}
+}
+
+// adjustParity sets odd parity for each byte in a DES key.
+// DES keys use odd parity - each byte should have an odd number of 1 bits.
+// This function examines bits 1-7 of each byte and sets bit 0 (LSB) accordingly.
+func adjustParity(key []byte) {
+	for i := 0; i < len(key); i++ {
+		// Count 1 bits in bits 1-7
+		b := key[i] >> 1
+		count := 0
+		for b > 0 {
+			count += int(b & 1)
+			b >>= 1
+		}
+		// Set LSB to make total number of 1s odd
+		if count%2 == 0 {
+			key[i] |= 1 // Set LSB to 1
+		} else {
+			key[i] &= 0xFE // Clear LSB
+		}
+	}
+}
+
+// ValidateKeyParity checks if all bytes in a DES key have odd parity.
+func ValidateKeyParity(key []byte) bool {
+	for i := 0; i < len(key); i++ {
+		// Count all bits (including LSB)
+		b := key[i]
+		count := 0
+		for b > 0 {
+			count += int(b & 1)
+			b >>= 1
+		}
+		if count%2 == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ValidateComponentConsistency checks if the components will XOR back to the original key.
+// Returns true if the components are consistent, false otherwise.
+func ValidateComponentConsistency(original string, components []string) bool {
+	// Decode original key
+	origBytes, err := hex.DecodeString(original)
+	if err != nil {
+		return false
+	}
+	defer cleanBytes(origBytes)
+
+	// Combine components
+	recombined, err := CombineComponents(components)
+	if err != nil {
+		return false
+	}
+
+	recombinedBytes, err := hex.DecodeString(recombined)
+	if err != nil {
+		return false
+	}
+	defer cleanBytes(recombinedBytes)
+
+	// Compare - must match exactly
+	if len(origBytes) != len(recombinedBytes) {
+		return false
+	}
+	for i := 0; i < len(origBytes); i++ {
+		if origBytes[i] != recombinedBytes[i] {
+			return false
+		}
+	}
+
+	return true
 }
