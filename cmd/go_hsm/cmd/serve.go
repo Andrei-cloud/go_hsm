@@ -28,11 +28,6 @@ var serveCmd = &cobra.Command{
 	Short: "Start the HSM server",
 	Long:  `Start the Hardware Security Module (HSM) server to process cryptographic commands over TCP.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Use default LMK value if not provided.
-		if lmk == "" {
-			lmk = "0123456789ABCDEFFEDCBA9876543210"
-		}
-
 		// Notify starting server.
 		fmt.Printf("starting HSM server on port %s\n", port)
 
@@ -40,7 +35,7 @@ var serveCmd = &cobra.Command{
 		logging.InitLogger(debug, human)
 
 		// Initialize the HSM instance.
-		hsmInstance, err := hsm.NewHSM(lmk, false)
+		hsmInstance, err := hsm.NewHSM(hsm.FirmwareVersion, false)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to initialize HSM instance: %v\n", err)
 			os.Exit(1)
@@ -122,7 +117,6 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 
 	serveCmd.Flags().StringVarP(&port, "port", "p", ":1500", "Server port")
-	serveCmd.Flags().StringVar(&lmk, "lmk", "", "LMK hex value")
 	serveCmd.Flags().BoolVar(&debug, "debug", false, "Enable debug logging")
 	serveCmd.Flags().BoolVar(&human, "human", false, "Enable human-readable logs")
 	serveCmd.Flags().

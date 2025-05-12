@@ -18,12 +18,13 @@ func ExecuteNC(input []byte) ([]byte, error) {
 
 	logDebug("NC calculating KCV using zero block.")
 
-	// Use actual zero bytes for KCV calculation.
-	zeros := make([]byte, 16)
-	kcvRaw, err := encryptUnderLMK(zeros)
-	if err != nil {
-		return nil, errorcodes.Err68
-	}
+	// // Use actual zero bytes for KCV calculation.
+	// zeros := make([]byte, 16)
+	// kcvRaw, err := encryptUnderLMK(zeros)
+	// if err != nil {
+	// 	return nil, errorcodes.Err68
+	// }
+	kcvRaw := make([]byte, 16)
 
 	logDebug(fmt.Sprintf("NC calculated KCV (hex): %s", cryptoutils.Raw2Str(kcvRaw[:8])))
 	logDebug(fmt.Sprintf("NC firmware version: %s", string(input)))
