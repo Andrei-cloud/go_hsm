@@ -25,25 +25,38 @@ its Key Check Value (KCV) and key type description.`,
 		scheme, _ := cmd.Flags().GetString("scheme")
 		pciMode, _ := cmd.Flags().GetBool("pci")
 
-		// Validate scheme
-		if len(scheme) != 1 || (scheme[0] != 'U' && scheme[0] != 'T') {
-			return errors.New("invalid scheme: must be U or T")
-		}
-
-		// Decode clear key
+		// Validate key scheme and length based on key length
 		clearKey, err := hex.DecodeString(clearKeyHex)
 		if err != nil {
 			return fmt.Errorf("invalid key format: %w", err)
 		}
 
-		// Check key length based on scheme
-		expectedLen := 16 // 'U' scheme
-		if scheme[0] == 'T' {
-			expectedLen = 24
+		// Default to scheme X for single length if not specified
+		if scheme == "" {
+			if len(clearKey) == 8 {
+				scheme = "X"
+			} else {
+				return errors.New("scheme must be specified for double/triple length keys")
+			}
 		}
-		if len(clearKey) != expectedLen {
-			return fmt.Errorf("invalid key length for scheme %c: want %d bytes, got %d",
-				scheme[0], expectedLen, len(clearKey))
+
+		// Validate scheme based on key length
+		switch len(clearKey) {
+		case 8: // Single length
+			if scheme != "X" && scheme != "" {
+				return fmt.Errorf("invalid scheme for single length key: %s", scheme)
+			}
+			scheme = "X" // Normalize empty scheme to X
+		case 16: // Double length
+			if scheme != "U" {
+				return fmt.Errorf("invalid scheme for double length key: want U, got %s", scheme)
+			}
+		case 24: // Triple length
+			if scheme != "T" {
+				return fmt.Errorf("invalid scheme for triple length key: want T, got %s", scheme)
+			}
+		default:
+			return fmt.Errorf("invalid key length: %d bytes", len(clearKey))
 		}
 
 		// Validate key parity

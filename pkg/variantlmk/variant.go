@@ -51,6 +51,8 @@ func (lmk LMKPair) ApplyVariant(variantID int) (LMKPair, error) {
 	return LMKPair{Left: copyL, Right: copyR}, nil
 }
 
+// EncryptUnderVariantLMK encrypts inputKey under a variant LMK pair using a specific scheme.
+// The provided LMKPair should already have the key-type specific variant applied.
 func EncryptUnderVariantLMK(inputKey []byte, pair LMKPair, schemeTag byte) ([]byte, error) {
 	var variants []byte
 	switch schemeTag {
@@ -64,8 +66,12 @@ func EncryptUnderVariantLMK(inputKey []byte, pair LMKPair, schemeTag byte) ([]by
 			return nil, errors.New("triple-length key required for scheme T")
 		}
 		variants = []byte{0x6A, 0xDE, 0x2B}
+	case 'X', 0: // Handle both X and empty scheme for single length
+		if len(inputKey) != 8 {
+			return nil, errors.New("single-length key required for scheme X")
+		}
+		variants = []byte{0xA6} // Use first variant for single length
 	default:
-
 		return nil, fmt.Errorf("unknown scheme tag: %c", schemeTag)
 	}
 
@@ -74,7 +80,7 @@ func EncryptUnderVariantLMK(inputKey []byte, pair LMKPair, schemeTag byte) ([]by
 		variantLMK := make([]byte, 16)
 		copy(variantLMK, pair.Left)
 		copy(variantLMK[8:], pair.Right)
-		variantLMK[8] ^= v
+		variantLMK[8] ^= v // Apply scheme variant to first byte of right half
 
 		variantLMK = append(variantLMK, variantLMK[:8]...)
 		block, err := des.NewTripleDESCipher(variantLMK)
@@ -118,8 +124,12 @@ func DecryptUnderVariantLMK(encryptedKey []byte, pair LMKPair, schemeTag byte) (
 			return nil, errors.New("triple-length encrypted key required for scheme T")
 		}
 		variants = []byte{0x6A, 0xDE, 0x2B}
+	case 'X', 0: // Handle both X and empty scheme for single length
+		if len(encryptedKey) != 8 {
+			return nil, errors.New("single-length encrypted key required for scheme X")
+		}
+		variants = []byte{0xA6} // Use first variant for single length
 	default:
-
 		return nil, fmt.Errorf("unknown scheme tag: %c", schemeTag)
 	}
 
