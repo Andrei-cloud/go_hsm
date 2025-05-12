@@ -11,6 +11,7 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/internal/server"
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
@@ -76,7 +77,7 @@ var serveCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr, "failed to reload plugins: %v\n", err)
 				} else {
 					srv.SetPluginManager(newPM)
-					fmt.Println("plugins reloaded")
+					log.Info().Msg("plugins reloaded")
 				}
 			}
 		}()
