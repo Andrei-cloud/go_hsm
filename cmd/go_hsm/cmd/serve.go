@@ -27,7 +27,7 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the HSM server",
 	Long:  `Start the Hardware Security Module (HSM) server to process cryptographic commands over TCP.`,
-	Run: func(cmd *cobra.Command, _ []string) {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		// Notify starting server.
 		fmt.Printf("starting HSM server on port %s\n", port)
 
@@ -37,8 +37,7 @@ var serveCmd = &cobra.Command{
 		// Initialize the HSM instance.
 		hsmInstance, err := hsm.NewHSM(hsm.FirmwareVersion, false)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to initialize HSM instance: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to initialize HSM instance: %v", err)
 		}
 
 		// Initialize the PluginManager with the HSM instance.
@@ -53,26 +52,19 @@ var serveCmd = &cobra.Command{
 		}
 
 		if err := pluginManager.LoadAll(pluginDir); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to load plugins: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to load plugins: %v", err)
 		}
 
 		// Initialize the server.
 		srv, err := server.NewServer(port, pluginManager)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to initialize server: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to initialize server: %v", err)
 		}
-
-		// Separate SIGHUP handling from termination signals.
-		sighupChan := make(chan os.Signal, 1)
-		signal.Notify(sighupChan, syscall.SIGHUP)
 
 		// Create a context that will be canceled when the server is stopping.
 		ctx, cancel := context.WithCancel(cmd.Context())
 		defer cancel()
 
-		// Ensure sighupChan is continuously monitored and does not block.
 		// reload plugins on SIGHUP.
 		reloadChan := make(chan os.Signal, 1)
 		signal.Notify(reloadChan, syscall.SIGHUP)
@@ -96,10 +88,10 @@ var serveCmd = &cobra.Command{
 
 		if err := srv.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to start server: %v\n", err)
-			os.Exit(1)
+
+			return fmt.Errorf("failed to start server: %v", err)
 		}
 
-		// wait for shutdown signal.
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-stopChan
@@ -110,6 +102,8 @@ var serveCmd = &cobra.Command{
 		}
 
 		fmt.Println("server stopped gracefully")
+
+		return nil
 	},
 }
 
