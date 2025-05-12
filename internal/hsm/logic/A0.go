@@ -1,4 +1,3 @@
-// Package logic provides business logic for HSM commands.
 package logic
 
 import (
