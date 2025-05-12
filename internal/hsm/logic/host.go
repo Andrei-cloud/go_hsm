@@ -1,5 +1,4 @@
 // nolint:all // wasm specific
-// Package logic provides business logic for HSM commands.
 package logic
 
 import (
@@ -10,14 +9,12 @@ import (
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 )
 
-//
 //go:wasm-module env
 //export EncryptUnderLMK
 func wasmEncryptUnderLMK(
 	plainKeyPtr, plainKeyLen, keyTypeStrPtr, keyTypeStrLen, schemeTagRaw uint32,
 ) uint64
 
-//
 //go:wasm-module env
 //export DecryptUnderLMK
 func wasmDecryptUnderLMK(

@@ -72,7 +72,7 @@ var serveCmd = &cobra.Command{
 			// replace reload loop to atomically swap plugin manager on SIGHUP.
 			for range reloadChan {
 				newPM := plugins.NewPluginManager(ctx, hsmInstance)
-				if err := newPM.LoadAll("./commands"); err != nil {
+				if err := newPM.LoadAll(pluginDir); err != nil {
 					fmt.Fprintf(os.Stderr, "failed to reload plugins: %v\n", err)
 				} else {
 					srv.SetPluginManager(newPM)
