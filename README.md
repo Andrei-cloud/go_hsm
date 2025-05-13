@@ -16,7 +16,7 @@ make plugins
 
 3. Start the HSM server:
 ```bash
-./bin/go_hsm serve --port 1500 --lmk $(cat lmk.key)
+./bin/go_hsm serve --port 1500
 ```
 
 4. Generate a PIN block:
@@ -119,10 +119,6 @@ Table of Contents
 - PIN block generation utilities
 - Key management operations
 - Plugin management tools
-
-## Supported Commands
-
-TBA
 
 ---
 
@@ -327,7 +323,7 @@ go_hsm pinblock --list-formats
 
 ## Writing a New Command
 
-Follow the pattern of **A0** and **NC** commands.
+Follow the pattern of existing commands (A0, BU, DC, EC, NC).
 
 ### 1. Implement Business Logic
 
@@ -337,36 +333,9 @@ Create a new file in `internal/hsm/logic`, e.g. `FO.go`:
 // ExecuteFO handles the FO command payload.
 func ExecuteFO(input []byte) ([]byte, error) {
     // parse input, call HSM, format response
-    // use decryptUnderLMK(data) and encryptUnderLMK(data) functions and logDebug(msg) provided by the logic package.
+    // use decryptUnderLMK(data), encryptUnderLMK(data), randomKey(length), and logDebug(msg) functions provided by the logic package.
 }
 ```
-
-The following host functions are exported to the WASM module and available in `internal/hsm/logic/host.go`:
-
-```go
-//go:wasm-module env
-//export EncryptUnderLMK
-func wasmEncryptUnderLMK(ptr, length uint32) uint64
-
-//go:wasm-module env
-//export DecryptUnderLMK
-func wasmDecryptUnderLMK(ptr, length uint32) uint64
-
-//go:wasm-module env
-//export RandomKey
-func wasmRandomKey(length uint32) uint64
-
-//go:wasm-module env
-//export log_debug
-func wasmLogToHost(s string)
-```
-
-The `RandomKey` function is a critical security component that:
-- Generates cryptographically secure random keys of specified length
-- Uses Go's `crypto/rand` for secure random number generation
-- Supports both double-length (16 bytes) and triple-length (24 bytes) keys
-- Returns the key in WASM-compatible memory format
-- Used by commands like A0 for secure key generation
 
 ### 2. Add go:generate Stub
 
@@ -382,22 +351,30 @@ package main
 
 ### 3. Generate Wrapper
 
-Run in the new command directory:
+Run generation for all commands or a specific one:
 
 ```bash
-cd commands/FO
-go generate
-``` 
+make gen       # generate wrappers for all commands
+# or for a single command:
+cd commands/FO && go generate
+```
 
-This creates `main.go` with the WASM exports.
+This creates the `main.go` stub with WASM exports:
+
+```go
+//export Alloc
+func Alloc(size uint32) hsmplugin.Buffer
+
+//export Execute
+func Execute(buf hsmplugin.Buffer) uint64
+```
 
 ### 4. Build the Plugin
 
-Compile with TinyGo:
+Compile all WASM plugins via Makefile:
 
 ```bash
-tinygo build -o ../FO.wasm -target=wasi -scheduler=none -opt=z -no-debug ./commands/FO/main.go
-rm ./commands/FO/main.go
+make plugins
 ```
 
 ## Contributing
