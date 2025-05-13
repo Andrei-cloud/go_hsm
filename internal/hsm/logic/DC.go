@@ -42,7 +42,7 @@ func ExecuteDC(input []byte) ([]byte, error) {
 	var decryptedTPK []byte
 
 	// Handle optional TPK
-	if firstByte == 'U' || firstByte == 'T' || firstByte == 'S' {
+	if firstByte == 'U' {
 		// Extract and decrypt TPK
 		tpkRaw, err := hex.DecodeString(string(data[1:tpkSize]))
 		if err != nil {
@@ -52,8 +52,31 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		}
 		data = data[tpkSize:]
 
-		// Decrypt and validate TPK
-		decryptedTPK, err = decryptUnderLMK(tpkRaw)
+		// Decrypt and validate TPK under LMK pair 14-15
+		decryptedTPK, err = decryptUnderLMK(tpkRaw, "002", 'U')
+		if err != nil {
+			logDebug(fmt.Sprintf("DC: failed to decrypt TPK: %v", err))
+
+			return nil, errorcodes.Err68
+		}
+
+		if !cryptoutils.CheckKeyParity(decryptedTPK) {
+			logDebug("DC: decrypted TPK parity error")
+
+			return nil, errorcodes.Err10
+		}
+	} else if len(data) >= 16 { // Single length TPK without scheme
+		// Extract and decrypt TPK as single length
+		tpkRaw, err := hex.DecodeString(string(data[:16]))
+		if err != nil {
+			logDebug(fmt.Sprintf("DC: invalid TPK hex format: %v", err))
+
+			return nil, errorcodes.Err15
+		}
+		data = data[16:]
+
+		// Decrypt and validate TPK under LMK pair 14-15
+		decryptedTPK, err = decryptUnderLMK(tpkRaw, "002", 'X')
 		if err != nil {
 			logDebug(fmt.Sprintf("DC: failed to decrypt TPK: %v", err))
 
@@ -74,13 +97,13 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err15
 	}
 
-	// Check if PVK starts with schema character
+	// For PVK: Either 'U' + 32H or just 32H (two single keys)
 	pvkScheme := data[0]
 	var decryptedPVK []byte
 	var pvkBytesToSkip int // Track how many bytes to skip after PVK processing
 
-	if pvkScheme == 'U' || pvkScheme == 'T' {
-		// Double or triple length key with schema
+	if pvkScheme == 'U' {
+		// Double length key with 'U' scheme
 		pvkData := data[1 : 1+pvkDoubleSize] // Read 32 hex chars after scheme
 		rawPvk, err := hex.DecodeString(string(pvkData))
 		if err != nil {
@@ -89,12 +112,19 @@ func ExecuteDC(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err15
 		}
 
-		// Decrypt PVK first
-		decryptedPVK, err = decryptUnderLMK(rawPvk)
+		// Decrypt PVK under LMK pair 14-15
+		decryptedPVK, err = decryptUnderLMK(rawPvk, "002", 'U')
 		if err != nil {
 			logDebug(fmt.Sprintf("DC: failed to decrypt PVK: %v", err))
 
 			return nil, errorcodes.Err68
+		}
+
+		// Check if double length key
+		if len(decryptedPVK) != 16 {
+			logDebug("DC: PVK must be double length")
+
+			return nil, errorcodes.Err27
 		}
 
 		// Check parity after decryption
@@ -105,7 +135,7 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		}
 		pvkBytesToSkip = 1 + pvkDoubleSize // Skip scheme + hex key
 	} else {
-		// Single length key pair - process PVK A and PVK B
+		// Single length key pair format - process PVK A and PVK B
 		// Ensure enough data for two single keys
 		if len(data) < pvkDoubleSize { // Need 16 + 16 hex chars
 			logDebug("DC: insufficient data for PVK pair")
@@ -113,15 +143,18 @@ func ExecuteDC(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err15
 		}
 
-		encpvkAB, err := hex.DecodeString(string(data[:pvkDoubleSize]))
+		// Split into PVK A and B components
+		pvkAData := data[:pvkSingleSize]              // First 16 hex chars
+		pvkBData := data[pvkSingleSize:pvkDoubleSize] // Second 16 hex chars
+
+		// Decrypt PVK A
+		encpvkA, err := hex.DecodeString(string(pvkAData))
 		if err != nil {
-			logDebug(fmt.Sprintf("DC: invalid PVK pair hex format: %v", err))
+			logDebug(fmt.Sprintf("DC: invalid PVK A hex format: %v", err))
 
 			return nil, errorcodes.Err15
 		}
-
-		// Decrypt extended PVK A + B
-		decryptedPVKAB, err := decryptUnderLMK(encpvkAB)
+		decryptedPVKA, err := decryptUnderLMK(encpvkA, "002", 'X')
 		if err != nil {
 			logDebug(fmt.Sprintf("DC: failed to decrypt PVK A: %v", err))
 
@@ -129,21 +162,35 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		}
 
 		// Check PVK A parity after decryption
-		if !cryptoutils.CheckKeyParity(decryptedPVKAB[:pvkSingleSize/2]) {
+		if !cryptoutils.CheckKeyParity(decryptedPVKA) {
 			logDebug("DC: decrypted PVK A parity error")
 
 			return nil, errorcodes.Err11
 		}
 
+		// Decrypt PVK B
+		encpvkB, err := hex.DecodeString(string(pvkBData))
+		if err != nil {
+			logDebug(fmt.Sprintf("DC: invalid PVK B hex format: %v", err))
+
+			return nil, errorcodes.Err15
+		}
+		decryptedPVKB, err := decryptUnderLMK(encpvkB, "002", 'X')
+		if err != nil {
+			logDebug(fmt.Sprintf("DC: failed to decrypt PVK B: %v", err))
+
+			return nil, errorcodes.Err68
+		}
+
 		// Check PVK B parity after decryption
-		if !cryptoutils.CheckKeyParity(decryptedPVKAB[pvkSingleSize/2 : pvkDoubleSize/2]) {
+		if !cryptoutils.CheckKeyParity(decryptedPVKB) {
 			logDebug("DC: decrypted PVK B parity error")
 
 			return nil, errorcodes.Err11
 		}
 
 		// Combine PVK A and PVK B for final PVK (16 raw bytes)
-		decryptedPVK = decryptedPVKAB
+		decryptedPVK = append(decryptedPVKA, decryptedPVKB...)
 		pvkBytesToSkip = pvkDoubleSize // Skip the two hex keys (16+16).
 	}
 
@@ -182,25 +229,25 @@ func ExecuteDC(input []byte) ([]byte, error) {
 	var pinBlockForClearHex string
 	if decryptedTPK != nil {
 		logDebug(fmt.Sprintf("DC: processing with TPK present, TPK length: %d", len(decryptedTPK)))
-		// Create TPK cipher
+		// Prepare TPK for 3DES operation
 		var fullTPK []byte
-		switch {
-		case firstByte == 'U':
-			// Double length key - use as is
+		switch len(decryptedTPK) {
+		case 16:
+			// Double length key - use as is, with last 8 bytes repeated
 			fullTPK = make([]byte, 24)
 			copy(fullTPK, decryptedTPK)
 			copy(fullTPK[16:], decryptedTPK[:8])
-			logDebug("DC: using double-length TPK with U schema")
-		case len(decryptedTPK) == 16:
-			// Single length key
+			logDebug("DC: using double-length TPK")
+		case 8:
+			// Single length key - repeat it three times
 			fullTPK = make([]byte, 24)
 			copy(fullTPK, decryptedTPK)
-			copy(fullTPK[8:], decryptedTPK[:8])
-			copy(fullTPK[16:], decryptedTPK[:8])
+			copy(fullTPK[8:], decryptedTPK)
+			copy(fullTPK[16:], decryptedTPK)
 			logDebug("DC: extended single-length TPK to triple-length")
 		default:
-			fullTPK = decryptedTPK
-			logDebug("DC: using double/triple-length TPK as is")
+			logDebug(fmt.Sprintf("DC: invalid TPK length: %d", len(decryptedTPK)))
+			return nil, errorcodes.Err68
 		}
 
 		// Create TPK cipher
@@ -227,8 +274,9 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		logDebug(fmt.Sprintf("DC: decrypted PIN block hex: %s", pinBlockForClearHex))
 		logDebug(fmt.Sprintf("DC: account number for PIN extraction: %s", accountNum))
 	} else {
+		// PIN block is already decrypted under PVK or other key
 		pinBlockForClearHex = encryptedPinBlockHex
-		logDebug(fmt.Sprintf("DC: using encrypted PIN block as is: %s", pinBlockForClearHex))
+		logDebug(fmt.Sprintf("DC: using PIN block as is: %s", pinBlockForClearHex))
 		logDebug(fmt.Sprintf("DC: account number for PIN extraction: %s", accountNum))
 	}
 
