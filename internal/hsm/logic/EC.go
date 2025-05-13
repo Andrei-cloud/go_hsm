@@ -59,13 +59,15 @@ func ExecuteEC(input []byte) ([]byte, error) {
 
 	// parse PVK under LMK variant
 	// PVK can be either:
-	// 1. 32 hex chars (no scheme) - a pair of single length keys
+	// 1. 32 hex chars (no scheme) - a pair of single length keys, each encrypted separately
 	// 2. 'U' + 32 hex chars - a double length key with scheme
 	var encryptedPvkHex string
 	var pvkScheme byte = 'U' // default scheme for double length key
+	const singleKeySize = 16 // 8 bytes = 16 hex chars
+	var decryptedPvk []byte
 
 	if data[0] == 'U' {
-		// Format 2: Scheme + 32 hex chars
+		// Format 2: Scheme + 32 hex chars - double length key
 		logDebug("EC: PVK format with scheme U")
 		if len(data) < 1+32 {
 			logDebug("EC: insufficient data for PVK with scheme")
@@ -73,8 +75,21 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		}
 		encryptedPvkHex = string(data[1:33])
 		data = data[33:]
+
+		// Decrypt as one double-length key
+		encryptedPvk, err := hex.DecodeString(encryptedPvkHex)
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decode encrypted PVK hex: %v", err))
+			return nil, errorcodes.Err15
+		}
+
+		decryptedPvk, err = decryptUnderLMK(encryptedPvk, "002", pvkScheme)
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decrypt PVK: %v", err))
+			return nil, errorcodes.Err68
+		}
 	} else {
-		// Format 1: Just 32 hex chars
+		// Format 1: Just 32 hex chars - two single length keys
 		logDebug("EC: PVK format without scheme")
 		if len(data) < 32 {
 			logDebug("EC: insufficient data for PVK without scheme")
@@ -82,25 +97,56 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		}
 		encryptedPvkHex = string(data[:32])
 		data = data[32:]
+
+		// Split into two parts and decrypt each separately
+		encryptedPvkA := encryptedPvkHex[:singleKeySize]
+		encryptedPvkB := encryptedPvkHex[singleKeySize:]
+		logDebug(fmt.Sprintf("EC: encrypted PVK part A hex: %s", encryptedPvkA))
+		logDebug(fmt.Sprintf("EC: encrypted PVK part B hex: %s", encryptedPvkB))
+
+		// Decrypt part A
+		encPvkBytesA, err := hex.DecodeString(encryptedPvkA)
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decode encrypted PVK A hex: %v", err))
+			return nil, errorcodes.Err15
+		}
+		decryptedPvkA, err := decryptUnderLMK(encPvkBytesA, "002", 'X')
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decrypt PVK A: %v", err))
+			return nil, errorcodes.Err68
+		}
+
+		// Decrypt part B
+		encPvkBytesB, err := hex.DecodeString(encryptedPvkB)
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decode encrypted PVK B hex: %v", err))
+			return nil, errorcodes.Err15
+		}
+		decryptedPvkB, err := decryptUnderLMK(encPvkBytesB, "002", 'X')
+		if err != nil {
+			logDebug(fmt.Sprintf("EC: failed to decrypt PVK B: %v", err))
+			return nil, errorcodes.Err68
+		}
+
+		// Concatenate the decrypted parts
+		decryptedPvk = append(decryptedPvkA, decryptedPvkB...)
 	}
 
-	logDebug(fmt.Sprintf("EC: encrypted PVK hex: %s", encryptedPvkHex))
-	encryptedPvk, err := hex.DecodeString(encryptedPvkHex)
-	if err != nil {
-		logDebug(fmt.Sprintf("EC: failed to decode encrypted PVK hex: %v", err))
-		return nil, errorcodes.Err15
-	}
-
-	decryptedPvk, err := decryptUnderLMK(encryptedPvk, "002", pvkScheme)
-	if err != nil {
-		logDebug(fmt.Sprintf("EC: failed to decrypt PVK: %v", err))
-		return nil, errorcodes.Err68
-	}
 	logDebug(fmt.Sprintf("EC: decrypted PVK: %x", decryptedPvk))
-	if !cryptoutils.CheckKeyParity(decryptedPvk) {
-		logDebug("EC: pvk parity error")
+
+	// Check parity for each half of the key separately
+	pvkA := decryptedPvk[:8]   // First 8 bytes
+	pvkB := decryptedPvk[8:16] // Second 8 bytes
+	if !cryptoutils.CheckKeyParity(pvkA) {
+		logDebug("EC: pvk part A parity error")
 		return nil, errorcodes.Err11
 	}
+	if !cryptoutils.CheckKeyParity(pvkB) {
+		logDebug("EC: pvk part B parity error")
+		return nil, errorcodes.Err11
+	}
+
+	// At this point both parts have correct parity and we can use the full key for PVV calculation
 
 	// parse PIN block + format + account + PVKI + PVV
 	const pinHexLen = 16
