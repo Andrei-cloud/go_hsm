@@ -257,6 +257,21 @@ func (pm *PluginManager) LoadAll(dir string) error {
 
 	newPlugins := make(map[string]*PluginInstance)
 
+	// helper to ensure a module exports required functions.
+	validateExports := func(mod api.Module, file string, names ...string) (map[string]api.Function, bool) {
+		fns := make(map[string]api.Function, len(names))
+		for _, name := range names {
+			fn := mod.ExportedFunction(name)
+			if fn == nil {
+				log.Warn().Str("file", file).Str("fn", name).Msg("plugin missing export")
+				return nil, false
+			}
+			fns[name] = fn
+		}
+
+		return fns, true
+	}
+
 	for _, f := range files {
 		if f.IsDir() || filepath.Ext(f.Name()) != ".wasm" {
 			continue
@@ -288,24 +303,16 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			continue
 		}
 
-		executeFn := module.ExportedFunction("Execute")
-		if executeFn == nil {
-			log.Warn().Str("file", f.Name()).Msg("plugin does not export Execute function")
-
-			continue
-		}
-
-		allocFn := module.ExportedFunction("Alloc")
-		if allocFn == nil {
-			log.Warn().Str("file", f.Name()).Msg("plugin does not export Alloc function")
-
+		// validate plugin exports
+		funcs, ok := validateExports(module, f.Name(), "Execute", "Alloc")
+		if !ok {
 			continue
 		}
 
 		newPlugins[cmdCode] = &PluginInstance{
 			Module:      module,
-			ExecuteFn:   executeFn,
-			AllocFn:     allocFn,
+			ExecuteFn:   funcs["Execute"],
+			AllocFn:     funcs["Alloc"],
 			Description: cmdCode,
 		}
 		log.Info().Str("plugin", cmdCode).Msg("loaded wasm plugin")
