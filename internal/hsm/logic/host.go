@@ -46,6 +46,11 @@ func randomKey(length int) ([]byte, error) {
 
 // encryptUnderLMK calls the host export to encrypt data under LMK.
 func encryptUnderLMK(plainKey []byte, keyType string, schemeTag byte) ([]byte, error) {
+	// map Z scheme to X9.17 for single-length DES under LMK
+	if schemeTag == 'Z' {
+		schemeTag = 'X'
+	}
+
 	plainKeyPtr, plainKeyLen := hsmplugin.ToBuffer(plainKey).AddressSize()
 	keyTypeStrPtr, keyTypeStrLen := hsmplugin.ToBuffer([]byte(keyType)).AddressSize()
 
@@ -65,6 +70,11 @@ func encryptUnderLMK(plainKey []byte, keyType string, schemeTag byte) ([]byte, e
 
 // decryptUnderLMK calls the host export to decrypt data under LMK.
 func decryptUnderLMK(encryptedKey []byte, keyType string, schemeTag byte) ([]byte, error) {
+	// map Z scheme to X9.17 for single-length DES under LMK
+	if schemeTag == 'Z' {
+		schemeTag = 'X'
+	}
+
 	encryptedKeyPtr, encryptedKeyLen := hsmplugin.ToBuffer(encryptedKey).AddressSize()
 	keyTypeStrPtr, keyTypeStrLen := hsmplugin.ToBuffer([]byte(keyType)).AddressSize()
 	r := wasmDecryptUnderLMK(
@@ -86,12 +96,16 @@ func logDebug(msg string) {
 	wasmLogToHost(msg)
 }
 
-// getKeyLength returns the key length in bytes based on the scheme.
+// getKeyLength returns the key length in bytes based on the encryption scheme tag.
 func getKeyLength(scheme byte) int {
-	if scheme == 'T' {
-		return 24 // Triple length
+	switch scheme {
+	case 'U', 'X':
+		return 16 // double-length DES
+	case 'T', 'Y':
+		return 24 // triple-length DES
+	default:
+		return 8 // single-length DES (Z or blank)
 	}
-	return 16 // Double length 'U' scheme
 }
 
 // prepareTripleDESKey extends double length key to triple length if needed.
