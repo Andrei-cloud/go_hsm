@@ -29,9 +29,6 @@ var serveCmd = &cobra.Command{
 	Short: "Start the HSM server",
 	Long:  `Start the Hardware Security Module (HSM) server to process cryptographic commands over TCP.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		// Notify starting server.
-		fmt.Printf("starting HSM server on port %s\n", port)
-
 		// Initialize logger.
 		logging.InitLogger(debug, human)
 
