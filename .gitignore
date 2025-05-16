@@ -2,4 +2,8 @@
 *.wasm
 go_hsm.code-workspace
 
-.github/
+*github/*
+bin/*
+
+*.json
+bin/go_hsm
