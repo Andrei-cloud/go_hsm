@@ -189,7 +189,9 @@ func GetGenerator(formatCode string) func(pin, pan string) (string, error) {
 
 	format, exists := formatMap[formatCode]
 	if !exists {
-		return nil
+		return func(pin, pan string) (string, error) {
+			return "", fmt.Errorf("unsupported format code: %s", formatCode)
+		}
 	}
 
 	return func(pin, pan string) (string, error) {

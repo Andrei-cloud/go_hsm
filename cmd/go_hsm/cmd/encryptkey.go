@@ -94,10 +94,10 @@ its Key Check Value (KCV) and key type description.`,
 		}
 
 		// Output results
-		fmt.Printf("Encrypted Key: %s\n", strings.ToUpper(hex.EncodeToString(encrypted)))
-		fmt.Printf("KCV: %s\n", strings.ToUpper(hex.EncodeToString(kcv)))
-		fmt.Printf("Key Type: %s\n", kt.String())
-		fmt.Printf("Key Scheme: %c\n", scheme[0])
+		cmd.Printf("Encrypted Key: %s\n", strings.ToUpper(hex.EncodeToString(encrypted)))
+		cmd.Printf("KCV: %s\n", strings.ToUpper(hex.EncodeToString(kcv)))
+		cmd.Printf("Key Type: %s\n", kt.String())
+		cmd.Printf("Key Scheme: %c\n", scheme[0])
 
 		return nil
 	},

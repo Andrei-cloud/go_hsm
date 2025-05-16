@@ -164,6 +164,7 @@ func encodeISO2(pin, _ string) (string, error) { // PAN is not used for ISO2 enc
 	for len(pinBlockStr) < 14 {
 		pinBlockStr += "F"
 	}
+
 	return pinBlockStr, nil
 }
 

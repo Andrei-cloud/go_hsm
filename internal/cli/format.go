@@ -3,6 +3,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"text/tabwriter"
@@ -26,17 +27,31 @@ func GetSupportedPinBlockFormats() map[string]string {
 }
 
 // PrintSupportedFormats prints the supported PIN block formats in a readable format.
-func PrintSupportedFormats() {
+func PrintSupportedFormats(writers ...interface{}) {
 	formats := GetSupportedPinBlockFormats()
 	codes := make([]string, 0, len(formats))
 	for code := range formats {
 		codes = append(codes, code)
 	}
 	sort.Strings(codes)
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "format\tdescription")
-	for _, code := range codes {
-		_, _ = fmt.Fprintf(w, "%s\t%s\n", code, formats[code])
+	var output io.Writer = os.Stdout
+	if len(writers) > 0 && writers[0] != nil {
+		if w, ok := writers[0].(io.Writer); ok {
+			output = w
+		}
 	}
-	_ = w.Flush()
+	// Use tabwriter only for files, otherwise print directly for buffers (test).
+	if _, ok := output.(*os.File); ok {
+		w := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "format\tdescription")
+		for _, code := range codes {
+			fmt.Fprintf(w, "%s\t%s\n", code, formats[code])
+		}
+		w.Flush()
+	} else {
+		fmt.Fprintln(output, "format\tdescription")
+		for _, code := range codes {
+			fmt.Fprintf(output, "%s\t%s\n", code, formats[code])
+		}
+	}
 }

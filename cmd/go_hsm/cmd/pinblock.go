@@ -7,16 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	pin         string
-	pan         string
-	formatCode  string
-	listFormats bool
-	extract     bool
-	pinblockHex string
-)
-
-// pinblockCmd represents the pinblock command.
 var pinblockCmd = &cobra.Command{
 	Use:   "pinblock",
 	Short: "Generate PIN block in specified format or extract PIN from PIN block",
@@ -31,25 +21,30 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 
   # List supported formats
   go_hsm pinblock --list-formats`,
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if listFormats {
-			cli.PrintSupportedFormats()
+		pin, _ := cmd.Flags().GetString("pin")
+		pan, _ := cmd.Flags().GetString("pan")
+		formatCode, _ := cmd.Flags().GetString("format")
+		listFormats, _ := cmd.Flags().GetBool("list-formats")
+		extract, _ := cmd.Flags().GetBool("extract")
+		pinblockHex, _ := cmd.Flags().GetString("pinblock")
 
+		if listFormats {
+			cli.PrintSupportedFormats(cmd.OutOrStdout())
 			return nil
 		}
 
 		if extract {
 			if pinblockHex == "" || pan == "" || formatCode == "" {
-				return errors.New("pinblock, pan, and format are required for extraction")
+				return errors.New("pinblock, pan, and format are required")
 			}
-
 			result, err := cli.ExtractPinBlock(pinblockHex, pan, formatCode)
 			if err != nil {
 				return err
 			}
-
 			cmd.Printf("pin extracted (format %s): %s\n", formatCode, result)
-
 			return nil
 		}
 
@@ -71,13 +66,13 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 func init() {
 	rootCmd.AddCommand(pinblockCmd)
 
-	pinblockCmd.Flags().StringVar(&pin, "pin", "", "PIN number (4-12 digits)")
-	pinblockCmd.Flags().StringVar(&pan, "pan", "", "Primary Account Number (card number)")
+	pinblockCmd.Flags().String("pin", "", "PIN number (4-12 digits)")
+	pinblockCmd.Flags().String("pan", "", "Primary Account Number (card number)")
 	pinblockCmd.Flags().
-		StringVar(&formatCode, "format", "", "Thales format code (e.g., 01 for ISO 0)")
+		String("format", "", "Thales format code (e.g., 01 for ISO 0)")
 	pinblockCmd.Flags().
-		BoolVar(&listFormats, "list-formats", false, "List supported PIN block formats")
-	pinblockCmd.Flags().BoolVar(&extract, "extract", false, "Extract clear PIN from PIN block")
+		Bool("list-formats", false, "List supported PIN block formats")
+	pinblockCmd.Flags().Bool("extract", false, "Extract clear PIN from PIN block")
 	pinblockCmd.Flags().
-		StringVar(&pinblockHex, "pinblock", "", "PIN block hex string to extract PIN from")
+		String("pinblock", "", "PIN block hex string to extract PIN from")
 }
