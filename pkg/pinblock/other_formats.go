@@ -105,7 +105,7 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 	for _, charRune := range padding {
 		if charRune != 'F' {
 			return "", fmt.Errorf(
-				"%w: decoded ansix98 pin block has invalid padding",
+				"%w: decoded ansix98 pin block has invalid padding character",
 				errPinBlockDecoding,
 			)
 		}
