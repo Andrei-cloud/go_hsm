@@ -113,12 +113,16 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 		}
 	}
 
+	if len(panDigits) == 12 {
+		return panDigits, nil
+	}
+
 	if panDigits == "" {
 		return "", errPanNoDigits
 	}
 
 	// For ISO0, 12 digits is too short (needs at least 13: 12 rightmost excluding check digit)
-	if !fromLeft && len(panDigits) <= 12 {
+	if !fromLeft && len(panDigits) < 12 {
 		return "", errInvalidPanLength
 	}
 

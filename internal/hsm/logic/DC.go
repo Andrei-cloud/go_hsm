@@ -145,9 +145,9 @@ func ExecuteDC(input []byte) ([]byte, error) {
 
 		// Split into PVK A and B components
 		pvkAData := data[:pvkSingleSize]              // First 16 hex chars
-		pvkBData := data[pvkSingleSize:pvkDoubleSize] // Second 16 hex chars
+		pvkBData := data[pvkSingleSize:pvkDoubleSize] // Second 16 hex chars.
 
-		// Decrypt PVK A
+		// Decrypt PVK A.
 		encpvkA, err := hex.DecodeString(string(pvkAData))
 		if err != nil {
 			logDebug(fmt.Sprintf("DC: invalid PVK A hex format: %v", err))
@@ -161,14 +161,17 @@ func ExecuteDC(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err68
 		}
 
-		// Check PVK A parity after decryption
+		// Check PVK A parity after decryption.
 		if !cryptoutils.CheckKeyParity(decryptedPVKA) {
 			logDebug("DC: decrypted PVK A parity error")
 
 			return nil, errorcodes.Err11
 		}
 
-		// Decrypt PVK B
+		// Log clear value of PVK A.
+		logDebug(fmt.Sprintf("DC: clear PVK A: %s", hex.EncodeToString(decryptedPVKA)))
+
+		// Decrypt PVK B.
 		encpvkB, err := hex.DecodeString(string(pvkBData))
 		if err != nil {
 			logDebug(fmt.Sprintf("DC: invalid PVK B hex format: %v", err))
@@ -182,12 +185,15 @@ func ExecuteDC(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err68
 		}
 
-		// Check PVK B parity after decryption
+		// Check PVK B parity after decryption.
 		if !cryptoutils.CheckKeyParity(decryptedPVKB) {
 			logDebug("DC: decrypted PVK B parity error")
 
 			return nil, errorcodes.Err11
 		}
+
+		// Log clear value of PVK B.
+		logDebug(fmt.Sprintf("DC: clear PVK B: %s", hex.EncodeToString(decryptedPVKB)))
 
 		// Combine PVK A and PVK B for final PVK (16 raw bytes)
 		decryptedPVK = append(decryptedPVKA, decryptedPVKB...)

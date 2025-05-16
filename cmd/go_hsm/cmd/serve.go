@@ -38,17 +38,18 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("failed to initialize HSM instance: %v", err)
 		}
 
-		// Initialize the PluginManager with the HSM instance.
+		// Make sure plugin directory exists
+		if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create plugin directory: %v", err)
+		}
+
+		// Initialize the PluginManager with HSM instance.
 		pluginManager := plugins.NewPluginManager(
 			cmd.Context(),
 			hsmInstance,
 		)
 
 		// Load plugins from the specified directory.
-		if pluginDir == "" {
-			pluginDir = "./plugins"
-		}
-
 		if err := pluginManager.LoadAll(pluginDir); err != nil {
 			return fmt.Errorf("failed to load plugins: %v", err)
 		}
@@ -67,11 +68,10 @@ var serveCmd = &cobra.Command{
 		reloadChan := make(chan os.Signal, 1)
 		signal.Notify(reloadChan, syscall.SIGHUP)
 		go func() {
-			// replace reload loop to atomically swap plugin manager on SIGHUP.
 			for range reloadChan {
 				newPM := plugins.NewPluginManager(ctx, hsmInstance)
 				if err := newPM.LoadAll(pluginDir); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to reload plugins: %v\n", err)
+					log.Error().Err(err).Msg("failed to reload plugins")
 				} else {
 					srv.SetPluginManager(newPM)
 					log.Info().Msg("plugins reloaded")
@@ -79,27 +79,23 @@ var serveCmd = &cobra.Command{
 			}
 		}()
 
-		// Ensure all goroutines exit when the program quits.
-		defer func() {
-			signal.Stop(reloadChan)
-		}()
+		defer signal.Stop(reloadChan)
 
 		if err := srv.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to start server: %v\n", err)
-
 			return fmt.Errorf("failed to start server: %v", err)
 		}
 
 		stopChan := make(chan os.Signal, 1)
 		signal.Notify(stopChan, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-stopChan
-		fmt.Printf("signal %v received, shutting down server\n", sig)
+		log.Info().
+			Str("signal", sig.String()).
+			Msg("shutting down server")
 
 		if err := srv.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to stop server: %v\n", err)
+			log.Error().Err(err).Msg("error during shutdown")
+			return err
 		}
-
-		fmt.Println("server stopped gracefully")
 
 		return nil
 	},

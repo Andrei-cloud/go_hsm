@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
 	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
 )
@@ -37,6 +38,11 @@ func NewHSM(firmwareVersion string, pciMode bool) (*HSM, error) {
 		PciMode:         pciMode,
 		FirmwareVersion: firmwareVersion,
 	}, nil
+}
+
+// GenerateRandomKey generates a cryptographically secure random key of the specified length.
+func (h *HSM) GenerateRandomKey(length int) ([]byte, error) {
+	return cryptoutils.GenerateRandomKey(length)
 }
 
 // EncryptKeyWithVariantScheme encrypts key data under a variant LMK using a specific key type and scheme tag ('U' or 'T').

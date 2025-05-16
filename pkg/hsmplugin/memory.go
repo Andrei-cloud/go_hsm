@@ -18,7 +18,7 @@ func ToBuffer(data []byte) Buffer {
 		return Buffer(0)
 	}
 
-	return Buffer(packResult(writeBytes(data)))
+	return Buffer(PackResult(writeBytes(data)))
 }
 
 // ToBytes reads and returns the byte slice from WASM memory pointed to by Buffer.
@@ -27,7 +27,7 @@ func (b Buffer) ToBytes() []byte {
 		return nil
 	}
 
-	ptr, length := unpackResult(uint64(b))
+	ptr, length := UnpackResult(uint64(b))
 	if length == 0 {
 		return nil
 	}
@@ -42,7 +42,7 @@ func (b Buffer) AddressSize() (uint32, uint32) {
 		return 0, 0
 	}
 
-	ptr, length := unpackResult(uint64(b))
+	ptr, length := UnpackResult(uint64(b))
 	if length == 0 {
 		return 0, 0
 	}
@@ -70,13 +70,13 @@ func writeBytes(data []byte) (uint32, uint32) {
 	return ptr, uint32(len(data))
 }
 
-// packResult combines a pointer and a length into a single uint64 result.
-func packResult(ptr, length uint32) uint64 {
+// PackResult combines a pointer and a length into a single uint64 result.
+func PackResult(ptr, length uint32) uint64 {
 	return uint64(ptr)<<32 | uint64(length)
 }
 
 // UnpackResult splits a combined uint64 value into pointer and length.
-func unpackResult(val uint64) (uint32, uint32) {
+func UnpackResult(val uint64) (uint32, uint32) {
 	ptr := api.DecodeU32(val >> 32)
 	length := api.DecodeU32(val)
 	return ptr, length

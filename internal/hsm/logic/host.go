@@ -3,8 +3,10 @@ package logic
 
 import (
 	"crypto/des"
+	"encoding/hex"
 	"errors"
 
+	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 )
@@ -93,7 +95,7 @@ func decryptUnderLMK(encryptedKey []byte, keyType string, schemeTag byte) ([]byt
 
 // logDebug invokes the host log_debug export.
 func logDebug(msg string) {
-	wasmLogToHost(msg)
+	wasmLogToHost(logging.FormatData([]byte(msg)))
 }
 
 // getKeyLength returns the key length in bytes based on the encryption scheme tag.
@@ -158,4 +160,23 @@ func appendEncryptedKeyToResponse(resp []byte, keyScheme byte, encryptedKey []by
 	resp = append(resp, keyScheme)
 	keyLength := getKeyLength(keyScheme)
 	return append(resp, cryptoutils.Raw2B(encryptedKey[:keyLength])...)
+}
+
+// isPrintableASCII checks if a byte slice contains only printable ASCII characters.
+func isPrintableASCII(data []byte) bool {
+	for _, b := range data {
+		if b < 32 || b > 126 {
+			return false
+		}
+	}
+	return true
+}
+
+// formatForLogging formats a byte slice for logging - as ASCII if all characters
+// are printable, or as hexadecimal otherwise.
+func formatForLogging(data []byte) string {
+	if isPrintableASCII(data) {
+		return string(data)
+	}
+	return hex.EncodeToString(data)
 }
