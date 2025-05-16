@@ -51,16 +51,17 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 		return "", errPanRequired
 	}
 
+	relevantPan, err := get12PanDigits(pan, false)
+	if err != nil {
+		return "", err
+	}
+
 	pinBlockBytes, err := hex.DecodeString(pinBlockHex)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid hex for ansix98 pin block", errInternalDecoding)
 	}
 
 	// Prepare PAN field (same as encoding).
-	relevantPan, err := get12PanDigits(pan, false)
-	if err != nil {
-		return "", err
-	}
 	panFieldStr := "0000" + relevantPan
 	panBlockPart2, err := hex.DecodeString(panFieldStr)
 	if err != nil {
@@ -75,7 +76,7 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 	clearPinFieldHex := strings.ToUpper(hex.EncodeToString(clearPinFieldBytes))
 
 	// Validate format "0LPPPP...". First char must be '0', L is PIN length (0x4-0xC).
-	if clearPinFieldHex[0] != '0' {
+	if clearPinFieldHex == "" || clearPinFieldHex[0] != '0' {
 		return "", fmt.Errorf(
 			"%w: decoded ansix98 pin block has invalid format",
 			errPinBlockDecoding,

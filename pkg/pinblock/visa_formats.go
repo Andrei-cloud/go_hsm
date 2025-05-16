@@ -12,6 +12,10 @@ import (
 // PAN: The 11 rightmost digits of the PAN (excluding the check digit) are used.
 // The 12th digit is the check digit of the PAN.
 func encodeVISA1(pin, pan string) (string, error) {
+	if len(pan) < 16 {
+		return "", errInvalidPanLength
+	}
+
 	if pan == "" {
 		return "", errPanRequired
 	}
@@ -50,6 +54,11 @@ func decodeVISA1(pinBlockHex, pan string) (string, error) {
 	if pan == "" {
 		return "", errPanRequired
 	}
+	relevantPan, err := getVisa1PanComponent(pan)
+	if err != nil {
+		return "", err
+	}
+
 	pinBlockBytes, err := hex.DecodeString(pinBlockHex)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid hex for visa1 pin block", errInternalDecoding)
@@ -59,10 +68,6 @@ func decodeVISA1(pinBlockHex, pan string) (string, error) {
 	}
 
 	// Prepare PAN field (same as in encoding).
-	relevantPan, err := getVisa1PanComponent(pan)
-	if err != nil {
-		return "", err
-	}
 	panFieldStr := "0000" + relevantPan
 	panBlockPart2, err := hex.DecodeString(panFieldStr)
 	if err != nil {
@@ -239,14 +244,17 @@ func encodeVISANEWOLDIN(newPin, oldPinAndUdkHex string) (string, error) {
 	oldPin := parts[0]
 	udkHex := parts[1]
 
-	if len(udkHex) < 8 {
+	if len(oldPin) < 4 {
+		return "", errInvalidPinLength
+	}
+	if len(udkHex) != 16 {
 		return "", fmt.Errorf(
 			"%w: udkHex too short for visa42 (min 8 hex chars)",
 			errInvalidPanLength,
 		)
 	}
 	if len(oldPin) < 4 || len(oldPin) > 12 { // Assuming old PIN also 4-12.
-		return "", fmt.Errorf("%w: old pin length invalid for visa42", errInvalidPinLength)
+		return "", errInvalidPinLength
 	}
 
 	// Step 1 (Key Block): '00000000' + 8 rightmost UDK.

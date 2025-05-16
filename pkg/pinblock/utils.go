@@ -103,6 +103,9 @@ func xorHexStrings(s1, s2 string) (string, error) {
 // If fromLeft is false, returns the rightmost 12 digits excluding check digit.
 // Accepts pans already provided as 12 digits excluding check digit.
 func get12PanDigits(pan string, fromLeft bool) (string, error) {
+	if pan == "" {
+		return "", errPanRequired
+	}
 	panDigits := ""
 	for _, r := range pan {
 		if r >= '0' && r <= '9' {
@@ -110,8 +113,17 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 		}
 	}
 
+	if panDigits == "" {
+		return "", errPanNoDigits
+	}
+
+	// For ISO0, 12 digits is too short (needs at least 13: 12 rightmost excluding check digit)
+	if !fromLeft && len(panDigits) <= 12 {
+		return "", errInvalidPanLength
+	}
+
 	if len(panDigits) < 12 {
-		return "", fmt.Errorf("%w: pan must contain at least 12 digits", errInvalidPanLength)
+		return "", errInvalidPanLength
 	}
 
 	if fromLeft {
@@ -125,10 +137,7 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 
 	panWithoutCheckDigit := panDigits[:len(panDigits)-1]
 	if len(panWithoutCheckDigit) < 12 {
-		return "", fmt.Errorf(
-			"%w: pan (after excluding check digit) must contain at least 12 digits",
-			errInvalidPanLength,
-		)
+		return "", errInvalidPanLength
 	}
 
 	return panWithoutCheckDigit[len(panWithoutCheckDigit)-12:], nil

@@ -15,7 +15,18 @@ func encodeISO0(pin, pan string) (string, error) {
 		pinBlock1Str += "F" // Specification: pad character (hexadecimal F)
 	}
 
-	// Block 2 (PAN field): '0000' + 12 right-most digits of account number, excluding check digit.
+	if pan == "" {
+		return "", errPanRequired
+	}
+	panDigits := ""
+	for _, r := range pan {
+		if r >= '0' && r <= '9' {
+			panDigits += string(r)
+		}
+	}
+	if len(panDigits) < 12 {
+		return "", errInvalidPanLength
+	}
 	relevantPan, err := get12PanDigits(pan, false) // false for fromRight.
 	if err != nil {
 		return "", err
@@ -150,17 +161,16 @@ func encodeISO2(pin, _ string) (string, error) { // PAN is not used for ISO2 enc
 	// Thales Spec: C N P P P P P/F P/F P/F P/F P/F P/F P/F P/F F F
 	// C = X'2', N = len, P = PIN, F = X'F'
 	pinBlockStr := fmt.Sprintf("2%X%s", len(pin), pin)
-	for len(pinBlockStr) < 16 {
+	for len(pinBlockStr) < 14 {
 		pinBlockStr += "F"
 	}
-
 	return pinBlockStr, nil
 }
 
 func decodeISO2(pinBlockHex, _ string) (string, error) { // PAN is not used for ISO2 decoding
-	if len(pinBlockHex) != 16 {
+	if len(pinBlockHex) != 14 {
 		return "", fmt.Errorf(
-			"%w: iso2 pin block must be 16 hex characters",
+			"%w: iso2 pin block must be 14 hex characters",
 			errInvalidPinBlockLength,
 		)
 	}
@@ -183,7 +193,7 @@ func decodeISO2(pinBlockHex, _ string) (string, error) { // PAN is not used for 
 
 	pinStartIndex := 2
 	pinEndIndex := pinStartIndex + int(pinLen)
-	if pinEndIndex > 16 {
+	if pinEndIndex > 14 {
 		return "", fmt.Errorf("%w: pin length exceeds block boundary in iso2", errPinBlockDecoding)
 	}
 	decodedPin := pinBlockHex[pinStartIndex:pinEndIndex]

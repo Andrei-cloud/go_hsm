@@ -13,7 +13,7 @@ build: ## Build HSM binary.
 	CGO_ENABLED=0 go build -o bin/go_hsm ./cmd/go_hsm/main.go
 
 test: ## Run tests.
-	go test ./... -v
+	go test -failfast -v ./...
 
 clean: ## Clean built binaries and plugins.
 	rm -rf bin $(WASM_OUT_DIR)
