@@ -7,13 +7,13 @@ import (
 )
 
 func TestBufferPool_GetPut(t *testing.T) {
-	// Create a pool with initial size of 10 bytes
-	pool := NewBufferPool(10)
+	// Create a pool with predefined size buckets
+	pool := NewBufferPool()
 
-	// Get a buffer of the default size
-	buf1 := pool.Get(10)
-	if len(buf1) != 10 {
-		t.Errorf("Expected buffer length 10, got %d", len(buf1))
+	// Get a buffer of 64 bytes (should match a bucket)
+	buf1 := pool.Get(64)
+	if len(buf1) != 64 {
+		t.Errorf("Expected buffer length 64, got %d", len(buf1))
 	}
 
 	// Write some data to the buffer
@@ -25,7 +25,7 @@ func TestBufferPool_GetPut(t *testing.T) {
 	pool.Put(buf1)
 
 	// Get another buffer - should be the same one, but zeros
-	buf2 := pool.Get(10)
+	buf2 := pool.Get(64)
 
 	// Verify the buffer was cleared
 	for i, b := range buf2 {
@@ -39,31 +39,50 @@ func TestBufferPool_GetPut(t *testing.T) {
 }
 
 func TestBufferPool_DifferentSizes(t *testing.T) {
-	// Create a pool with initial size of 10 bytes
-	pool := NewBufferPool(10)
+	// Create a pool with predefined size buckets
+	pool := NewBufferPool()
 
-	// Get a buffer larger than the initial size
-	buf1 := pool.Get(20)
-	if len(buf1) != 20 {
-		t.Errorf("Expected buffer length 20, got %d", len(buf1))
+	// Get a buffer for specific size
+	buf1 := pool.Get(200)
+	if len(buf1) != 200 {
+		t.Errorf("Expected buffer length 200, got %d", len(buf1))
+	}
+	// This should use the 256-byte bucket
+	if cap(buf1) < 200 {
+		t.Errorf("Expected buffer capacity >= 200, got %d", cap(buf1))
 	}
 
-	// Get a buffer smaller than the initial size
-	buf2 := pool.Get(5)
-	if len(buf2) != 5 {
-		t.Errorf("Expected buffer length 5, got %d", len(buf2))
+	// Get a buffer smaller than the smallest bucket
+	buf2 := pool.Get(30)
+	if len(buf2) != 30 {
+		t.Errorf("Expected buffer length 30, got %d", len(buf2))
+	}
+	// This should use the 64-byte bucket
+	if cap(buf2) < 30 {
+		t.Errorf("Expected buffer capacity >= 30, got %d", cap(buf2))
 	}
 
-	// Get a buffer of zero size (should use minimum size)
+	// Get a buffer of zero size
 	buf3 := pool.Get(0)
 	if len(buf3) != 0 {
 		t.Errorf("Expected buffer length 0, got %d", len(buf3))
+	}
+
+	// Get a buffer larger than the largest bucket
+	buf4 := pool.Get(8192)
+	if len(buf4) != 8192 {
+		t.Errorf("Expected buffer length 8192, got %d", len(buf4))
+	}
+	// This should allocate a new buffer rather than using a bucket
+	if cap(buf4) != 8192 {
+		t.Errorf("Expected buffer capacity == 8192, got %d", cap(buf4))
 	}
 
 	// Return all buffers
 	pool.Put(buf1)
 	pool.Put(buf2)
 	pool.Put(buf3)
+	pool.Put(buf4)
 }
 
 // Benchmark to show how BufferPool helps reduce garbage collection overhead
@@ -128,8 +147,8 @@ func (op *HSMOperation) ExecuteWithoutPool() []byte {
 }
 
 func BenchmarkHSMOperations_WithPool(b *testing.B) {
-	// Create a pool with initial buffer size
-	pool := NewBufferPool(512)
+	// Create a pool with predefined buffer sizes
+	pool := NewBufferPool()
 
 	// Define a mix of operations with different buffer sizes
 	operations := []HSMOperation{
@@ -194,8 +213,8 @@ func BenchmarkConcurrentHSMOperations(b *testing.B) {
 	// Run with different worker counts to simulate varying levels of concurrency
 	for _, workers := range []int{1, 4, 8, 16} {
 		b.Run(fmt.Sprintf("WithPool_%dWorkers", workers), func(b *testing.B) {
-			// Create a pool with initial buffer size
-			pool := NewBufferPool(512)
+			// Create a pool with predefined buffer sizes
+			pool := NewBufferPool()
 
 			// Define a mix of operations with different buffer sizes
 			operations := []HSMOperation{
@@ -278,5 +297,134 @@ func BenchmarkConcurrentHSMOperations(b *testing.B) {
 			close(workCh)
 			wg.Wait()
 		})
+	}
+}
+
+// Buffer represents a slice of bytes with size and address metadata.
+
+// BenchmarkPoolVsNoPool compares the performance of the bucketed pool against direct allocation.
+func BenchmarkPoolVsNoPool(b *testing.B) {
+	// Define a mix of realistic buffer sizes
+	sizes := []int{
+		48,   // Small key data
+		96,   // Medium command
+		256,  // Typical HSM command
+		1000, // Larger than 512 bucket
+		1500, // Between 1024-2048 buckets
+		5000, // Larger than any bucket
+	}
+
+	b.Run("WithPool", func(b *testing.B) {
+		pool := NewBufferPool()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			size := sizes[i%len(sizes)]
+			buf := pool.Get(size)
+			// Simulate some work
+			buf[0] = 1
+			if len(buf) > 1 {
+				buf[len(buf)-1] = 2
+			}
+			pool.Put(buf)
+		}
+	})
+
+	b.Run("NoPool", func(b *testing.B) {
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			size := sizes[i%len(sizes)]
+			buf := make([]byte, size)
+			// Simulate same work
+			buf[0] = 1
+			if len(buf) > 1 {
+				buf[len(buf)-1] = 2
+			}
+			// No put - simulate GC handling it
+		}
+	})
+}
+
+func TestBufferPool_Stats(t *testing.T) {
+	pool := NewBufferPool()
+
+	// Reset stats to ensure clean test
+	pool.ResetStats()
+
+	// Track some allocations and hits
+	buf1 := pool.Get(64)
+	buf2 := pool.Get(128)
+	buf3 := pool.Get(512)
+	buf4 := pool.Get(8192) // Oversized
+
+	// Put some back to create hits on next Get
+	pool.Put(buf1)
+	pool.Put(buf2)
+
+	// These should be hits
+	buf5 := pool.Get(64)
+	buf6 := pool.Get(128)
+	// Get stats and verify counts
+	stats := pool.Stats()
+
+	if stats["allocations"].(int64) != 6 {
+		t.Errorf("Expected 6 allocations, got %d", stats["allocations"])
+	}
+
+	if stats["hits"].(int64) != 5 {
+		t.Errorf("Expected 2 hits, got %d", stats["hits"])
+	}
+
+	if stats["misses"].(int64) != 1 {
+		t.Errorf("Expected 4 misses, got %d", stats["misses"])
+	}
+
+	if stats["oversized"].(int64) != 1 {
+		t.Errorf("Expected 1 oversized, got %d", stats["oversized"])
+	}
+
+	// Test hit rate calculation
+	expectedHitRate := (float64(5) / float64(6)) * 100
+	hitRate := stats["hit_rate_pct"].(float64)
+	if hitRate < expectedHitRate-0.1 || hitRate > expectedHitRate+0.1 {
+		t.Errorf("Expected hit rate approximately %.2f%%, got %.2f%%", expectedHitRate, hitRate)
+	}
+	// Test reset
+	pool.ResetStats()
+	stats = pool.Stats()
+
+	if stats["allocations"].(int64) != 0 || stats["hits"].(int64) != 0 ||
+		stats["misses"].(int64) != 0 {
+		t.Error("Stats were not properly reset to zero")
+	}
+
+	// Clean up
+	pool.Put(buf3)
+	pool.Put(buf4)
+	pool.Put(buf5)
+	pool.Put(buf6)
+}
+
+func TestBufferPool_GetBucketSizes(t *testing.T) {
+	pool := NewBufferPool()
+	sizes := pool.GetBucketSizes()
+
+	// Should have at least a few predefined bucket sizes
+	if len(sizes) < 3 {
+		t.Errorf("Expected at least 3 bucket sizes, got %d", len(sizes))
+	}
+
+	// Verify increasing order
+	for i := 1; i < len(sizes); i++ {
+		if sizes[i] <= sizes[i-1] {
+			t.Errorf(
+				"Bucket sizes should be in increasing order, but %d at index %d is not greater than %d at index %d",
+				sizes[i],
+				i,
+				sizes[i-1],
+				i-1,
+			)
+		}
 	}
 }
