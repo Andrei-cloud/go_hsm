@@ -24,11 +24,12 @@ import (
 // PluginManager manages WASM plugin instances and supports hot reload by recreating the runtime.
 type PluginManager struct {
 	//nolint:containedctx // Context is stored in the struct intentionally to allow reuse across plugin operations.
-	ctx     context.Context
-	runtime wazero.Runtime
-	plugins map[string]*PluginInstance
-	hsm     *hsm.HSM
-	mu      sync.RWMutex
+	ctx        context.Context
+	runtime    wazero.Runtime
+	plugins    map[string]*PluginInstance
+	hsm        *hsm.HSM
+	bufferPool *hsmplugin.BufferPool
+	mu         sync.RWMutex
 }
 
 // PluginInstance holds a WASM module and its execute and allocation functions.
@@ -42,7 +43,12 @@ type PluginInstance struct {
 
 // NewPluginManager returns a PluginManager ready to load plugins using the provided context and HSM instance.
 func NewPluginManager(ctx context.Context, hsmInstance *hsm.HSM) *PluginManager {
-	return &PluginManager{ctx: ctx, plugins: make(map[string]*PluginInstance), hsm: hsmInstance}
+	return &PluginManager{
+		ctx:        ctx,
+		plugins:    make(map[string]*PluginInstance),
+		hsm:        hsmInstance,
+		bufferPool: hsmplugin.NewBufferPool(1024),
+	}
 }
 
 // LoadAll loads all WASM plugins from the specified directory, instantiating each and storing it by command code.
@@ -360,19 +366,26 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 		return nil, fmt.Errorf("plugin execution error: %w", err)
 	}
 
-	// read response from guest memory.
-	resp, err := ReadBuffer(inst.Module, hsmplugin.Buffer(res))
+	// Use pooled buffer for response
+	respBuf, err := ReadBufferToPool(inst.Module, hsmplugin.Buffer(res), pm.bufferPool)
 	if err != nil {
-		return nil, fmt.Errorf("%w", err)
+		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+
+	// Copy to a new buffer that will outlive this function
+	result := make([]byte, len(respBuf))
+	copy(result, respBuf)
+
+	// Return pooled buffer
+	pm.bufferPool.Put(respBuf)
 
 	log.Debug().
 		Str("event", "plugin_response").
 		Str("command", cmd).
-		Str("response_hex", hex.EncodeToString(resp)).
+		Str("response_hex", hex.EncodeToString(result)).
 		Msg("plugin execution response")
 
-	return resp, nil
+	return result, nil
 }
 
 // GetDescription returns the description of the given command or the command code if not found.
@@ -399,4 +412,15 @@ func (pm *PluginManager) HSM() *hsm.HSM {
 // Close closes the underlying WASM runtime and releases resources.
 func (pm *PluginManager) Close() error {
 	return pm.runtime.Close(pm.ctx)
+}
+
+// CleanupPooledBuffers creates a new buffer pool, discarding the old one.
+// This can be called periodically to ensure memory is released if the
+// pool has accumulated many large buffers.
+func (pm *PluginManager) CleanupPooledBuffers() {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Create a new buffer pool with the same initial size
+	pm.bufferPool = hsmplugin.NewBufferPool(1024)
 }

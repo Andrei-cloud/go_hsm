@@ -1,6 +1,14 @@
 # go_hsm
 
-A Go-based Hardware Security Module (HSM) implementation compatible with Thales/Racal protocols, featuring WASM-based plugin architecture for command extensibility ### Quick Start
+A Go-based Hardware Security Module (HSM) implementation compatible with Thales/Racal protocols, featuring WASM-based plugin architecture for command extensibility
+
+## Features
+
+- Memory-efficient buffer pooling for optimal performance in high-throughput environments
+- WASM-based plugin architecture for extensible command implementation
+- Compatible with Thales/Racal HSM protocols
+
+### Quick Start
 
 1. Clone and build:
 ```bash
