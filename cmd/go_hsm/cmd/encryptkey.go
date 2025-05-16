@@ -31,13 +31,12 @@ its Key Check Value (KCV) and key type description.`,
 			return fmt.Errorf("invalid key format: %w", err)
 		}
 
-		// Default to scheme X for single length if not specified
+		// Default to scheme X for single length if not specified.
 		if scheme == "" {
-			if len(clearKey) == 8 {
-				scheme = "X"
-			} else {
+			if len(clearKey) != 8 {
 				return errors.New("scheme must be specified for double/triple length keys")
 			}
+			scheme = "X"
 		}
 
 		// Validate scheme based on key length
