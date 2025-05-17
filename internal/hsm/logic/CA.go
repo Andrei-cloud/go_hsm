@@ -46,8 +46,6 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		logDebug("CA: srcClear parity error")
 		return nil, errorcodes.Err10
 	}
-	// clone srcClear to prevent buffer reuse from overwriting it on next decryptUnderLMK call.
-	srcClear = append([]byte(nil), srcClear...)
 
 	// Parse optional destination flag
 	keyType := "001"
