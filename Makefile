@@ -29,25 +29,56 @@ gen: plugin-gen ## Generate plugin code
 		fi; \
 	done
 
-plugins: gen ## Build WASM plugins
+plugins: ## Build WASM plugins
 	@echo "Building WASM plugins with TinyGo..."
-	@rm -f $(WASM_OUT_DIR)/*.wasm
-	@for d in commands/*; do \
-		if [ -d "$$d" ]; then \
-			name=$$(basename "$$d"); \
-			echo "  - $$name.wasm"; \
-			if [ -f "./commands/$$name/main.go" ]; then \
-				if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
-					-target=wasi -scheduler=none -opt=z -no-debug \
-					"./commands/$$name/main.go"; then \
-					rm "./commands/$$name/main.go"; \
-					echo "    Cleaned up generated code"; \
-				fi; \
-			else \
-				echo "    Skipping - no main.go"; \
+	@if [ -n "$(CMD)" ]; then \
+		name=$(CMD); \
+		rm -f $(WASM_OUT_DIR)/$$name.wasm; \
+		echo "Generating plugin code for $$name..."; \
+		if [ -d ./commands/$$name ]; then \
+			desc=$$(grep -h "^func Execute$$name" ./commands/$$name/gen.go | sed -E 's/^.*\/\///'); \
+			if [ -z "$$desc" ]; then \
+				desc="HSM command $$name implementation"; \
 			fi; \
+			$(PLUGIN_GEN) \
+				-cmd $$name \
+				-logic github.com/andrei-cloud/go_hsm/internal/hsm/logic \
+				-version $(VERSION) \
+				-desc "$$desc" \
+				-author $(AUTHOR) \
+				-out ./commands/$$name; \
 		fi; \
-	done
+		echo "  - $$name.wasm"; \
+		if [ -f "./commands/$$name/main.go" ]; then \
+			if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
+				-target=wasi -scheduler=none -opt=z -no-debug \
+				"./commands/$$name/main.go"; then \
+				rm "./commands/$$name/main.go"; \
+				echo "    Cleaned up generated code"; \
+			fi; \
+		else \
+			echo "    Skipping - no main.go"; \
+		fi; \
+	else \
+		rm -f $(WASM_OUT_DIR)/*.wasm; \
+		$(MAKE) gen; \
+		for d in commands/*; do \
+			if [ -d "$$d" ]; then \
+				name=$$(basename "$$d"); \
+				echo "  - $$name.wasm"; \
+				if [ -f "./commands/$$name/main.go" ]; then \
+					if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
+						-target=wasi -scheduler=none -opt=z -no-debug \
+						"./commands/$$name/main.go"; then \
+						rm "./commands/$$name/main.go"; \
+						echo "    Cleaned up generated code"; \
+					fi; \
+				else \
+					echo "    Skipping - no main.go"; \
+				fi; \
+			fi; \
+		done; \
+	fi
 
 run: ## Start HSM server with debug logging.
 	@HUMAN=true DEBUG=true go run ./cmd/go_hsm/main.go serve \
