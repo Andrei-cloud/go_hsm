@@ -21,7 +21,7 @@ func InitLogger(debug, human bool) {
 			TimeFormat: time.RFC3339Nano,
 			NoColor:    false,
 		}
-		cw.FormatMessage = func(m interface{}) string {
+		cw.FormatMessage = func(m any) string { // replace interface{} with any
 			return fmt.Sprint(m)
 		}
 		log.Logger = base.Output(cw)

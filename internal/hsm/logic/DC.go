@@ -65,6 +65,10 @@ func ExecuteDC(input []byte) ([]byte, error) {
 
 			return nil, errorcodes.Err10
 		}
+
+		// Log clear value of TPK.
+		logDebug(fmt.Sprintf("DC: clear TPK: %s", hex.EncodeToString(decryptedTPK)))
+
 	} else if len(data) >= 16 { // Single length TPK without scheme
 		// Extract and decrypt TPK as single length
 		tpkRaw, err := hex.DecodeString(string(data[:16]))
@@ -301,8 +305,10 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err20
 	}
 	logDebug(fmt.Sprintf("DC: clear PIN length: %d", len(clearPINString)))
+	logDebug(fmt.Sprintf("DC: clear PIN: %s", clearPINString))
 	logDebug(fmt.Sprintf("DC: account number used: %s", accountNum))
 	logDebug(fmt.Sprintf("DC: PVKI used: %s", pvki))
+	logDebug(fmt.Sprintf("DC: clear PVk: %s", hex.EncodeToString(decryptedPVK)))
 
 	// Calculate PVV using clear PIN
 	calculatedPVV, err := cryptoutils.GetVisaPVV(

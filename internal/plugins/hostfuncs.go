@@ -157,7 +157,7 @@ func (h *HostFunctions) jsonParse(
 		return 0
 	}
 
-	var parsed interface{}
+	var parsed any
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		log.Error().Err(err).Msg("failed to parse JSON")
 		return 0
@@ -176,7 +176,7 @@ func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, si
 		return 0
 	}
 
-	var value interface{}
+	var value any
 	if err := json.Unmarshal(data, &value); err != nil {
 		log.Error().Err(err).Msg("failed to parse data for JSON stringify")
 		return 0

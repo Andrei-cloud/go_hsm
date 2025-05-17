@@ -27,7 +27,7 @@ func GetSupportedPinBlockFormats() map[string]string {
 }
 
 // PrintSupportedFormats prints the supported PIN block formats in a readable format.
-func PrintSupportedFormats(writers ...interface{}) {
+func PrintSupportedFormats(writers ...any) {
 	formats := GetSupportedPinBlockFormats()
 	codes := make([]string, 0, len(formats))
 	for code := range formats {
