@@ -11,6 +11,18 @@ import (
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
+// For testing: allow overriding the decrypt function.
+var decryptUnderLMKFunc = decryptUnderLMK
+
+// SetDecryptForTest replaces the LMK decryption function for testing and returns the original.
+func SetDecryptForTest(
+	f func([]byte, string, byte) ([]byte, error),
+) (orig func([]byte, string, byte) ([]byte, error)) {
+	orig = decryptUnderLMKFunc
+	decryptUnderLMKFunc = f
+	return orig
+}
+
 // ExecuteCY executes the CY command to verify a CVV.
 func ExecuteCY(input []byte) ([]byte, error) {
 	logDebug(
@@ -49,7 +61,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		}
 
 		logDebug("Decrypting U-prefixed double-length CVK using type '402' scheme 'U'...")
-		decryptedCVK, err := decryptUnderLMK(encryptedCVKBytes, "402", 'U')
+		decryptedCVK, err := decryptUnderLMKFunc(encryptedCVKBytes, "402", 'U')
 		if err != nil {
 			logDebug(fmt.Sprintf("Error decrypting U-prefixed CVK: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
@@ -91,7 +103,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 
 		// Decrypt and validate CVKA
 		logDebug("Decrypting CVKA using type '402' scheme 'X'...")
-		decryptedCVKA, err := decryptUnderLMK(encryptedCVKABytes, "402", 'X')
+		decryptedCVKA, err := decryptUnderLMKFunc(encryptedCVKABytes, "402", 'X')
 		if err != nil {
 			logDebug(fmt.Sprintf("Error decrypting CVKA: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
@@ -111,7 +123,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 
 		// Decrypt and validate CVKB
 		logDebug("Decrypting CVKB using type '402' scheme 'X'...")
-		decryptedCVKB, err := decryptUnderLMK(encryptedCVKBBytes, "402", 'X')
+		decryptedCVKB, err := decryptUnderLMKFunc(encryptedCVKBBytes, "402", 'X')
 		if err != nil {
 			logDebug(fmt.Sprintf("Error decrypting CVKB: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
