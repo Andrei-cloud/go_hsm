@@ -7,7 +7,9 @@ import (
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
+	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
+	"github.com/andrei-cloud/go_hsm/pkg/pinblock"
 )
 
 // ExecuteCA translates a PIN block encrypted under a TPK to one encrypted under a ZPK or BDK under Variant LMK.
@@ -105,9 +107,49 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	fmtDst := string(data[2:4])
 	logDebug(fmt.Sprintf("CA: fmtSrc: %s, fmtDst: %s", fmtSrc, fmtDst))
 
+	// Get the source format
+	srcFormat, err := hsm.GetPinBlockFormatFromThalesCode(fmtSrc)
+	if err != nil {
+		logDebug(fmt.Sprintf("CA: invalid source format code: %s", fmtSrc))
+		return nil, errorcodes.Err15
+	}
+
+	// Get the destination format
+	dstFormat, err := hsm.GetPinBlockFormatFromThalesCode(fmtDst)
+	if err != nil {
+		logDebug(fmt.Sprintf("CA: invalid destination format code: %s", fmtDst))
+		return nil, errorcodes.Err15
+	}
+
 	data = data[4:]
-	// Note: Format codes may differ; format conversion is allowed per spec.
-	// Additional parsing for PAN/token, KSN, etc. should be implemented here for full compliance.
+
+	// Process any additional data based on format requirements (PAN, UDK, etc.)
+	var panOrUdk string
+	switch srcFormat {
+	case pinblock.ISO0, pinblock.PLUSNETWORK, pinblock.MASTERCARDPAYNOWPAYLATER:
+		if len(data) < 12 {
+			logDebug("CA: missing PAN for PAN-based format")
+			return nil, errorcodes.Err15
+		}
+		panOrUdk = string(data[:12])
+		data = data[12:]
+	case pinblock.VISANEWPINONLY:
+		if len(data) < 16 {
+			logDebug("CA: missing UDK for VISA format 41")
+			return nil, errorcodes.Err15
+		}
+		panOrUdk = string(data[:16])
+		data = data[16:]
+	case pinblock.VISANEWOLDIN:
+		if len(data) < 20 { // Need both old PIN and UDK
+			logDebug("CA: missing old PIN/UDK for VISA format 42")
+			return nil, errorcodes.Err15
+		}
+		oldPin := string(data[:4]) // Assuming 4-digit old PIN
+		udk := string(data[4:20])
+		panOrUdk = oldPin + "|" + udk
+		data = data[20:]
+	}
 
 	// Decrypt PIN block under source TPK
 	inPin, err := hex.DecodeString(pinHex)
@@ -115,7 +157,6 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		logDebug("CA: failed to decode pinHex")
 		return nil, errorcodes.Err15
 	}
-	logDebug(fmt.Sprintf("CA: srcClear: %x", srcClear))
 	srcCipher, err := des.NewTripleDESCipher(prepareTripleDESKey(srcClear))
 	if err != nil {
 		logDebug(fmt.Sprintf("CA: tpk cipher error: %v", err))
@@ -123,18 +164,40 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	}
 	plain := make([]byte, len(inPin))
 	srcCipher.Decrypt(plain, inPin)
+	plainHex := hex.EncodeToString(plain)
 	logDebug(fmt.Sprintf("CA: decrypted PIN block: %x", plain))
 
-	logDebug(fmt.Sprintf("CA: dstClear: %x", dstClear))
-	// Encrypt under destination key
+	// Extract the clear PIN from the decrypted block
+	clearPin, err := pinblock.DecodePinBlock(plainHex, panOrUdk, srcFormat)
+	if err != nil {
+		logDebug(fmt.Sprintf("CA: failed to decode PIN block: %v", err))
+		return nil, errorcodes.Err15
+	}
+
+	// Re-encode the PIN in the destination format
+	newBlockHex, err := pinblock.EncodePinBlock(clearPin, panOrUdk, dstFormat)
+	if err != nil {
+		logDebug(fmt.Sprintf("CA: failed to encode PIN block: %v", err))
+		return nil, errorcodes.Err15
+	}
+
+	// Encrypt the new block under destination key
+	newBlockBytes, err := hex.DecodeString(newBlockHex)
+	if err != nil {
+		logDebug("CA: failed to decode new PIN block hex")
+		return nil, errorcodes.Err15
+	}
 	dstCipher, err := des.NewTripleDESCipher(prepareTripleDESKey(dstClear))
 	if err != nil {
 		logDebug(fmt.Sprintf("CA: zpk cipher error: %v", err))
 		return nil, fmt.Errorf("zpk cipher: %w", err)
 	}
-	out := make([]byte, len(plain))
-	dstCipher.Encrypt(out, plain)
+	out := make([]byte, len(newBlockBytes))
+	dstCipher.Encrypt(out, newBlockBytes)
 	logDebug(fmt.Sprintf("CA: encrypted PIN block: %x", out))
+
+	// Update PIN length from actual clear PIN length
+	pinLen = []byte(fmt.Sprintf("%02d", len(clearPin)))
 
 	// Build response: CB + 00 + pin length + PIN block + format
 	resp := []byte("CB00")
