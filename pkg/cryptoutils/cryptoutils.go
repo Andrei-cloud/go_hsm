@@ -213,31 +213,32 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 	return []byte(digits), nil
 }
 
-// GetVisaCVV generates a 3-digit CVV using DES and 3DES operations.
-func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]byte, error) {
-	rawKey, err := hex.DecodeString(string(cvkHex))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode cvkHex for GetVisaCVV: %w", err)
+// GetVisaCVV calculates the CVV for a given set of card data and a CVK.
+// panHex: Primary Account Number as a hex string.
+// expDate: Expiration date in YYMM format.
+// servCode: Service code, 3 digits.
+// cvkRaw: The raw Card Verification Key bytes (must be 24 bytes for TDES EDE).
+func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error) {
+	// Validate CVK length.
+	if len(cvkRaw) != 24 {
+		return nil, fmt.Errorf("invalid CVK length: expected 24 bytes, got %d", len(cvkRaw))
 	}
-	// Single DES on account number
-	desBlock, err := des.NewCipher(rawKey[:8])
+
+	// The key is already triple-length, so use it directly.
+	block, err := des.NewTripleDESCipher(cvkRaw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create TDES cipher: %w", err)
 	}
-	// 3DES for final block
-	des3Block, err := des.NewTripleDESCipher(rawKey)
-	if err != nil {
-		return nil, err
-	}
+
 	// Build TSP: expDate + serviceCode + nine zeros
-	block1Data := expDate + serviceCode + strings.Repeat("0", 9)
+	block1Data := expDate + servCode + strings.Repeat("0", 9)
 	// Encrypt and XOR
-	rawAcct, err := hex.DecodeString(accountNumber)
+	rawAcct, err := hex.DecodeString(panHex)
 	if err != nil {
 		return nil, err
 	}
 	d1 := make([]byte, len(rawAcct))
-	desBlock.Encrypt(d1, rawAcct)
+	block.Encrypt(d1, rawAcct)
 	block1 := Raw2B(d1)
 	xored, err := XOR(block1, []byte(block1Data))
 	if err != nil {
@@ -249,7 +250,7 @@ func GetVisaCVV(accountNumber, expDate, serviceCode string, cvkHex []byte) ([]by
 		return nil, fmt.Errorf("failed to decode XORed result for GetVisaCVV: %w", err)
 	}
 	dst := make([]byte, len(rawB))
-	NewECBEncrypter(des3Block).CryptBlocks(dst, rawB)
+	NewECBEncrypter(block).CryptBlocks(dst, rawB)
 
 	return []byte(GetDigitsFromString(Raw2Str(dst), 3)), nil
 }
@@ -359,6 +360,21 @@ func GenerateRandomKey(length int) ([]byte, error) {
 	}
 
 	return finalKey, nil
+}
+
+// ExtendDoubleToTripleKey extends a 16-byte double-length key to a 24-byte triple-length key (K1K2K1).
+// This is a common way to form a TDEA keying option 1 key (K1, K2, K3) where K3=K1 from a double-length key (K1, K2).
+func ExtendDoubleToTripleKey(doubleKey []byte) ([]byte, error) {
+	if len(doubleKey) != 16 {
+		return nil, fmt.Errorf(
+			"input key must be 16 bytes for double-to-triple extension, got %d",
+			len(doubleKey),
+		)
+	}
+	tripleKey := make([]byte, 24)
+	copy(tripleKey, doubleKey)          // Copy K1K2 to the first 16 bytes.
+	copy(tripleKey[16:], doubleKey[:8]) // Copy K1 (first 8 bytes of doubleKey) to the last 8 bytes.
+	return tripleKey, nil
 }
 
 // ExtendToDouble extends a single length key to double length by concatenating it with itself.
