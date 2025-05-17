@@ -30,10 +30,13 @@ type PluginManager struct {
 
 // PluginInstance holds a WASM module instance.
 type PluginInstance struct {
-	Module    api.Module
-	AllocFn   api.Function
-	ExecuteFn api.Function
-	mu        sync.Mutex
+	Module        api.Module
+	AllocFn       api.Function
+	ExecuteFn     api.Function
+	VersionFn     api.Function
+	DescriptionFn api.Function
+	AuthorFn      api.Function
+	mu            sync.Mutex
 }
 
 // NewPluginManager returns a PluginManager ready to load plugins.
@@ -82,7 +85,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		// Load and compile WASM module
 		wasmBytes, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
-			log.Error().
+			log.Debug().
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to read plugin file")
@@ -91,7 +94,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 
 		compiled, err := newRt.CompileModule(pm.ctx, wasmBytes)
 		if err != nil {
-			log.Error().
+			log.Debug().
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to compile plugin module")
@@ -106,33 +109,38 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		// Instantiate module
 		instance, err := newRt.InstantiateModule(pm.ctx, compiled, cfg)
 		if err != nil {
-			log.Error().
+			log.Debug().
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to instantiate plugin module")
-
 			continue
 		}
 
 		// Get required functions
 		allocFn := instance.ExportedFunction("Alloc")
 		executeFn := instance.ExportedFunction("Execute")
-		if allocFn == nil || executeFn == nil {
-			log.Error().
+		versionFn := instance.ExportedFunction("version")
+		descriptionFn := instance.ExportedFunction("description")
+		authorFn := instance.ExportedFunction("author")
+		if allocFn == nil || executeFn == nil || versionFn == nil ||
+			descriptionFn == nil || authorFn == nil {
+			log.Debug().
 				Str("file", f.Name()).
 				Msg("plugin missing required exports")
-
 			continue
 		}
 
 		// Create plugin instance
 		newPlugins[cmdCode] = &PluginInstance{
-			Module:    instance,
-			AllocFn:   allocFn,
-			ExecuteFn: executeFn,
+			Module:        instance,
+			AllocFn:       allocFn,
+			ExecuteFn:     executeFn,
+			VersionFn:     versionFn,
+			DescriptionFn: descriptionFn,
+			AuthorFn:      authorFn,
 		}
 
-		log.Info().
+		log.Debug().
 			Str("plugin", cmdCode).
 			Msg("loaded wasm plugin")
 	}

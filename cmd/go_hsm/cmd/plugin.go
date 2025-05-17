@@ -128,7 +128,7 @@ func TestExecute%s(t *testing.T) {
 
 		stubPath := filepath.Join(pluginDir, "gen.go")
 		stubContent := fmt.Sprintf(
-			`//go:generate plugingen -cmd=%s -logic=github.com/andrei-cloud/go_hsm/internal/hsm/logic -version=%s -desc="%s" -author="%s" -out=.
+			`//go:generate plugingen -cmd=%s -logic=github.com/andrei-cloud/go_hsm/internal/hsm/logic -version=%s -desc "%s" -author "%s" -out=.
 package main`,
 			name,
 			pluginVersion,
@@ -154,6 +154,7 @@ package main`,
 		}
 
 		cmd.Printf("Successfully created and built plugin %s\n", name)
+
 		return nil
 	},
 }
@@ -163,7 +164,7 @@ func init() {
 	pluginCmd.AddCommand(createCmd)
 
 	createCmd.Flags().StringVarP(&pluginDesc, "desc", "d", "", "Plugin description")
-	createCmd.Flags().StringVarP(&pluginVersion, "version", "v", "1.0.0", "Plugin version")
+	createCmd.Flags().StringVarP(&pluginVersion, "version", "v", "0.1.0", "Plugin version")
 	createCmd.Flags().StringVarP(&pluginAuthor, "author", "a", "HSM Team", "Plugin author")
 }
 
@@ -177,6 +178,7 @@ func incrementCommandCode(cmd string) string {
 	} else {
 		last++
 	}
+
 	return string(cmd[0]) + string(last)
 }
 
@@ -184,5 +186,6 @@ func runMake(target string, args ...string) error {
 	makeCmd := exec.Command("make", append([]string{target}, args...)...)
 	makeCmd.Stdout = os.Stdout
 	makeCmd.Stderr = os.Stderr
+
 	return makeCmd.Run()
 }

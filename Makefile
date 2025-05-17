@@ -1,8 +1,6 @@
 # Plugin tools and directories 
 WASM_OUT_DIR := ./plugins
-PLUGIN_GEN := ./bin/plugingen
-VERSION ?= 1.0.0
-AUTHOR ?= "HSM Plugin Generator"
+PLUGIN_GEN := plugingen
 
 .PHONY: help gen plugins run run-release build test clean cli install plugin-gen
 
@@ -16,25 +14,9 @@ bin/plugingen:
 	@mkdir -p bin
 	@go build -o bin/plugingen ./cmd/plugingen
 
-gen: plugin-gen ## Generate plugin code
-	@echo "Generating plugin code..."
-	@for d in internal/commands/plugins/*; do \
-		if [ -d $$d ]; then \
-			name=$$(basename $$d); \
-			desc=$$(grep -h "^func Execute$$name" "$$d/gen.go" | sed -E 's/^.*\/\///'); \
-			if [ -z "$$desc" ]; then \
-				desc="HSM command $$name implementation"; \
-			fi; \
-			echo "  - $$name"; \
-			$(PLUGIN_GEN) \
-				-cmd $$name \
-				-logic github.com/andrei-cloud/go_hsm/internal/hsm/logic \
-				-version $(VERSION) \
-				-desc "$$desc" \
-				-author $(AUTHOR) \
-				-out ./internal/commands/plugins/$$name; \
-		fi; \
-	done
+gen: ## Generate new plugin code
+	@echo "Generating new plugin code..."
+	@go generate ./internal/commands/plugins/...
 
 plugins: ## Build WASM plugins
 	@echo "Building WASM plugins with TinyGo..."
@@ -42,19 +24,7 @@ plugins: ## Build WASM plugins
 		name=$(CMD); \
 		rm -f $(WASM_OUT_DIR)/$$name.wasm; \
 		echo "Generating plugin code for $$name..."; \
-		if [ -d ./internal/commands/plugins/$$name ]; then \
-			desc=$$(grep -h "^func Execute$$name" "./internal/commands/plugins/$$name/gen.go" | sed -E 's/^.*\/\///'); \
-			if [ -z "$$desc" ]; then \
-				desc="HSM command $$name implementation"; \
-			fi; \
-			$(PLUGIN_GEN) \
-				-cmd $$name \
-				-logic github.com/andrei-cloud/go_hsm/internal/hsm/logic \
-				-version $(VERSION) \
-				-desc "$$desc" \
-				-author $(AUTHOR) \
-				-out ./internal/commands/plugins/$$name; \
-		fi; \
+		go generate "./internal/commands/plugins/$$name/gen.go"; \
 		echo "  - $$name.wasm"; \
 		if [ -f "./internal/commands/plugins/$$name/main.go" ]; then \
 			if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
