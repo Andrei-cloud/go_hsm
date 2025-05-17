@@ -51,6 +51,17 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("failed to load plugins: %v", err)
 		}
 
+		log.Debug().Msg("Loaded plugins metadata:")
+		for _, cmdName := range pluginManager.ListPlugins() {
+			version, description, author := pluginManager.GetPluginMetadata(cmdName)
+			log.Debug().
+				Str("command", cmdName).
+				Str("version", version).
+				Str("description", description).
+				Str("author", author).
+				Msg("plugin details")
+		}
+
 		// Initialize the server with configured host and port
 		serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 		srv, err := server.NewServer(serverAddr, pluginManager)
@@ -70,9 +81,23 @@ var serveCmd = &cobra.Command{
 				newPM := plugins.NewPluginManager(ctx, hsmInstance)
 				if err := newPM.LoadAll(cfg.Plugin.Path); err != nil {
 					log.Error().Err(err).Msg("failed to reload plugins")
-				} else {
-					srv.SetPluginManager(newPM)
-					log.Info().Msg("plugins reloaded")
+					continue
+				}
+
+				// Update server with new plugin manager
+				srv.SetPluginManager(newPM)
+				log.Info().Msg("plugins reloaded")
+
+				// Log reloaded plugin metadata in debug mode
+				log.Debug().Msg("Reloaded plugins metadata:")
+				for _, cmdName := range newPM.ListPlugins() {
+					version, description, author := newPM.GetPluginMetadata(cmdName)
+					log.Debug().
+						Str("command", cmdName).
+						Str("version", version).
+						Str("description", description).
+						Str("author", author).
+						Msg("plugin details")
 				}
 			}
 		}()

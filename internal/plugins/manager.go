@@ -89,6 +89,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to read plugin file")
+
 			continue
 		}
 
@@ -98,6 +99,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to compile plugin module")
+
 			continue
 		}
 
@@ -113,6 +115,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Err(err).
 				Str("file", f.Name()).
 				Msg("failed to instantiate plugin module")
+
 			continue
 		}
 
@@ -127,6 +130,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			log.Debug().
 				Str("file", f.Name()).
 				Msg("plugin missing required exports")
+
 			continue
 		}
 
@@ -139,10 +143,6 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			DescriptionFn: descriptionFn,
 			AuthorFn:      authorFn,
 		}
-
-		log.Debug().
-			Str("plugin", cmdCode).
-			Msg("loaded wasm plugin")
 	}
 
 	// Update runtime and plugins atomically

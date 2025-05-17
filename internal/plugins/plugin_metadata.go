@@ -21,14 +21,6 @@ func (pm *PluginManager) GetPluginMetadata(cmd string) (version, description, au
 		return "N/A", "Error: Plugin not loaded", "N/A"
 	}
 
-	log.Debug().Str("command", cmd).
-		Bool("has_version", inst.VersionFn != nil).
-		Bool("has_desc", inst.DescriptionFn != nil).
-		Bool("has_author", inst.AuthorFn != nil).
-		Msg("checking plugin functions")
-
-	// Call plugin functions to get metadata
-
 	if inst.VersionFn != nil {
 		if results, err := inst.VersionFn.Call(pm.ctx); err == nil && len(results) > 0 {
 			ptr, size := hsmplugin.UnpackResult(uint64(results[0]))
