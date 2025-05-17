@@ -67,7 +67,11 @@ func encryptUnderLMK(plainKey []byte, keyType string, schemeTag byte) ([]byte, e
 		return nil, errors.New("failed to encrypt key under LMK")
 	}
 
-	return hsmplugin.Buffer(r).ToBytes(), nil
+	// read bytes from WASM memory and make a deep copy
+	buf := hsmplugin.Buffer(r).ToBytes()
+	copyBuf := append([]byte(nil), buf...)
+
+	return copyBuf, nil
 }
 
 // decryptUnderLMK calls the host export to decrypt data under LMK.
@@ -90,7 +94,11 @@ func decryptUnderLMK(encryptedKey []byte, keyType string, schemeTag byte) ([]byt
 		return nil, errors.New("failed to decrypt key under LMK")
 	}
 
-	return hsmplugin.Buffer(r).ToBytes(), nil
+	// read bytes from WASM memory and make a deep copy
+	buf := hsmplugin.Buffer(r).ToBytes()
+	copyBuf := append([]byte(nil), buf...)
+
+	return copyBuf, nil
 }
 
 // logDebug invokes the host log_debug export.
