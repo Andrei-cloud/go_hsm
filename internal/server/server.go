@@ -10,8 +10,8 @@ import (
 	anetserver "github.com/andrei-cloud/anet/server"
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
-	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
+	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/rs/zerolog/log"
 )
 
@@ -198,8 +198,8 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	// unified processed log with duration and error status
 	duration := time.Since(start)
-	reqStr := logging.FormatData(data)
-	respStr := logging.FormatData(resp)
+	reqStr := common.FormatData(data)
+	respStr := common.FormatData(resp)
 	if execErr != nil {
 		log.Error().
 			Str("event", "request_processed").

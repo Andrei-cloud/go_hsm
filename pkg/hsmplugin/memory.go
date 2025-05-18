@@ -9,7 +9,12 @@ import (
 )
 
 // Buffer represents a pointer and length packed in a uint64 for WASM memory operations.
-// The high 32 bits hold the pointer and the low 32 bits hold the length.
+//
+// The high 32 bits hold the pointer and the low 32 bits hold the length. This encoding is used
+// because the WASM ABI (as used by go_hsm) returns a single 64-bit value from guest functions,
+// and Go code can extract the pointer and length using UnpackResult. This approach is necessary
+// for compatibility with WASM's single-value return, but may be replaced by returning two uint32s
+// in future ABIs for clarity and simplicity.
 type Buffer uint64
 
 // ToBuffer allocates memory for data in WASM linear memory and returns a Buffer referencing it.
@@ -54,7 +59,11 @@ func (b Buffer) AddressSize() (uint32, uint32) {
 //
 //nolint:gosec // allow unsafe pointer usage.
 func ReadBytes(ptr, length uint32) []byte {
-	// Directly map to WASM memory.
+	// Directly map to WASM memory. Use uintptr conversion as required by Go 1.17+.
+	if ptr == 0 || length == 0 {
+		return nil
+	}
+
 	return unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), uintptr(length))
 }
 

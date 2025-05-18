@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -19,11 +20,11 @@ type HostFunctions struct {
 }
 
 // NewHostFunctions creates a new host functions provider.
-func NewHostFunctions(runtime wazero.Runtime, hsm *hsm.HSM) *HostFunctions {
+func NewHostFunctions(runtime wazero.Runtime, hsmInstance *hsm.HSM) *HostFunctions {
 	return &HostFunctions{
 		runtime: runtime,
 		builder: runtime.NewHostModuleBuilder("env"),
-		hsm:     hsm,
+		hsm:     hsmInstance,
 	}
 }
 
@@ -76,12 +77,12 @@ func (h *HostFunctions) Register(ctx context.Context) error {
 // readMemory safely reads bytes from WASM module memory.
 func readMemory(mod api.Module, ptr, size uint32) ([]byte, error) {
 	if mod == nil {
-		return nil, fmt.Errorf("nil module")
+		return nil, errors.New("nil module")
 	}
 
 	memory := mod.Memory()
 	if memory == nil {
-		return nil, fmt.Errorf("no memory exported")
+		return nil, errors.New("no memory exported")
 	}
 
 	data, ok := memory.Read(ptr, size)
@@ -95,12 +96,12 @@ func readMemory(mod api.Module, ptr, size uint32) ([]byte, error) {
 // writeMemory safely writes bytes to WASM module memory.
 func writeMemory(mod api.Module, ptr uint32, data []byte) error {
 	if mod == nil {
-		return fmt.Errorf("nil module")
+		return errors.New("nil module")
 	}
 
 	memory := mod.Memory()
 	if memory == nil {
-		return fmt.Errorf("no memory exported")
+		return errors.New("no memory exported")
 	}
 
 	if !memory.Write(ptr, data) {

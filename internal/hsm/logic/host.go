@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 
-	"github.com/andrei-cloud/go_hsm/internal/logging"
+	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 )
@@ -24,8 +24,16 @@ func wasmDecryptUnderLMK(
 ) uint64
 
 //go:wasm-module env
+//export log_info
+func wasmLogInfo(s string)
+
+//go:wasm-module env
+//export log_error
+func wasmLogError(s string)
+
+//go:wasm-module env
 //export log_debug
-func wasmLogToHost(s string)
+func wasmLogDebug(s string)
 
 //go:wasm-module env
 //export RandomKey
@@ -101,9 +109,19 @@ func decryptUnderLMK(encryptedKey []byte, keyType string, schemeTag byte) ([]byt
 	return copyBuf, nil
 }
 
+// logInfo invokes the host log_info export.
+func logInfo(msg string) {
+	wasmLogInfo(common.FormatData([]byte(msg)))
+}
+
+// logError invokes the host log_error export.
+func logError(msg string) {
+	wasmLogError(common.FormatData([]byte(msg)))
+}
+
 // logDebug invokes the host log_debug export.
 func logDebug(msg string) {
-	wasmLogToHost(logging.FormatData([]byte(msg)))
+	wasmLogDebug(common.FormatData([]byte(msg)))
 }
 
 // getKeyLength returns the key length in bytes based on the encryption scheme tag.

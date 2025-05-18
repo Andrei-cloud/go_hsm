@@ -23,22 +23,20 @@ import (
 
 //export version
 func version() uint64 {
-    version := "{{.Version}}"
-    buf := []byte(version)
-    size := uint32(len(buf))
-    ptr := uint32(Alloc(size))
-    copy(hsmplugin.Buffer(ptr).ToBytes(), buf)
-    return uint64(hsmplugin.PackResult(ptr, size))
+    version := []byte("{{.Version}}")
+    return uint64(hsmplugin.ToBuffer(version))
 }
 
 //export description
 func description() uint64 {
-    desc := "{{.Description}}"
-    buf := []byte(desc)
-    size := uint32(len(buf))
-    ptr := uint32(Alloc(size))
-    copy(hsmplugin.Buffer(ptr).ToBytes(), buf)
-    return uint64(hsmplugin.PackResult(ptr, size))
+    desc := []byte("{{.Description}}")
+    return uint64(hsmplugin.ToBuffer(desc))
+}
+
+//export author
+func author() uint64 {
+    author := []byte("{{.Author}}")
+    return uint64(hsmplugin.ToBuffer(author))
 }
 
 //export Alloc
