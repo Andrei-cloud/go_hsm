@@ -55,7 +55,7 @@ import (
 
 // Execute%s processes the %s command payload.
 func Execute%s(input []byte) ([]byte, error) {
-	logDebug(fmt.Sprintf("%s command input length: %%d", len(input)))
+	logInfo("%s: Starting command processing.")
 
 	if len(input) < 2 {
 		return nil, errorcodes.Err15
@@ -63,7 +63,7 @@ func Execute%s(input []byte) ([]byte, error) {
 
 	// TODO: Implement command logic here
 	
-	return []byte(fmt.Sprintf("%s00")), nil
+	return []byte("%s00"), nil
 }`, name, name, name, name, incrementCommandCode(name))
 
 		testContent := fmt.Sprintf(`package logic
