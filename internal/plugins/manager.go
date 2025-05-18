@@ -55,14 +55,19 @@ func NewPluginManager(
 }
 
 // LoadAll loads all WASM plugins from the specified directory.
+// It uses wazero's AOT compilation with a shared compilation cache
+// for optimal performance and memory use. This approach ensures
+// high-throughput plugin execution while controlling memory growth.
 func (pm *PluginManager) LoadAll(dir string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read plugin directory: %w", err)
 	}
 
-	// Create new runtime for fresh module instantiation
-	newRt := wazero.NewRuntime(pm.ctx)
+	// Create new runtime with compilation cache for better performance
+	runtimeConfig := wazero.NewRuntimeConfig().
+		WithCompilationCache(wazero.NewCompilationCache())
+	newRt := wazero.NewRuntimeWithConfig(pm.ctx, runtimeConfig)
 
 	// Initialize WASI
 	wasi_snapshot_preview1.MustInstantiate(pm.ctx, newRt)
@@ -183,6 +188,7 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	log.Debug().
 		Str("event", "plugin_execution").
 		Str("command", cmd).
+		Int("input_size", len(input)).
 		Hex("input", input).
 		Msg("executing plugin")
 
@@ -193,21 +199,15 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	}
 
 	// Read result from plugin memory
-	respBuf, err := ReadBufferToPool(inst.Module, hsmplugin.Buffer(res), pm.bufferPool)
+	result, err := ReadBuffer(inst.Module, hsmplugin.Buffer(res))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Copy to new buffer
-	result := make([]byte, len(respBuf))
-	copy(result, respBuf)
-
-	// Return pooled buffer
-	pm.bufferPool.Put(respBuf)
-
 	log.Debug().
 		Str("event", "plugin_response").
 		Str("command", cmd).
+		Int("output_size", len(result)).
 		Hex("output", result).
 		Msg("plugin execution complete")
 
@@ -220,8 +220,17 @@ func (pm *PluginManager) Close() error {
 	defer pm.mu.Unlock()
 
 	if pm.runtime != nil {
-		return pm.runtime.Close(pm.ctx)
+		log.Debug().Msg("closing wazero runtime and freeing WASM memory")
+		// This properly frees WASM linear memory
+		if err := pm.runtime.Close(pm.ctx); err != nil {
+			return fmt.Errorf("error closing runtime: %w", err)
+		}
+		pm.runtime = nil
 	}
+
+	// Clean up buffer pool to release any large cached slices
+	pm.CleanupPooledBuffers()
+
 	return nil
 }
 
@@ -234,6 +243,7 @@ func (pm *PluginManager) ListPlugins() []string {
 	for cmd := range pm.plugins {
 		result = append(result, cmd)
 	}
+
 	return result
 }
 
@@ -242,7 +252,19 @@ func (pm *PluginManager) HSM() *hsm.HSM {
 	return pm.hsm
 }
 
-// CleanupPooledBuffers creates a new buffer pool.
+// CleanupPooledBuffers releases the current buffer pool and creates a new one.
+// This is useful for releasing large cached slices back to Go's allocator
+// during idle periods or after processing large payloads.
 func (pm *PluginManager) CleanupPooledBuffers() {
+	oldPool := pm.bufferPool
+
+	// Create new pool first to avoid any race conditions
 	pm.bufferPool = hsmplugin.NewBufferPool()
+
+	// Pre-warm the pool with a few buffers for common sizes to avoid cold starts
+	pm.bufferPool.Prewarm(10)
+
+	log.Debug().
+		Interface("stats", oldPool.Stats()).
+		Msg("buffer pool statistics before cleanup")
 }

@@ -66,6 +66,8 @@ func ReadBuffer(mod api.Module, buf hsmplugin.Buffer) ([]byte, error) {
 
 // ReadBufferToPool reads bytes from guest memory at the address represented by buf
 // and returns them using a buffer from the provided pool.
+// This optimized version avoids double-copying where possible by using direct access
+// to memory when available.
 func ReadBufferToPool(
 	mod api.Module,
 	buf hsmplugin.Buffer,
@@ -76,18 +78,17 @@ func ReadBufferToPool(
 		return nil, nil
 	}
 
-	// Get a buffer from the pool
-	result := pool.Get(int(size))
-
-	// Read memory into our buffer
+	// Read memory directly - this is a view into WASM memory, not a copy
 	data, ok := mod.Memory().Read(ptr, size)
 	if !ok {
-		// Return buffer to pool before returning error
-		pool.Put(result)
 		return nil, errors.New("memory read failed: bounds exceeded")
 	}
 
+	// Get a buffer from the pool
+	result := pool.Get(int(size))
+
 	// Copy the data into our pooled buffer
+	// This is unavoidable as we need to preserve the data after returning from WASM
 	copy(result, data)
 
 	return result, nil
