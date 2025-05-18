@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
@@ -19,7 +20,7 @@ import (
 
 // PluginManager manages WASM plugin instances and supports hot reload.
 type PluginManager struct {
-	ctx        context.Context
+	ctx        context.Context //nolint:containedctx // Context is used for plugin lifecycle.
 	runtime    wazero.Runtime
 	plugins    map[string]*PluginInstance
 	hsm        *hsm.HSM
@@ -140,7 +141,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		}
 
 		// Create plugin instance
-		newPlugins[cmdCode] = &PluginInstance{
+		inst := &PluginInstance{
 			Module:        instance,
 			AllocFn:       allocFn,
 			ExecuteFn:     executeFn,
@@ -148,6 +149,17 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			DescriptionFn: descriptionFn,
 			AuthorFn:      authorFn,
 		}
+		// Validate plugin metadata
+		version, description, author := pm.getPluginMetadataFromInstance(inst)
+		if version == "N/A" || description == "N/A" || author == "N/A" {
+			log.Warn().
+				Str("file", f.Name()).
+				Str("version", version).
+				Str("description", description).
+				Str("author", author).
+				Msg("plugin metadata missing or malformed")
+		}
+		newPlugins[cmdCode] = inst
 	}
 
 	// Update runtime and plugins atomically
@@ -164,6 +176,73 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	pm.mu.Unlock()
 
 	return nil
+}
+
+// GetPluginMetadata returns the metadata for a given plugin command.
+func (pm *PluginManager) GetPluginMetadata(cmd string) (string, string, string) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	inst, ok := pm.plugins[cmd]
+	if !ok {
+		return "N/A", "N/A", "N/A"
+	}
+
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+
+	version, description, author := pm.getPluginMetadataFromInstance(inst)
+
+	return version, description, author
+}
+
+// getPluginMetadataFromInstance is a helper for metadata validation at load time.
+func (pm *PluginManager) getPluginMetadataFromInstance(
+	inst *PluginInstance,
+) (string, string, string) {
+	var version, description, author string
+	ctx := pm.ctx
+	if inst.VersionFn != nil {
+		if results, err := inst.VersionFn.Call(ctx); err == nil && len(results) > 0 {
+			ptr, size := hsmplugin.UnpackResult(results[0])
+			if size > 0 {
+				if bytes, ok := inst.Module.Memory().Read(ptr, size); ok {
+					version = string(bytes)
+				}
+			}
+		}
+	}
+	if inst.DescriptionFn != nil {
+		if results, err := inst.DescriptionFn.Call(ctx); err == nil && len(results) > 0 {
+			ptr, size := hsmplugin.UnpackResult(results[0])
+			if size > 0 {
+				if bytes, ok := inst.Module.Memory().Read(ptr, size); ok {
+					description = string(bytes)
+				}
+			}
+		}
+	}
+	if inst.AuthorFn != nil {
+		if results, err := inst.AuthorFn.Call(ctx); err == nil && len(results) > 0 {
+			ptr, size := hsmplugin.UnpackResult(results[0])
+			if size > 0 {
+				if bytes, ok := inst.Module.Memory().Read(ptr, size); ok {
+					author = string(bytes)
+				}
+			}
+		}
+	}
+	if version == "" {
+		version = "N/A"
+	}
+	if description == "" {
+		description = "N/A"
+	}
+	if author == "" {
+		author = "N/A"
+	}
+
+	return version, description, author
 }
 
 // ExecuteCommand executes a command via its WASM plugin.
@@ -192,8 +271,12 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 		Hex("input", input).
 		Msg("executing plugin")
 
-	// Execute plugin
-	res, err := CallExecute(pm.ctx, inst.ExecuteFn, ptr, uint32(len(input)))
+	// Add context timeout to avoid hung plugins
+	ctx, cancel := context.WithTimeout(pm.ctx, 2*time.Second) // TODO: make timeout configurable
+	defer cancel()
+
+	// TODO: Update CallExecute and plugin ABI to use WASM multi-value returns for pointer/length
+	res, err := CallExecute(ctx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {
 		return nil, fmt.Errorf("plugin execution failed: %w", err)
 	}

@@ -56,39 +56,19 @@ func CallExecute(ctx context.Context, exec api.Function, ptr, length uint32) (ui
 
 // ReadBuffer reads bytes from guest memory at the address represented by buf and returns them as a byte slice.
 func ReadBuffer(mod api.Module, buf hsmplugin.Buffer) ([]byte, error) {
-	data, ok := mod.Memory().Read(buf.AddressSize())
-	if !ok {
-		return nil, errors.New("memory read failed: bounds exceeded")
-	}
-
-	return data, nil
-}
-
-// ReadBufferToPool reads bytes from guest memory at the address represented by buf
-// and returns them using a buffer from the provided pool.
-// This optimized version avoids double-copying where possible by using direct access
-// to memory when available.
-func ReadBufferToPool(
-	mod api.Module,
-	buf hsmplugin.Buffer,
-	pool *hsmplugin.BufferPool,
-) ([]byte, error) {
 	ptr, size := buf.AddressSize()
 	if size == 0 {
 		return nil, nil
 	}
 
-	// Read memory directly - this is a view into WASM memory, not a copy
+	// Read memory directly - this is a view into WASM memory, not a copy.
 	data, ok := mod.Memory().Read(ptr, size)
 	if !ok {
 		return nil, errors.New("memory read failed: bounds exceeded")
 	}
 
-	// Get a buffer from the pool
-	result := pool.Get(int(size))
-
-	// Copy the data into our pooled buffer
-	// This is unavoidable as we need to preserve the data after returning from WASM
+	// Make a copy to ensure the result is safe after WASM memory changes.
+	result := make([]byte, size)
 	copy(result, data)
 
 	return result, nil

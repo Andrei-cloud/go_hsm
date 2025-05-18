@@ -56,18 +56,6 @@ func NewBufferPool() *BufferPool {
 	}
 }
 
-// trackResizeHint records a mapping between requested and actual buffer sizes
-// to optimize future allocations. It uses a soft limit to prevent unbounded growth.
-func (bp *BufferPool) trackResizeHint(requested, actual int) {
-	bp.resizeHintsMu.Lock()
-	defer bp.resizeHintsMu.Unlock()
-
-	// Only track if we haven't hit the limit
-	if len(bp.resizeHints) < bp.maxResizeHints {
-		bp.resizeHints[requested] = actual
-	}
-}
-
 // getBestBucketSize returns the optimal bucket size for a requested capacity
 // using historical resize hints if available.
 func (bp *BufferPool) getBestBucketSize(size int) int {
