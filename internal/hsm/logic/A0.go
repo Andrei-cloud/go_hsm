@@ -22,9 +22,10 @@ func ExecuteA0(input []byte) ([]byte, error) {
 	keyScheme := input[4]
 	remainder := input[5:]
 
+	logInfo("A0: Starting command processing.")
 	logDebug(
 		fmt.Sprintf(
-			"A0 command input - mode: %c, key type: %s, scheme: %c",
+			"A0: Command input - mode: %c, key type: %s, scheme: %c",
 			mode,
 			keyType,
 			keyScheme,
@@ -33,6 +34,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 
 	// Validate mode (0=under LMK only, 1=under ZMK/TMK)
 	if mode != '0' && mode != '1' {
+		logError("A0: Invalid mode value")
 		return nil, errorcodes.ErrA8
 	}
 
@@ -43,32 +45,38 @@ func ExecuteA0(input []byte) ([]byte, error) {
 	}
 
 	keyLength := getKeyLength(keyScheme)
-	logDebug(fmt.Sprintf("A0 generating random key of length: %d", keyLength))
+	logInfo("A0: Generating random key.")
+	logDebug(fmt.Sprintf("A0: Random key length: %d", keyLength))
 
 	// Generate random key with proper length
 	clearKey, err := randomKey(keyLength)
 	if err != nil {
+		logError("A0: Failed to generate random key")
 		return nil, errors.Join(errors.New("generate random key"), err)
 	}
 
-	logDebug(fmt.Sprintf("A0 generated clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
+	logDebug(fmt.Sprintf("A0: Generated clear key (hex): %s", cryptoutils.Raw2Str(clearKey)))
 
 	// Calculate KCV using hex-encoded key
+	logInfo("A0: Calculating key check value.")
 	kcv, err := cryptoutils.KeyCV([]byte(cryptoutils.Raw2Str(clearKey)), 6)
 	if err != nil {
+		logError("A0: Failed to calculate KCV")
 		return nil, errors.Join(errors.New("failed calculate kcv"), err)
 	}
 
-	logDebug(fmt.Sprintf("A0 calculated KCV: %s", string(kcv)))
+	logDebug(fmt.Sprintf("A0: Calculated KCV: %s", string(kcv)))
 
 	// Encrypt key under LMK
+	logInfo("A0: Encrypting key under LMK.")
 	lmkEncryptedKey, err := encryptUnderLMK(clearKey, keyType, keyScheme)
 	if err != nil {
+		logError("A0: Failed to encrypt key under LMK")
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)
 	}
 
 	logDebug(
-		fmt.Sprintf("A0 key encrypted under LMK (hex): %s", cryptoutils.Raw2Str(lmkEncryptedKey)),
+		fmt.Sprintf("A0: Key encrypted under LMK (hex): %s", cryptoutils.Raw2Str(lmkEncryptedKey)),
 	)
 
 	// Build response
@@ -77,13 +85,15 @@ func ExecuteA0(input []byte) ([]byte, error) {
 
 	// Handle mode 1 - encrypt under ZMK/TMK if provided
 	if mode == '1' {
-		logDebug("A0 processing ZMK encryption mode")
+		logInfo("A0: Processing ZMK encryption mode.")
+		logDebug("A0: Parsing ZMK parameters.")
 
 		idx := 0
 		if idx < len(remainder) && remainder[idx] == ';' {
 			idx++
 		}
 		if idx >= len(remainder) {
+			logError("A0: Input data too short for ZMK mode")
 			return nil, errorcodes.Err15
 		}
 
