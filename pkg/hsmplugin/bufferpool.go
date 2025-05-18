@@ -116,6 +116,7 @@ func (bp *BufferPool) Get(size int) []byte {
 		bp.oversized++
 		bp.misses++
 		bp.statsMu.Unlock()
+
 		return make([]byte, size)
 	}
 
@@ -126,6 +127,7 @@ func (bp *BufferPool) Get(size int) []byte {
 		bp.statsMu.Lock()
 		bp.misses++
 		bp.statsMu.Unlock()
+
 		return make([]byte, size)
 	}
 
@@ -141,6 +143,7 @@ func (bp *BufferPool) Get(size int) []byte {
 			bp.statsMu.Unlock()
 		}
 		// Return slice with correct length but full capacity
+
 		return buf[:size:cap(buf)]
 	}
 
@@ -148,7 +151,31 @@ func (bp *BufferPool) Get(size int) []byte {
 	bp.statsMu.Lock()
 	bp.misses++
 	bp.statsMu.Unlock()
+
 	return make([]byte, size)
+}
+
+// Prewarm initializes the buffer pool with the specified number of buffers per size bucket.
+// This can help reduce allocation pressure during high-load periods.
+//
+// Example usage:
+//
+//	p.Prewarm(10) // Pre-allocate 10 buffers of each size.
+func (bp *BufferPool) Prewarm(count int) {
+	bp.mu.RLock()
+	defer bp.mu.RUnlock()
+
+	for _, size := range bp.sizeBuckets {
+		pool := bp.pools[size]
+		if pool == nil {
+			continue
+		}
+
+		for range count {
+			b := make([]byte, 0, size)
+			pool.Put(&b)
+		}
+	}
 }
 
 // Put returns a buffer to the pool for reuse.
@@ -189,34 +216,10 @@ func (bp *BufferPool) Put(buf []byte) {
 		buf = buf[:0:cap(buf)]
 		pool := bp.pools[targetSize]
 		if pool != nil {
-			pool.Put(buf)
+			pool.Put(&buf)
 		}
 	}
 	bp.mu.RUnlock()
-}
-
-// Prewarm initializes the buffer pool with the specified number of buffers per size bucket.
-// This can help reduce allocation pressure during high-load periods.
-//
-// Example usage:
-//
-//	pool.Prewarm(10) // Pre-allocate 10 buffers of each size
-func (bp *BufferPool) Prewarm(count int) {
-	bp.mu.RLock()
-	defer bp.mu.RUnlock()
-
-	for _, size := range bp.sizeBuckets {
-		pool := bp.pools[size]
-		if pool == nil {
-			continue
-		}
-
-		buffers := make([][]byte, count)
-		for i := 0; i < count; i++ {
-			buffers[i] = make([]byte, 0, size)
-			pool.Put(buffers[i])
-		}
-	}
 }
 
 // Stats returns a map of statistics about the buffer pool's performance.
@@ -226,7 +229,7 @@ func (bp *BufferPool) Prewarm(count int) {
 // - misses: Number of times a new buffer had to be allocated
 // - oversized: Number of buffers that exceeded the largest bucket size
 // - hit_rate_pct: Percentage of requests that were served from the pool
-// - bucket_stats: Map of per-bucket statistics
+// - bucket_stats: Map of per-bucket statistics.
 func (bp *BufferPool) Stats() map[string]any {
 	bp.statsMu.RLock()
 	defer bp.statsMu.RUnlock()
@@ -287,5 +290,6 @@ func (bp *BufferPool) GetBucketSizes() []int {
 	// Create a copy to avoid sharing the internal slice
 	sizes := make([]int, len(bp.sizeBuckets))
 	copy(sizes, bp.sizeBuckets)
+
 	return sizes
 }

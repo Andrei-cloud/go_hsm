@@ -7,14 +7,14 @@ import (
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	"github.com/andrei-cloud/go_hsm/internal/logging" // Added import.
+	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
 // ExecuteCW executes the CW command to generate a CVV.
 func ExecuteCW(input []byte) ([]byte, error) {
 	logDebug(
-		fmt.Sprintf("ExecuteCW input: %s", logging.FormatData(input)),
+		fmt.Sprintf("ExecuteCW input: %s", common.FormatData(input)),
 	)
 
 	var cvkHexStr string
@@ -55,7 +55,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 		}
 		clearCVK = decryptedCVK
 		logDebug(
-			fmt.Sprintf("Decrypted CVK from U-prefixed input: %s", logging.FormatData(clearCVK)),
+			fmt.Sprintf("Decrypted CVK from U-prefixed input: %s", common.FormatData(clearCVK)),
 		)
 	} else {
 		// Case 2: Not 'U' prefixed - means a PAIR OF ENCRYPTED SINGLE-LENGTH CVKs is PROVIDED.
@@ -100,7 +100,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 			logDebug("Error: Decrypted CVKA parity check failed.")
 			return nil, errorcodes.Err10 // CVK A or CVK B parity error.
 		}
-		logDebug(fmt.Sprintf("Decrypted CVKA: %s", logging.FormatData(decryptedCVKA)))
+		logDebug(fmt.Sprintf("Decrypted CVKA: %s", common.FormatData(decryptedCVKA)))
 		if len(decryptedCVKA) != 8 {
 			logDebug(fmt.Sprintf("Error: Decrypted CVKA is not single length (8 bytes). Length: %d", len(decryptedCVKA)))
 			return nil, errorcodes.Err10 // Key component length error.
@@ -119,18 +119,18 @@ func ExecuteCW(input []byte) ([]byte, error) {
 			logDebug("Error: Decrypted CVKB parity check failed.")
 			return nil, errorcodes.Err10 // CVK A or CVK B parity error.
 		}
-		logDebug(fmt.Sprintf("Decrypted CVKB: %s", logging.FormatData(decryptedCVKB)))
+		logDebug(fmt.Sprintf("Decrypted CVKB: %s", common.FormatData(decryptedCVKB)))
 		if len(decryptedCVKB) != 8 {
 			logDebug(fmt.Sprintf("Error: Decrypted CVKB is not single length (8 bytes). Length: %d", len(decryptedCVKB)))
 			return nil, errorcodes.Err10 // Key component length error.
 		}
 
 		clearCVK = append(decryptedCVKA, decryptedCVKB...)
-		logDebug(fmt.Sprintf("Combined clear CVK from pair: %s", logging.FormatData(clearCVK)))
+		logDebug(fmt.Sprintf("Combined clear CVK from pair: %s", common.FormatData(clearCVK)))
 	}
 
 	logDebug(
-		fmt.Sprintf("Clear CVK for validation: %s", logging.FormatData(clearCVK)),
+		fmt.Sprintf("Clear CVK for validation: %s", common.FormatData(clearCVK)),
 	) // Replaced hex.EncodeToString with logging.FormatData.
 	logDebug("Validating clear CVK length and parity.")
 	// Validate the clear CVK (length and parity).
@@ -152,7 +152,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 	logDebug(
 		fmt.Sprintf(
 			"Remaining data (PAN field, expiry, service code): %s",
-			logging.FormatData(
+			common.FormatData(
 				remainingData,
 			), // Replaced hex.EncodeToString with logging.FormatData.
 		),
@@ -186,7 +186,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err42 // Using Err42 for crypto operation failure.
 	}
 	logDebug(
-		fmt.Sprintf("Triple-length CVK for GetVisaCVV: %s", logging.FormatData(tripleLengthCVK)),
+		fmt.Sprintf("Triple-length CVK for GetVisaCVV: %s", common.FormatData(tripleLengthCVK)),
 	)
 
 	logDebug("Calculating CVV...")
@@ -205,7 +205,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err42
 	}
 	logDebug(
-		fmt.Sprintf("Calculated CVV bytes: %s", logging.FormatData(cvvValueBytes)),
+		fmt.Sprintf("Calculated CVV bytes: %s", common.FormatData(cvvValueBytes)),
 	) // Replaced hex.EncodeToString with logging.FormatData.
 
 	// Format response: 'CX' + '00' + CVV
@@ -214,7 +214,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 	response = append(response, []byte(errorcodes.Err00.CodeOnly())...)
 	response = append(response, cvvValueBytes...)
 	logDebug(
-		fmt.Sprintf("Final response: %s", logging.FormatData(response)),
+		fmt.Sprintf("Final response: %s", common.FormatData(response)),
 	) // Replaced hex.EncodeToString with logging.FormatData.
 
 	return response, nil

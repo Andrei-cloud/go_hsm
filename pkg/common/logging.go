@@ -1,4 +1,4 @@
-package logging
+package common
 
 import (
 	"encoding/hex"
@@ -15,13 +15,13 @@ func InitLogger(debug, human bool) {
 	zerolog.TimeFieldFormat = time.RFC3339Nano                 // always initialize base logger with timestamp.
 	base := zerolog.New(os.Stdout).With().Timestamp().Logger() // initialize base logger.
 	if human {
-		// use console writer for human-friendly output
+		// use console writer for human-friendly output.
 		cw := zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.RFC3339Nano,
 			NoColor:    false,
 		}
-		cw.FormatMessage = func(m any) string { // replace interface{} with any
+		cw.FormatMessage = func(m any) string {
 			return fmt.Sprint(m)
 		}
 		log.Logger = base.Output(cw)

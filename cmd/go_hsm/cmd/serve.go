@@ -9,9 +9,9 @@ import (
 
 	"github.com/andrei-cloud/go_hsm/internal/config"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
-	"github.com/andrei-cloud/go_hsm/internal/logging"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/internal/server"
+	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -27,7 +27,7 @@ var serveCmd = &cobra.Command{
 		cfg := config.Get()
 
 		// Initialize logger with config values
-		logging.InitLogger(cfg.Log.Level == "debug", cfg.Log.Format == "human")
+		common.InitLogger(cfg.Log.Level == "debug", cfg.Log.Format == "human")
 
 		// Initialize the HSM instance
 		hsmInstance, err := hsm.NewHSM(hsm.FirmwareVersion, false)

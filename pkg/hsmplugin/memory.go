@@ -54,7 +54,11 @@ func (b Buffer) AddressSize() (uint32, uint32) {
 //
 //nolint:gosec // allow unsafe pointer usage.
 func ReadBytes(ptr, length uint32) []byte {
-	// Directly map to WASM memory.
+	// Directly map to WASM memory. Use uintptr conversion as required by Go 1.17+.
+	if ptr == 0 || length == 0 {
+		return nil
+	}
+
 	return unsafe.Slice((*byte)(unsafe.Pointer(uintptr(ptr))), uintptr(length))
 }
 

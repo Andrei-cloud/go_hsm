@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	"github.com/andrei-cloud/go_hsm/internal/logging"
+	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
@@ -26,7 +26,7 @@ func SetDecryptForTest(
 // ExecuteCY executes the CY command to verify a CVV.
 func ExecuteCY(input []byte) ([]byte, error) {
 	logDebug(
-		fmt.Sprintf("ExecuteCY input: %s", logging.FormatData(input)),
+		fmt.Sprintf("ExecuteCY input: %s", common.FormatData(input)),
 	)
 
 	// Minimum data length: CVK(32H or U+32H) + CVV(3N) + PAN(min 1N) + ';'(1) + expDate(4N) + servCode(3N) = 44/45 bytes
@@ -71,7 +71,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		}
 		clearCVK = decryptedCVK
 		logDebug(
-			fmt.Sprintf("Decrypted CVK from U-prefixed input: %s", logging.FormatData(clearCVK)),
+			fmt.Sprintf("Decrypted CVK from U-prefixed input: %s", common.FormatData(clearCVK)),
 		)
 	} else {
 		// Case 2: Not 'U' prefixed - means a PAIR OF ENCRYPTED SINGLE-LENGTH CVKs is PROVIDED.
@@ -119,7 +119,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 			logDebug("Error: Decrypted CVKA parity check failed.")
 			return nil, errorcodes.Err10 // CVK A or CVK B parity error.
 		}
-		logDebug(fmt.Sprintf("Decrypted CVKA: %s", logging.FormatData(decryptedCVKA)))
+		logDebug(fmt.Sprintf("Decrypted CVKA: %s", common.FormatData(decryptedCVKA)))
 
 		// Decrypt and validate CVKB
 		logDebug("Decrypting CVKB using type '402' scheme 'X'...")
@@ -139,14 +139,14 @@ func ExecuteCY(input []byte) ([]byte, error) {
 			logDebug("Error: Decrypted CVKB parity check failed.")
 			return nil, errorcodes.Err10 // CVK A or CVK B parity error.
 		}
-		logDebug(fmt.Sprintf("Decrypted CVKB: %s", logging.FormatData(decryptedCVKB)))
+		logDebug(fmt.Sprintf("Decrypted CVKB: %s", common.FormatData(decryptedCVKB)))
 
 		clearCVK = append(decryptedCVKA, decryptedCVKB...)
-		logDebug(fmt.Sprintf("Combined clear CVK from pair: %s", logging.FormatData(clearCVK)))
+		logDebug(fmt.Sprintf("Combined clear CVK from pair: %s", common.FormatData(clearCVK)))
 	}
 
 	// Validate final CVK (both formats must result in valid double-length key)
-	logDebug(fmt.Sprintf("Clear CVK for validation: %s", logging.FormatData(clearCVK)))
+	logDebug(fmt.Sprintf("Clear CVK for validation: %s", common.FormatData(clearCVK)))
 	logDebug("Validating clear CVK length and parity.")
 
 	if len(clearCVK) != 16 {
@@ -166,7 +166,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 	}
 	cvvToVerify := input[cvvStartIndex : cvvStartIndex+3]
 	remainingData := input[cvvStartIndex+3:]
-	logDebug(fmt.Sprintf("CVV to verify: %s", logging.FormatData(cvvToVerify)))
+	logDebug(fmt.Sprintf("CVV to verify: %s", common.FormatData(cvvToVerify)))
 
 	// Parse remaining fields
 	panDelimiterIndex := bytes.IndexByte(remainingData, ';')
@@ -194,7 +194,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err42 // Using Err42 for crypto operation failure.
 	}
 	logDebug(
-		fmt.Sprintf("Triple-length CVK for GetVisaCVV: %s", logging.FormatData(tripleLengthCVK)),
+		fmt.Sprintf("Triple-length CVK for GetVisaCVV: %s", common.FormatData(tripleLengthCVK)),
 	)
 
 	// Calculate CVV using the utility function
@@ -209,7 +209,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		logDebug(fmt.Sprintf("Error calculating CVV: %v", err))
 		return nil, errorcodes.Err42
 	}
-	logDebug(fmt.Sprintf("Calculated CVV: %s", logging.FormatData(calculatedCVV)))
+	logDebug(fmt.Sprintf("Calculated CVV: %s", common.FormatData(calculatedCVV)))
 
 	// Compare CVVs and format response
 	var errorCode string
@@ -218,14 +218,14 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		errorCode = errorcodes.Err00.CodeOnly() // No error, CVV verified.
 	} else {
 		logDebug(fmt.Sprintf("CVV verification failed: calculated %s != provided %s",
-			logging.FormatData(calculatedCVV), logging.FormatData(cvvToVerify)))
+			common.FormatData(calculatedCVV), common.FormatData(cvvToVerify)))
 		errorCode = errorcodes.Err01.CodeOnly() // CVV failed verification.
 	}
 
 	response := make([]byte, 0, 2+len(errorCode))
 	response = append(response, []byte("CZ")...)
 	response = append(response, []byte(errorCode)...)
-	logDebug(fmt.Sprintf("Final response: %s", logging.FormatData(response)))
+	logDebug(fmt.Sprintf("Final response: %s", common.FormatData(response)))
 
 	return response, nil
 }

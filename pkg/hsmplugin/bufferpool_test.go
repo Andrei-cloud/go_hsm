@@ -6,7 +6,14 @@ import (
 	"testing"
 )
 
+// HSMOperation simulates a typical HSM command execution that processes data.
+type HSMOperation struct {
+	inputSize  int
+	outputSize int
+}
+
 func TestBufferPool_GetPut(t *testing.T) {
+	t.Parallel()
 	// Create a pool with predefined size buckets
 	pool := NewBufferPool()
 
@@ -39,6 +46,7 @@ func TestBufferPool_GetPut(t *testing.T) {
 }
 
 func TestBufferPool_DifferentSizes(t *testing.T) {
+	t.Parallel()
 	// Create a pool with predefined size buckets
 	pool := NewBufferPool()
 
@@ -83,15 +91,6 @@ func TestBufferPool_DifferentSizes(t *testing.T) {
 	pool.Put(buf2)
 	pool.Put(buf3)
 	pool.Put(buf4)
-}
-
-// Benchmark to show how BufferPool helps reduce garbage collection overhead
-// in a more realistic high-throughput HSM scenario with concurrent operations.
-
-// HSMOperation simulates a typical HSM command execution that processes data
-type HSMOperation struct {
-	inputSize  int
-	outputSize int
 }
 
 func (op *HSMOperation) ExecuteWithPool(pool *BufferPool) []byte {
@@ -208,7 +207,7 @@ func BenchmarkHSMOperations_WithoutPool(b *testing.B) {
 }
 
 // ConcurrentBenchmark runs multiple simulated HSM operations concurrently
-// to demonstrate the benefits of buffer pooling in high-throughput scenarios
+// to demonstrate the benefits of buffer pooling in high-throughput scenarios.
 func BenchmarkConcurrentHSMOperations(b *testing.B) {
 	// Run with different worker counts to simulate varying levels of concurrency
 	for _, workers := range []int{1, 4, 8, 16} {
@@ -347,6 +346,7 @@ func BenchmarkPoolVsNoPool(b *testing.B) {
 }
 
 func TestBufferPool_Stats(t *testing.T) {
+	t.Parallel()
 	pool := NewBufferPool()
 
 	// Reset stats to ensure clean test
@@ -368,35 +368,44 @@ func TestBufferPool_Stats(t *testing.T) {
 	// Get stats and verify counts
 	stats := pool.Stats()
 
-	if stats["allocations"].(int64) != 6 {
-		t.Errorf("Expected 6 allocations, got %d", stats["allocations"])
+	if v, ok := stats["allocations"].(int64); !ok || v != 6 {
+		t.Errorf("expected 6 allocations, got %v", stats["allocations"])
 	}
 
-	if stats["hits"].(int64) != 5 {
-		t.Errorf("Expected 2 hits, got %d", stats["hits"])
+	if v, ok := stats["hits"].(int64); !ok || v != 3 {
+		t.Errorf("expected 3 hits, got %v", stats["hits"])
 	}
 
-	if stats["misses"].(int64) != 1 {
-		t.Errorf("Expected 4 misses, got %d", stats["misses"])
+	if v, ok := stats["misses"].(int64); !ok || v != 3 {
+		t.Errorf("expected 3 misses, got %v", stats["misses"])
 	}
 
-	if stats["oversized"].(int64) != 1 {
-		t.Errorf("Expected 1 oversized, got %d", stats["oversized"])
+	if v, ok := stats["oversized"].(int64); !ok || v != 1 {
+		t.Errorf("expected 1 oversized, got %v", stats["oversized"])
 	}
 
 	// Test hit rate calculation
-	expectedHitRate := (float64(5) / float64(6)) * 100
-	hitRate := stats["hit_rate_pct"].(float64)
-	if hitRate < expectedHitRate-0.1 || hitRate > expectedHitRate+0.1 {
-		t.Errorf("Expected hit rate approximately %.2f%%, got %.2f%%", expectedHitRate, hitRate)
+	expectedHitRate := (float64(3) / float64(6)) * 100
+	hitRate, ok := stats["hit_rate_pct"].(float64)
+	if !ok || hitRate < expectedHitRate-0.1 || hitRate > expectedHitRate+0.1 {
+		t.Errorf(
+			"expected hit rate approximately %.2f%%, got %v",
+			expectedHitRate,
+			stats["hit_rate_pct"],
+		)
 	}
 	// Test reset
 	pool.ResetStats()
 	stats = pool.Stats()
 
-	if stats["allocations"].(int64) != 0 || stats["hits"].(int64) != 0 ||
-		stats["misses"].(int64) != 0 {
-		t.Error("Stats were not properly reset to zero")
+	if v1, ok1 := stats["allocations"].(int64); !ok1 || v1 != 0 {
+		t.Error("stats were not properly reset to zero")
+	}
+	if v2, ok2 := stats["hits"].(int64); !ok2 || v2 != 0 {
+		t.Error("stats were not properly reset to zero")
+	}
+	if v3, ok3 := stats["misses"].(int64); !ok3 || v3 != 0 {
+		t.Error("stats were not properly reset to zero")
 	}
 
 	// Clean up
@@ -407,19 +416,20 @@ func TestBufferPool_Stats(t *testing.T) {
 }
 
 func TestBufferPool_GetBucketSizes(t *testing.T) {
+	t.Parallel()
 	pool := NewBufferPool()
 	sizes := pool.GetBucketSizes()
 
 	// Should have at least a few predefined bucket sizes
 	if len(sizes) < 3 {
-		t.Errorf("Expected at least 3 bucket sizes, got %d", len(sizes))
+		t.Errorf("expected at least 3 bucket sizes, got %d", len(sizes))
 	}
 
 	// Verify increasing order
 	for i := 1; i < len(sizes); i++ {
 		if sizes[i] <= sizes[i-1] {
 			t.Errorf(
-				"Bucket sizes should be in increasing order, but %d at index %d is not greater than %d at index %d",
+				"bucket sizes should be in increasing order, but %d at index %d is not greater than %d at index %d",
 				sizes[i],
 				i,
 				sizes[i-1],
