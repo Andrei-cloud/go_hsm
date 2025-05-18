@@ -11,12 +11,11 @@ import (
 
 // ExecuteHC generates a TMK, TPK or PVK Variant LMK key, ignoring PCI compliance enforcement.
 func ExecuteHC(input []byte) ([]byte, error) {
-	logDebug("HC: starting ExecuteHC")
-	logDebug(fmt.Sprintf("HC: input length: %d", len(input)))
+	logInfo("HC: starting key generation")
 
 	// Fast fail: must have at least enough for minimal key (16 hex) + 'HC' (2)
 	if len(input) < 18 {
-		logDebug("HC: input too short for any valid key + HC")
+		logError("HC: input too short for key and command code")
 		return nil, errorcodes.Err15
 	}
 
@@ -25,108 +24,114 @@ func ExecuteHC(input []byte) ([]byte, error) {
 	var keyHexLen int
 	var encKeyHex string
 
-	logDebug(fmt.Sprintf("HC: inputKeyScheme: %c", inputKeyScheme))
+	logInfo("HC: processing input key scheme")
+	logDebug(fmt.Sprintf("HC: input key scheme: %c", inputKeyScheme))
+
 	if inputKeyScheme == 'U' || inputKeyScheme == 'T' || inputKeyScheme == 'X' {
 		keyLen = getKeyLength(inputKeyScheme)
 		keyHexLen = keyLen * 2
-		logDebug(fmt.Sprintf("HC: scheme provided, keyLen: %d, keyHexLen: %d", keyLen, keyHexLen))
+		logDebug(fmt.Sprintf("HC: key length: %d bytes (%d hex chars)", keyLen, keyHexLen))
+
 		if len(input) < 1+keyHexLen+2 {
-			logDebug("HC: not enough data for key+HC")
+			logError("HC: insufficient data for key with scheme")
 			return nil, errorcodes.Err15
 		}
 		encKeyHex = string(input[1 : 1+keyHexLen])
-		logDebug(fmt.Sprintf("HC: encKeyHex: %s", encKeyHex))
 		input = input[1+keyHexLen:]
 	} else {
-		logDebug("HC: no scheme provided, treat as paired single (PVK)")
 		// No scheme provided, treat as paired single (PVK), key is 16 hex chars
+		logInfo("HC: processing key as paired single-length components")
 		inputKeyScheme = 'X'
 		keyLen = 8
 		keyHexLen = 16
+
 		if len(input) < keyHexLen+2 {
-			logDebug("HC: not enough data for single-length key+HC")
+			logError("HC: insufficient data for paired single-length key")
 			return nil, errorcodes.Err15
 		}
 		encKeyHex = string(input[:keyHexLen])
-		logDebug(fmt.Sprintf("HC: encKeyHex: %s", encKeyHex))
 		input = input[keyHexLen:]
 	}
 
 	// Accept and skip optional fields after 'HC' (delimiter, key schemes, reserved, LMK id, etc.)
 	if len(input) > 0 && input[0] == ';' {
-		logDebug("HC: found optional delimiter ';'")
+		logInfo("HC: processing optional fields")
 		input = input[1:]
 		// Only skip up to 3 optional fields if present, but do not require them
 		for i := 0; i < 3; i++ {
 			if len(input) == 0 {
 				break
 			}
-			logDebug(fmt.Sprintf("HC: skipping optional field %d after ';'", i+1))
+			logDebug(fmt.Sprintf("HC: skipping optional field %d", i+1))
 			input = input[1:]
 		}
 	}
+
 	if len(input) > 0 && input[0] == '%' {
-		logDebug("HC: found optional delimiter '%' for LMK id")
+		logInfo("HC: processing LMK identifier")
 		if len(input) >= 3 {
 			input = input[3:]
 		} else {
-			logDebug("HC: not enough data for LMK id after '%' delimiter, but skipping as optional")
+			logDebug("HC: incomplete LMK identifier, skipping")
 			input = input[len(input):] // skip to end
 		}
 	}
 
-	logDebug(fmt.Sprintf("HC: final encKeyHex for decode: %s", encKeyHex))
+	logInfo("HC: decoding input key")
 	encKeyBytes, err := hex.DecodeString(encKeyHex)
 	if err != nil {
-		logDebug("HC: failed to decode encKeyHex")
+		logError("HC: invalid key hex format")
 		return nil, errorcodes.Err15
 	}
+	logDebug(fmt.Sprintf("HC: encoded key value: %x", encKeyBytes))
 
 	const keyType = "002"
+	logInfo("HC: decrypting key under LMK")
 	clearKey, err := decryptUnderLMK(encKeyBytes, keyType, inputKeyScheme)
 	if err != nil {
-		logDebug("HC: failed to decrypt under LMK")
+		logError("HC: key decryption failed")
 		return nil, errorcodes.Err10
 	}
-	logDebug(fmt.Sprintf("HC: clearKey: %x", clearKey))
 
+	logInfo("HC: verifying key parity")
 	if !cryptoutils.CheckKeyParity(clearKey) {
-		logDebug("HC: clearKey parity error")
+		logError("HC: key parity check failed")
 		return nil, errorcodes.Err10
 	}
 
 	genKeyLen := getKeyLength(inputKeyScheme)
-	logDebug(fmt.Sprintf("HC: generating new random key of length: %d", genKeyLen))
+	logInfo("HC: generating new random key")
 	newKey, err := randomKey(genKeyLen)
 	if err != nil {
-		logDebug("HC: failed to generate random key")
+		logError("HC: random key generation failed")
 		return nil, errorcodes.Err20
 	}
-	logDebug(fmt.Sprintf("HC: newKey: %x", newKey))
 
+	logInfo("HC: encrypting generated key under LMK")
 	lmkEncryptedKey, err := encryptUnderLMK(newKey, keyType, inputKeyScheme)
 	if err != nil {
-		logDebug("HC: failed to encrypt newKey under LMK")
+		logError("HC: key encryption under LMK failed")
 		return nil, errorcodes.Err20
 	}
-	logDebug(fmt.Sprintf("HC: lmkEncryptedKey: %x", lmkEncryptedKey))
 
+	logInfo("HC: encrypting generated key under TMK")
 	tmkEncryptedKey := make([]byte, len(newKey))
 	block := prepareTripleDESKey(clearKey)
 	cipher, err := des.NewTripleDESCipher(block)
 	if err != nil {
-		logDebug("HC: failed to create TDES cipher for TMK encryption")
+		logError("HC: failed to create TMK cipher")
 		return nil, errorcodes.Err20
 	}
+
 	for i := 0; i < len(newKey); i += 8 {
 		cipher.Encrypt(tmkEncryptedKey[i:i+8], newKey[i:i+8])
 	}
-	logDebug(fmt.Sprintf("HC: tmkEncryptedKey: %x", tmkEncryptedKey))
 
+	logInfo("HC: formatting response")
 	resp := []byte("HD00")
 	resp = appendEncryptedKeyToResponse(resp, inputKeyScheme, tmkEncryptedKey)
 	resp = appendEncryptedKeyToResponse(resp, inputKeyScheme, lmkEncryptedKey)
 
-	logDebug(fmt.Sprintf("HC: response: %x", resp))
+	logDebug(fmt.Sprintf("HC: response value: %x", resp))
 	return resp, nil
 }
