@@ -1,4 +1,3 @@
-// nolint:all // wasm specific
 package logic
 
 import (
@@ -110,17 +109,15 @@ func getKeyLength(scheme byte) int {
 // prepareTripleDESKey extends double length key to triple length if needed.
 func prepareTripleDESKey(key []byte) []byte {
 	if len(key) == 16 {
-		fullKey := make([]byte, 24)
-		copy(fullKey, key)
-		copy(fullKey[16:], key[:8])
-		return fullKey
+		return append(key, key[:8]...)
 	}
+
 	return key
 }
 
 // encryptKeyUnderZMK encrypts clearKey using the provided ZMK.
 // It assumes the ZMK key type is "000" and derives the scheme ('U' or 'T') from the length of zmkBytes.
-func encryptKeyUnderZMK(clearKey []byte, zmkBytes []byte) ([]byte, error) {
+func encryptKeyUnderZMK(clearKey, zmkBytes []byte) ([]byte, error) {
 	const zmkKeyType = "000" // Standard Thales key type for ZMK.
 	var zmkSchemeTag byte
 
