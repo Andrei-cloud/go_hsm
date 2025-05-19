@@ -41,6 +41,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 	// Validate key scheme
 	if keyScheme != 'Z' && keyScheme != 'U' && keyScheme != 'T' && keyScheme != 'X' &&
 		keyScheme != 'Y' {
+		logError("A0: Invalid key scheme")
 		return nil, errorcodes.Err26
 	}
 
@@ -129,7 +130,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 		)
 
 		// append encrypted under ZMK using its scheme tag
-		resp = appendEncryptedKeyToResponse(resp, zmkScheme, zmkEncryptedKey)
+		resp = appendEncryptedKeyToResponse(resp, keyScheme, zmkEncryptedKey)
 	}
 
 	// Append KCV

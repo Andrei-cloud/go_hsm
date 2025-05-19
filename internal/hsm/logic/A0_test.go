@@ -10,6 +10,11 @@ import (
 func TestExecuteA0(t *testing.T) {
 	t.Parallel()
 
+	// Initialize the test LMK provider.
+	if err := SetupTestLMKProvider(); err != nil {
+		t.Fatalf("Failed to setup test LMK provider: %v", err)
+	}
+
 	testCases := []struct {
 		name             string
 		input            []byte
@@ -29,7 +34,7 @@ func TestExecuteA0(t *testing.T) {
 				'0',
 				'0',
 				'0',
-				'X',
+				'K',
 			}, // mode='0', keyType='000', keyScheme='X'.
 			expectedResponse: nil,
 			expectedError:    errorcodes.Err26,
