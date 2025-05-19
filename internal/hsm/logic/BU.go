@@ -70,7 +70,7 @@ func ExecuteBU(input []byte) ([]byte, error) {
 
 	// Decrypt key under LMK
 	logInfo("BU: Decrypting key under LMK.")
-	clearKey, err := decryptUnderLMK(encryptedKey, keyType, keyScheme)
+	clearKey, err := LMKProviderInstance.DecryptUnderLMK(encryptedKey, keyType, keyScheme)
 	if err != nil {
 		logError("BU: Failed to decrypt key under LMK")
 		return nil, errors.Join(errors.New("failed to decrypt key under lmk"), err)

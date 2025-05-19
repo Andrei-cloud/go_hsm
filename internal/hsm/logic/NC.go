@@ -28,7 +28,7 @@ func ExecuteNC(input []byte) ([]byte, error) {
 	logInfo("NC: Calculating KCV value.")
 	// When LMK is available:
 	// zeros := make([]byte, 16)
-	// kcvRaw, err := encryptUnderLMK(zeros)
+	// kcvRaw, err := LMKProviderInstance.EncryptUnderLMK(zeros)
 	// if err != nil {
 	//   logError("NC: Failed to calculate KCV")
 	//   return nil, errorcodes.Err68

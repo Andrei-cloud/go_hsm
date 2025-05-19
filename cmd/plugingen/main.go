@@ -46,6 +46,7 @@ func Alloc(size uint32) hsmplugin.Buffer {
 
 //export Execute
 func Execute(buf hsmplugin.Buffer) uint64 {
+	logic.SetDefaultLMKProvider()
     in := hsmplugin.Buffer(buf).ToBytes()
 
     out, err := logic.Execute{{.Cmd}}(in)

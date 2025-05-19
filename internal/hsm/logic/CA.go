@@ -43,7 +43,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	}
 
 	logInfo("CA: Decrypting source key under LMK.")
-	srcClear, err := decryptUnderLMK(srcBytes, "002", srcScheme)
+	srcClear, err := LMKProviderInstance.DecryptUnderLMK(srcBytes, "002", srcScheme)
 	if err != nil {
 		logError("CA: Failed to decrypt source key under LMK")
 		return nil, errorcodes.Err68
@@ -92,7 +92,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	}
 
 	logInfo("CA: Decrypting destination key under LMK.")
-	dstClear, err := decryptUnderLMK(dstBytes, keyType, dstScheme)
+	dstClear, err := LMKProviderInstance.DecryptUnderLMK(dstBytes, keyType, dstScheme)
 	if err != nil {
 		logError("CA: Failed to decrypt destination key under LMK")
 		return nil, errorcodes.Err68

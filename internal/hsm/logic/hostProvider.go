@@ -133,7 +133,7 @@ func encryptKeyUnderZMK(clearKey []byte, zmkBytes []byte) ([]byte, error) {
 		return nil, errors.New("invalid zmk length, must be 16 or 24 bytes")
 	}
 
-	rawZmk, err := decryptUnderLMK(zmkBytes, zmkKeyType, zmkSchemeTag)
+	rawZmk, err := LMKProviderInstance.DecryptUnderLMK(zmkBytes, zmkKeyType, zmkSchemeTag)
 	if err != nil {
 		return nil, errors.Join(errors.New("decrypt zmk"), err)
 	}

@@ -49,7 +49,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 	logDebug(fmt.Sprintf("A0: Random key length: %d", keyLength))
 
 	// Generate random key with proper length
-	clearKey, err := randomKey(keyLength)
+	clearKey, err := LMKProviderInstance.RandomKey(keyLength)
 	if err != nil {
 		logError("A0: Failed to generate random key")
 		return nil, errors.Join(errors.New("generate random key"), err)
@@ -69,7 +69,7 @@ func ExecuteA0(input []byte) ([]byte, error) {
 
 	// Encrypt key under LMK
 	logInfo("A0: Encrypting key under LMK.")
-	lmkEncryptedKey, err := encryptUnderLMK(clearKey, keyType, keyScheme)
+	lmkEncryptedKey, err := LMKProviderInstance.EncryptUnderLMK(clearKey, keyType, keyScheme)
 	if err != nil {
 		logError("A0: Failed to encrypt key under LMK")
 		return nil, errors.Join(errors.New("encrypt under lmk"), err)

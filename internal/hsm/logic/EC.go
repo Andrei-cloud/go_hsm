@@ -50,7 +50,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err15
 	}
 
-	decryptedZpk, err := decryptUnderLMK(encryptedZpk, "001", zpkScheme)
+	decryptedZpk, err := LMKProviderInstance.DecryptUnderLMK(encryptedZpk, "001", zpkScheme)
 	if err != nil {
 		logError("EC: ZPK decryption failed")
 		return nil, errorcodes.Err68
@@ -88,7 +88,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		}
 
 		logInfo("EC: decrypting PVK under LMK")
-		decryptedPvk, err = decryptUnderLMK(encryptedPvk, "002", pvkScheme)
+		decryptedPvk, err = LMKProviderInstance.DecryptUnderLMK(encryptedPvk, "002", pvkScheme)
 		if err != nil {
 			logError("EC: PVK decryption failed")
 			return nil, errorcodes.Err68
@@ -113,7 +113,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 			logError("EC: invalid first PVK component hex format")
 			return nil, errorcodes.Err15
 		}
-		decryptedPvkA, err := decryptUnderLMK(encPvkBytesA, "002", 'X')
+		decryptedPvkA, err := LMKProviderInstance.DecryptUnderLMK(encPvkBytesA, "002", 'X')
 		if err != nil {
 			logError("EC: first PVK component decryption failed")
 			return nil, errorcodes.Err68
@@ -126,7 +126,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 			logError("EC: invalid second PVK component hex format")
 			return nil, errorcodes.Err15
 		}
-		decryptedPvkB, err := decryptUnderLMK(encPvkBytesB, "002", 'X')
+		decryptedPvkB, err := LMKProviderInstance.DecryptUnderLMK(encPvkBytesB, "002", 'X')
 		if err != nil {
 			logError("EC: second PVK component decryption failed")
 			return nil, errorcodes.Err68

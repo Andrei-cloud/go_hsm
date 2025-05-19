@@ -93,7 +93,7 @@ func ExecuteFA(input []byte) ([]byte, error) {
 
 	// Decrypt ZMK under LMK (pair 04-05, key type 000)
 	logInfo("FA: decrypting ZMK under LMK")
-	clearZmk, err := decryptUnderLMK(zmkBytes, "000", zmkScheme)
+	clearZmk, err := LMKProviderInstance.DecryptUnderLMK(zmkBytes, "000", zmkScheme)
 	if err != nil {
 		logError("FA: ZMK decryption failed")
 		return nil, errorcodes.Err68
@@ -144,7 +144,7 @@ func ExecuteFA(input []byte) ([]byte, error) {
 	// Encrypt ZPK under LMK (pair 06-07, key type 001)
 	logInfo("FA: encrypting ZPK under LMK")
 	lmkScheme := zpkScheme // Use same scheme as input unless overridden
-	lmkEncryptedZpk, err := encryptUnderLMK(clearZpk, "001", lmkScheme)
+	lmkEncryptedZpk, err := LMKProviderInstance.EncryptUnderLMK(clearZpk, "001", lmkScheme)
 	if err != nil {
 		logError("FA: ZPK encryption under LMK failed")
 		return nil, errorcodes.Err68

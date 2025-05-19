@@ -86,7 +86,7 @@ func ExecuteHC(input []byte) ([]byte, error) {
 
 	const keyType = "002"
 	logInfo("HC: decrypting key under LMK")
-	clearKey, err := decryptUnderLMK(encKeyBytes, keyType, inputKeyScheme)
+	clearKey, err := LMKProviderInstance.DecryptUnderLMK(encKeyBytes, keyType, inputKeyScheme)
 	if err != nil {
 		logError("HC: key decryption failed")
 		return nil, errorcodes.Err10
@@ -100,14 +100,14 @@ func ExecuteHC(input []byte) ([]byte, error) {
 
 	genKeyLen := getKeyLength(inputKeyScheme)
 	logInfo("HC: generating new random key")
-	newKey, err := randomKey(genKeyLen)
+	newKey, err := LMKProviderInstance.RandomKey(genKeyLen)
 	if err != nil {
 		logError("HC: random key generation failed")
 		return nil, errorcodes.Err20
 	}
 
 	logInfo("HC: encrypting generated key under LMK")
-	lmkEncryptedKey, err := encryptUnderLMK(newKey, keyType, inputKeyScheme)
+	lmkEncryptedKey, err := LMKProviderInstance.EncryptUnderLMK(newKey, keyType, inputKeyScheme)
 	if err != nil {
 		logError("HC: key encryption under LMK failed")
 		return nil, errorcodes.Err20

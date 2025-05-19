@@ -49,7 +49,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		}
 
 		logInfo("CY: Decrypting CVK under LMK.")
-		decryptedCVK, err := decryptUnderLMK(encryptedCVKBytes, "402", 'U')
+		decryptedCVK, err := LMKProviderInstance.DecryptUnderLMK(encryptedCVKBytes, "402", 'U')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVK decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
@@ -90,7 +90,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 
 		logInfo("CY: Decrypting CVKA under LMK.")
 		// Key Type "402" for CVK, Scheme 'X' for single-length key.
-		decryptedCVKA, err := decryptUnderLMK(encryptedCVKABytes, "402", 'X')
+		decryptedCVKA, err := LMKProviderInstance.DecryptUnderLMK(encryptedCVKABytes, "402", 'X')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVKA decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
@@ -114,7 +114,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		}
 
 		logInfo("CY: Decrypting CVKB under LMK.")
-		decryptedCVKB, err := decryptUnderLMK(encryptedCVKBBytes, "402", 'X')
+		decryptedCVKB, err := LMKProviderInstance.DecryptUnderLMK(encryptedCVKBBytes, "402", 'X')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVKB decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
