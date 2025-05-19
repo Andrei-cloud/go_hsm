@@ -29,7 +29,9 @@ func TestExecuteCA(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			resp, err := ExecuteCA(tc.input)
 			if err != tc.expErr {
 				t.Fatalf("%s: expected error %v, got %v", tc.name, tc.expErr, err)

@@ -5,30 +5,17 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/common"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
-// For testing: allow overriding the decrypt function.
-var decryptUnderLMKFunc = decryptUnderLMK
-
-// SetDecryptForTest replaces the LMK decryption function for testing and returns the original.
-func SetDecryptForTest(
-	f func([]byte, string, byte) ([]byte, error),
-) (orig func([]byte, string, byte) ([]byte, error)) {
-	orig = decryptUnderLMKFunc
-	decryptUnderLMKFunc = f
-	return orig
-}
-
 // ExecuteCY executes the CY command to verify a CVV.
 func ExecuteCY(input []byte) ([]byte, error) {
 	logInfo("CY: Starting CVV verification.")
-	logDebug(
-		fmt.Sprintf("CY: Input data: %s", common.FormatData(input)),
-	)
+	logDebug(fmt.Sprintf("CY: Input data: %s", common.FormatData(input)))
 
 	// Minimum data length: CVK(32H or U+32H) + CVV(3N) + PAN(min 1N) + ';'(1) + expDate(4N) + servCode(3N) = 44/45 bytes
 	const minDataLength = 32 + 3 + 1 + 1 + 4 + 3
@@ -62,18 +49,17 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		}
 
 		logInfo("CY: Decrypting CVK under LMK.")
-		decryptedCVK, err := decryptUnderLMKFunc(encryptedCVKBytes, "402", 'U')
+		decryptedCVK, err := decryptUnderLMK(encryptedCVKBytes, "402", 'U')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVK decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
+
 			return nil, errorcodes.Err10
 		}
 		clearCVK = decryptedCVK
-		logDebug(
-			fmt.Sprintf("CY: Decrypted CVK value: %s", common.FormatData(clearCVK)),
-		)
+		logDebug(fmt.Sprintf("CY: Decrypted CVK value: %s", common.FormatData(clearCVK)))
 	} else {
 		// Case 2: Not 'U' prefixed - means a PAIR OF ENCRYPTED SINGLE-LENGTH CVKs is PROVIDED.
 		// Format: <16H_encrypted_CVKA><16H_encrypted_CVKB> + remaining_data...
@@ -102,89 +88,96 @@ func ExecuteCY(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err15
 		}
 
-		// Decrypt and validate CVKA
 		logInfo("CY: Decrypting CVKA under LMK.")
-		decryptedCVKA, err := decryptUnderLMKFunc(encryptedCVKABytes, "402", 'X')
+		// Key Type "402" for CVK, Scheme 'X' for single-length key.
+		decryptedCVKA, err := decryptUnderLMK(encryptedCVKABytes, "402", 'X')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVKA decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
-			return nil, errorcodes.Err10
-		}
-		if len(decryptedCVKA) != 8 {
-			logError(fmt.Sprintf("CY: CVKA incorrect length: %d bytes", len(decryptedCVKA)))
+
 			return nil, errorcodes.Err10
 		}
 
 		logInfo("CY: Verifying CVKA parity.")
 		if !cryptoutils.CheckKeyParity(decryptedCVKA) {
 			logError("CY: CVKA parity check failed")
+
 			return nil, errorcodes.Err10
 		}
 		logDebug(fmt.Sprintf("CY: CVKA decrypted value: %s", common.FormatData(decryptedCVKA)))
+		if len(decryptedCVKA) != 8 {
+			logError(fmt.Sprintf("CY: CVKA incorrect length: %d bytes", len(decryptedCVKA)))
 
-		// Decrypt and validate CVKB
+			return nil, errorcodes.Err10
+		}
+
 		logInfo("CY: Decrypting CVKB under LMK.")
-		decryptedCVKB, err := decryptUnderLMKFunc(encryptedCVKBBytes, "402", 'X')
+		decryptedCVKB, err := decryptUnderLMK(encryptedCVKBBytes, "402", 'X')
 		if err != nil {
 			logError(fmt.Sprintf("CY: CVKB decryption failed: %v", err))
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
-			return nil, errorcodes.Err10
-		}
-		if len(decryptedCVKB) != 8 {
-			logError(fmt.Sprintf("CY: CVKB incorrect length: %d bytes", len(decryptedCVKB)))
-			return nil, errorcodes.Err10
-		}
 
+			return nil, errorcodes.Err10
+		}
 		logInfo("CY: Verifying CVKB parity.")
 		if !cryptoutils.CheckKeyParity(decryptedCVKB) {
 			logError("CY: CVKB parity check failed")
+
 			return nil, errorcodes.Err10
 		}
 		logDebug(fmt.Sprintf("CY: CVKB decrypted value: %s", common.FormatData(decryptedCVKB)))
+		if len(decryptedCVKB) != 8 {
+			logError(fmt.Sprintf("CY: CVKB incorrect length: %d bytes", len(decryptedCVKB)))
+
+			return nil, errorcodes.Err10
+		}
 
 		logInfo("CY: Combining key components.")
-		clearCVK = append(decryptedCVKA, decryptedCVKB...)
+		clearCVK = slices.Concat(decryptedCVKA, decryptedCVKB)
 		logDebug(fmt.Sprintf("CY: Combined CVK value: %s", common.FormatData(clearCVK)))
 	}
 
-	// Validate final CVK (both formats must result in valid double-length key)
 	logInfo("CY: Validating final CVK.")
 	logDebug(fmt.Sprintf("CY: Final CVK value: %s", common.FormatData(clearCVK)))
 
+	// CVK for Visa CVV must be 16 bytes (double-length DES key).
 	if len(clearCVK) != 16 {
 		logError(fmt.Sprintf("CY: CVK incorrect length: %d bytes, expected 16", len(clearCVK)))
+
 		return nil, errorcodes.Err27
 	}
 
 	if !cryptoutils.CheckKeyParity(clearCVK) {
 		logError("CY: Final CVK parity check failed")
+
 		return nil, errorcodes.Err10
 	}
 	logInfo("CY: CVK validation successful.")
 
-	// Parse CVV (3 bytes)
-	logInfo("CY: Processing verification data.")
-	if len(input) < cvvStartIndex+3 {
-		logError("CY: Input data too short for CVV")
-		return nil, errorcodes.Err15
-	}
-	cvvToVerify := input[cvvStartIndex : cvvStartIndex+3]
-	remainingData := input[cvvStartIndex+3:]
-	logDebug(fmt.Sprintf("CY: CVV to verify: %s", common.FormatData(cvvToVerify)))
+	// Extract received CVV
+	cvv := string(input[cvvStartIndex : cvvStartIndex+3])
+	logDebug(fmt.Sprintf("CY: Received CVV value: %s", cvv))
 
-	// Parse remaining fields
+	// Process remaining data (account data after CVV)
+	remainingData := input[cvvStartIndex+3:]
+	logDebug(fmt.Sprintf("CY: Remaining data: %s", common.FormatData(remainingData)))
+
+	// Find PAN delimiter
 	panDelimiterIndex := bytes.IndexByte(remainingData, ';')
 	if panDelimiterIndex == -1 || panDelimiterIndex == 0 {
 		logError("CY: Invalid PAN format")
 		return nil, errorcodes.Err15
 	}
+
+	// cryptoutils.GetVisaCVV expects PAN as a hex string.
 	panHexStr := string(remainingData[:panDelimiterIndex])
 	logDebug(fmt.Sprintf("CY: PAN value: %s", panHexStr))
 
+	// Expected data after PAN (hex) + ';': 4N (expDate) + 3N (servCode) = 7 bytes.
 	if len(remainingData) < panDelimiterIndex+1+4+3 {
 		logError("CY: Missing expiry date or service code")
 		return nil, errorcodes.Err15
@@ -194,19 +187,19 @@ func ExecuteCY(input []byte) ([]byte, error) {
 	servCodeStr := string(remainingData[panDelimiterIndex+1+4 : panDelimiterIndex+1+4+3])
 	logDebug(fmt.Sprintf("CY: Expiry date: %s, Service code: %s", expDateStr, servCodeStr))
 
-	// Extend CVK to triple length for CVV calculation
-	logInfo("CY: Preparing CVK for CVV verification.")
+	logInfo("CY: Preparing CVK for CVV calculation.")
 	tripleLengthCVK, err := cryptoutils.ExtendDoubleToTripleKey(clearCVK)
 	if err != nil {
 		logError(fmt.Sprintf("CY: Failed to extend CVK: %v", err))
 		return nil, errorcodes.Err42
 	}
 	logDebug(
-		fmt.Sprintf("CY: Extended CVK value: %s", common.FormatData(tripleLengthCVK)),
+		fmt.Sprintf("Triple-length CVK for verification: %s", common.FormatData(tripleLengthCVK)),
 	)
 
-	// Calculate CVV using the utility function
-	logInfo("CY: Calculating verification CVV.")
+	logInfo("CY: Calculating CVV for verification.")
+	// Calculate CVV using the utility function.
+	// PAN is passed as a hex string, expDate and servCode as digit strings, cvk as raw bytes.
 	calculatedCVV, err := cryptoutils.GetVisaCVV(
 		panHexStr,
 		expDateStr,
@@ -214,29 +207,23 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		tripleLengthCVK,
 	)
 	if err != nil {
-		logError(fmt.Sprintf("CY: CVV calculation failed: %v", err))
+		logError(fmt.Sprintf("CY: Error calculating CVV: %v", err))
+		// An error from GetVisaCVV could be due to various reasons (e.g., internal crypto error).
+		// Map to Err42 (DES failure) or a more general crypto error.
+
 		return nil, errorcodes.Err42
 	}
-	logDebug(fmt.Sprintf("CY: Generated CVV value: %s", common.FormatData(calculatedCVV)))
 
-	// Compare CVVs and format response
-	logInfo("CY: Verifying CVV match.")
-	var errorCode string
-	if bytes.Equal(cvvToVerify, calculatedCVV) {
-		logInfo("CY: CVV verification successful.")
-		errorCode = errorcodes.Err00.CodeOnly()
-	} else {
+	logDebug(fmt.Sprintf("CY: Calculated CVV: %s, Received CVV: %s", string(calculatedCVV), cvv))
+
+	// Compare calculated CVV with received CVV
+	if string(calculatedCVV) != cvv {
 		logError("CY: CVV verification failed")
-		logDebug(fmt.Sprintf("CY: CVV mismatch - calculated: %s, provided: %s",
-			common.FormatData(calculatedCVV), common.FormatData(cvvToVerify)))
-		errorCode = errorcodes.Err01.CodeOnly()
+
+		return nil, errorcodes.Err01
 	}
 
-	logInfo("CY: Formatting response.")
-	response := make([]byte, 0, 2+len(errorCode))
-	response = append(response, []byte("CZ")...)
-	response = append(response, []byte(errorCode)...)
-	logDebug(fmt.Sprintf("CY: Final response: %s", common.FormatData(response)))
+	logInfo("CY: CVV verification successful.")
 
-	return response, nil
+	return []byte("CZ00"), nil
 }

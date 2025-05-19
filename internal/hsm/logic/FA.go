@@ -72,7 +72,7 @@ func ExecuteFA(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err15
 		}
 		zpkHex = string(data[1 : 1+zpkLen*2])
-		data = data[1+zpkLen*2:]
+		_ = data[1+zpkLen*2:]
 	} else {
 		// assume double-length ZPK without scheme
 		zpkLen = 16
@@ -81,7 +81,6 @@ func ExecuteFA(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err15
 		}
 		zpkHex = string(data[:zpkLen*2])
-		data = data[zpkLen*2:]
 	}
 
 	logInfo("FA: decoding ZPK")
@@ -170,5 +169,6 @@ func ExecuteFA(input []byte) ([]byte, error) {
 	resp = append(resp, kcv...)
 
 	logDebug(fmt.Sprintf("FA: response value: %x", resp))
+
 	return resp, nil
 }

@@ -6,6 +6,7 @@ import (
 )
 
 func TestExecuteFA_AllZeroZPK(t *testing.T) {
+	t.Parallel()
 	// U + 32 hex ZMK + U + 32 hex ZPK (all zero)
 	input := []byte(
 		"U" + "0123456789ABCDEF0123456789ABCDEF" + "U" + "00000000000000000000000000000000",
@@ -17,6 +18,7 @@ func TestExecuteFA_AllZeroZPK(t *testing.T) {
 }
 
 func TestExecuteFA_ParityAdvice(t *testing.T) {
+	t.Parallel()
 	// U + 32 hex ZMK + U + 32 hex ZPK (bad parity)
 	zmk := "0123456789ABCDEF0123456789ABCDEF"
 	zpk := "0123456789ABCDEF0123456789ABCDEE" // last byte even parity
@@ -31,6 +33,7 @@ func TestExecuteFA_ParityAdvice(t *testing.T) {
 }
 
 func TestExecuteFA_Success(t *testing.T) {
+	t.Parallel()
 	// U + 32 hex ZMK + U + 32 hex ZPK (good parity)
 	zmk := "0123456789ABCDEF0123456789ABCDEF"
 	zpk := "0123456789ABCDEF0123456789ABCDEF"

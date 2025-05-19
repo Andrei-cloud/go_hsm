@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
@@ -30,9 +31,9 @@ func ExecuteBU(input []byte) ([]byte, error) {
 		),
 	)
 
-	//ketypecode - '00' – '9E': this field indicates a 2-digit Key Type Code
-	//(identical to the regular 3-digit Key Type Code but without the
-	//middle digit) need to be converted to a 3-digit Key Type Code
+	// ketypecode - '00' – '9E': this field indicates a 2-digit Key Type Code
+	// (identical to the regular 3-digit Key Type Code but without the
+	// middle digit) need to be converted to a 3-digit Key Type Code
 	// by inserting a '0' in the middle.
 	if keyTypeCode[0] < '0' || keyTypeCode[0] > '9' ||
 		keyTypeCode[1] < '0' || keyTypeCode[1] > 'D' {
@@ -95,8 +96,7 @@ func ExecuteBU(input []byte) ([]byte, error) {
 	logDebug(fmt.Sprintf("BU: Calculated KCV: %s", string(kcv)))
 
 	// Format successful response
-	resp := []byte("BV00")
-	rest := append(resp, kcv...)
+	resp := slices.Concat([]byte("BV00"), kcv)
 
-	return rest, nil
+	return resp, nil
 }

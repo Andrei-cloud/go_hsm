@@ -4,6 +4,7 @@ import (
 	"crypto/des"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -65,8 +66,8 @@ func ExecuteDC(input []byte) ([]byte, error) {
 		}
 
 		logDebug(fmt.Sprintf("DC: decrypted TPK value: %s", hex.EncodeToString(decryptedTPK)))
-
-	} else if len(data) >= 16 { // Single length TPK without scheme
+	} else if len(data) >= 16 {
+		// Single length TPK without scheme
 		logInfo("DC: processing single-length TPK")
 		// Extract and decrypt TPK as single length
 		tpkRaw, err := hex.DecodeString(string(data[:16]))
@@ -192,7 +193,7 @@ func ExecuteDC(input []byte) ([]byte, error) {
 
 		// Combine PVK A and PVK B for final PVK (16 raw bytes)
 		logInfo("DC: combining PVK components")
-		decryptedPVK = append(decryptedPVKA, decryptedPVKB...)
+		decryptedPVK = slices.Concat(decryptedPVK, decryptedPVKB)
 
 		pvkBytesToSkip = pvkDoubleSize // Skip the two hex keys (16+16)
 	}

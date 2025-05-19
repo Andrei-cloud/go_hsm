@@ -5,6 +5,7 @@ import (
 	"crypto/des"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -147,7 +148,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		}
 		panOrUdk = string(data[:12])
 		logDebug(fmt.Sprintf("CA: Using PAN: %s", panOrUdk))
-		data = data[12:]
+		_ = data[12:]
 	case pinblock.VISANEWPINONLY:
 		if len(data) < 16 {
 			logError("CA: Missing UDK for VISA format 41")
@@ -155,7 +156,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		}
 		panOrUdk = string(data[:16])
 		logDebug(fmt.Sprintf("CA: Using UDK: %s", panOrUdk))
-		data = data[16:]
+		_ = data[16:]
 	case pinblock.VISANEWOLDIN:
 		if len(data) < 20 { // Need both old PIN and UDK
 			logError("CA: Missing old PIN/UDK for VISA format 42")
@@ -165,7 +166,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		udk := string(data[4:20])
 		panOrUdk = oldPin + "|" + udk
 		logDebug(fmt.Sprintf("CA: Using old PIN and UDK: %s", panOrUdk))
-		data = data[20:]
+		_ = data[20:]
 	}
 
 	// Decrypt PIN block under source TPK
@@ -219,13 +220,11 @@ func ExecuteCA(input []byte) ([]byte, error) {
 
 	// Update PIN length from actual clear PIN length
 	logInfo("CA: Formatting response.")
-	pinLen = []byte(fmt.Sprintf("%02d", len(clearPin)))
+	pinLen = fmt.Appendf([]byte{}, "%02d", len(clearPin))
 
 	// Build response: CB + 00 + pin length + PIN block + format
-	resp := []byte("CB00")
-	resp = append(resp, pinLen...)
-	resp = append(resp, cryptoutils.Raw2B(out)...)
-	resp = append(resp, fmtDst...)
+	resp := slices.Concat([]byte("CB00"), pinLen, cryptoutils.Raw2B(out), []byte(fmtDst))
+
 	logDebug(fmt.Sprintf("CA: Final response: %s", string(resp)))
 
 	return resp, nil

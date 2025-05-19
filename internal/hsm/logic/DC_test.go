@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	// Added for default LMK.
 )
 
 func TestExecuteDC(t *testing.T) {

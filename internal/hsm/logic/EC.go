@@ -4,6 +4,7 @@ import (
 	"crypto/des"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -132,7 +133,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 		}
 
 		// Concatenate the decrypted parts
-		decryptedPvk = append(decryptedPvkA, decryptedPvkB...)
+		decryptedPvk = slices.Concat(decryptedPvkA, decryptedPvkB)
 	}
 
 	logInfo("EC: verifying PVK components parity")
@@ -230,5 +231,6 @@ func ExecuteEC(input []byte) ([]byte, error) {
 	}
 
 	logInfo("EC: PIN verification completed successfully")
+
 	return []byte("ED" + errorcodes.Err00.CodeOnly()), nil
 }

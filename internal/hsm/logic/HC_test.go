@@ -6,6 +6,7 @@ import (
 )
 
 func TestExecuteHC_Basic(t *testing.T) {
+	t.Parallel()
 	// Example: U-prefixed double-length key, dummy values.
 	clearKey := make([]byte, 16)
 	for i := range clearKey {

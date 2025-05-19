@@ -3,7 +3,6 @@ package logic
 
 import (
 	"crypto/des"
-	"encoding/hex"
 	"errors"
 
 	"github.com/andrei-cloud/go_hsm/pkg/common"
@@ -158,23 +157,4 @@ func appendEncryptedKeyToResponse(resp []byte, keyScheme byte, encryptedKey []by
 	resp = append(resp, keyScheme)
 	keyLength := getKeyLength(keyScheme)
 	return append(resp, cryptoutils.Raw2B(encryptedKey[:keyLength])...)
-}
-
-// isPrintableASCII checks if a byte slice contains only printable ASCII characters.
-func isPrintableASCII(data []byte) bool {
-	for _, b := range data {
-		if b < 32 || b > 126 {
-			return false
-		}
-	}
-	return true
-}
-
-// formatForLogging formats a byte slice for logging - as ASCII if all characters
-// are printable, or as hexadecimal otherwise.
-func formatForLogging(data []byte) string {
-	if isPrintableASCII(data) {
-		return string(data)
-	}
-	return hex.EncodeToString(data)
 }

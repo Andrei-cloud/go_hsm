@@ -39,10 +39,9 @@ func ExecuteHC(input []byte) ([]byte, error) {
 		encKeyHex = string(input[1 : 1+keyHexLen])
 		input = input[1+keyHexLen:]
 	} else {
-		// No scheme provided, treat as paired single (PVK), key is 16 hex chars
+		// No scheme provided, treat as paired single-length components
 		logInfo("HC: processing key as paired single-length components")
 		inputKeyScheme = 'X'
-		keyLen = 8
 		keyHexLen = 16
 
 		if len(input) < keyHexLen+2 {
@@ -70,10 +69,10 @@ func ExecuteHC(input []byte) ([]byte, error) {
 	if len(input) > 0 && input[0] == '%' {
 		logInfo("HC: processing LMK identifier")
 		if len(input) >= 3 {
-			input = input[3:]
+			_ = input[3:]
 		} else {
 			logDebug("HC: incomplete LMK identifier, skipping")
-			input = input[len(input):] // skip to end
+			_ = input[len(input):] // skip to end
 		}
 	}
 
@@ -133,5 +132,6 @@ func ExecuteHC(input []byte) ([]byte, error) {
 	resp = appendEncryptedKeyToResponse(resp, inputKeyScheme, lmkEncryptedKey)
 
 	logDebug(fmt.Sprintf("HC: response value: %x", resp))
+
 	return resp, nil
 }

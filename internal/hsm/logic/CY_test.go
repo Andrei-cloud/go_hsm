@@ -5,20 +5,11 @@ import (
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
-	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestExecuteCY(t *testing.T) {
-	// Save the original decrypt function and restore it after tests
-	originalDecrypt := SetDecryptForTest(
-		func(data []byte, keyType string, scheme byte) ([]byte, error) {
-			// For testing, return a fixed valid key.
-
-			return cryptoutils.FixKeyParity([]byte("0123456789ABCDEF0123456789ABCDEF")), nil
-		},
-	)
-	defer SetDecryptForTest(originalDecrypt)
+	t.Parallel()
 
 	tests := []struct {
 		name    string
@@ -59,7 +50,9 @@ func TestExecuteCY(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			input, err := hex.DecodeString(tt.input)
 			if err != nil {
 				t.Fatalf("failed to decode test input hex: %v", err)

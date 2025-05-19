@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"slices"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/pkg/common"
@@ -52,6 +53,7 @@ func ExecuteCW(input []byte) ([]byte, error) {
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
+
 			return nil, errorcodes.Err10
 		}
 		clearCVK = decryptedCVK
@@ -95,17 +97,20 @@ func ExecuteCW(input []byte) ([]byte, error) {
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
+
 			return nil, errorcodes.Err10
 		}
 
 		logInfo("CW: Verifying CVKA parity.")
 		if !cryptoutils.CheckKeyParity(decryptedCVKA) {
 			logError("CW: CVKA parity check failed")
+
 			return nil, errorcodes.Err10
 		}
 		logDebug(fmt.Sprintf("CW: CVKA decrypted value: %s", common.FormatData(decryptedCVKA)))
 		if len(decryptedCVKA) != 8 {
 			logError(fmt.Sprintf("CW: CVKA incorrect length: %d bytes", len(decryptedCVKA)))
+
 			return nil, errorcodes.Err10
 		}
 
@@ -116,11 +121,13 @@ func ExecuteCW(input []byte) ([]byte, error) {
 			if hsmErr, ok := err.(errorcodes.HSMError); ok {
 				return nil, hsmErr
 			}
+
 			return nil, errorcodes.Err10
 		}
 		logInfo("CW: Verifying CVKB parity.")
 		if !cryptoutils.CheckKeyParity(decryptedCVKB) {
 			logError("CW: CVKB parity check failed")
+
 			return nil, errorcodes.Err10
 		}
 		logDebug(fmt.Sprintf("CW: CVKB decrypted value: %s", common.FormatData(decryptedCVKB)))
@@ -130,7 +137,8 @@ func ExecuteCW(input []byte) ([]byte, error) {
 		}
 
 		logInfo("CW: Combining key components.")
-		clearCVK = append(decryptedCVKA, decryptedCVKB...)
+		// combining CVKA and CVKB into a double-length CVK.
+		clearCVK = slices.Concat(decryptedCVKA, decryptedCVKB)
 		logDebug(fmt.Sprintf("CW: Combined CVK value: %s", common.FormatData(clearCVK)))
 	}
 
@@ -204,10 +212,8 @@ func ExecuteCW(input []byte) ([]byte, error) {
 
 	// Format response: 'CX' + '00' + CVV
 	logInfo("CW: Formatting response.")
-	response := make([]byte, 0, 2+len(errorcodes.Err00.CodeOnly())+len(cvvValueBytes))
-	response = append(response, []byte("CX")...)
-	response = append(response, []byte(errorcodes.Err00.CodeOnly())...)
-	response = append(response, cvvValueBytes...)
+
+	response := slices.Concat([]byte("CX00"), cvvValueBytes)
 	logDebug(fmt.Sprintf("CW: Final response: %s", common.FormatData(response)))
 
 	return response, nil
