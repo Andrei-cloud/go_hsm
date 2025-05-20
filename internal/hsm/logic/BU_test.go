@@ -55,6 +55,11 @@ func TestExecuteBU(t *testing.T) {
 		},
 	}
 
+	// Initialize the test LMK provider.
+	if err := SetupTestLMKProvider(); err != nil {
+		t.Fatalf("Failed to setup test LMK provider: %v", err)
+	}
+
 	// --- Run Tests. ---
 	for _, tc := range testCases {
 		tc := tc // Capture range variable.
