@@ -23,8 +23,8 @@ func ExecuteCW(input []byte) ([]byte, error) {
 	var panStartIndex int
 	var clearCVK []byte // This will hold the CVK after potential decryption.
 
-	// Minimum data length after key part: PAN_hex (min 1) + ';' (1) + expDate (4) + servCode (3) = 9 bytes.
-	const minDataLengthAfterKey = 1 + 1 + 4 + 3
+	// Minimum data length after key part: PAN_hex (13..19) + ';' (1) + expDate (4) + servCode (3) = 9 bytes.
+	const minDataLengthAfterKey = 13 + 1 + 4 + 3
 
 	if len(input) > 0 && input[0] == 'U' {
 		// Case 1: 'U' prefixed - means an ENCRYPTED DOUBLE-LENGTH CVK is provided.
@@ -164,13 +164,18 @@ func ExecuteCW(input []byte) ([]byte, error) {
 
 	panDelimiterIndex := bytes.IndexByte(remainingData, ';')
 	if panDelimiterIndex == -1 || panDelimiterIndex == 0 {
-		logError("CW: Invalid PAN format")
+		logError("CW: Invalid PAN format - missing delimiter")
 		return nil, errorcodes.Err15
 	}
 
 	// cryptoutils.GetVisaCVV expects PAN as a hex string.
 	panHexStr := string(remainingData[:panDelimiterIndex])
-	logDebug(fmt.Sprintf("CW: PAN value: %s", panHexStr))
+	panLength := len(panHexStr)
+	if panLength < 13 || panLength > 19 {
+		logError(fmt.Sprintf("CW: Invalid PAN length: %d, must be between 13 and 19", panLength))
+		return nil, errorcodes.Err15
+	}
+	logDebug(fmt.Sprintf("CW: PAN value: %s, length: %d", panHexStr, panLength))
 
 	// Expected data after PAN (hex) + ';': 4N (expDate) + 3N (servCode) = 7 bytes.
 	if len(remainingData) < panDelimiterIndex+1+4+3 {

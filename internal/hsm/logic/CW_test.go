@@ -9,6 +9,12 @@ import (
 
 func TestExecuteCW(t *testing.T) {
 	t.Parallel()
+
+	// Initialize test LMK provider
+	if err := SetupTestLMKProvider(); err != nil {
+		t.Fatalf("Failed to setup test LMK provider: %v", err)
+	}
+
 	tests := []struct {
 		name     string
 		input    string
@@ -18,13 +24,13 @@ func TestExecuteCW(t *testing.T) {
 	}{
 		{
 			name:  "Valid CVV calculation with good key",
-			input: "0123456789ABCDEF0123456789ABCDEF4111111111111111;2412123000",
-			want:  "CX00123",
+			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
+			want:  "CX00067",
 		},
 		{
 			name:  "Valid CVV calculation with variant key",
-			input: "U0123456789ABCDEF0123456789ABCDEF4111111111111111;2412123000",
-			want:  "CX00123",
+			input: "U1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
+			want:  "CX00067",
 		},
 		{
 			name:     "Invalid input length - too short for CVK",
@@ -46,39 +52,84 @@ func TestExecuteCW(t *testing.T) {
 		},
 		{
 			name:     "Invalid CVK parity",
-			input:    "000000000000000000000000000000004111111111111111;2412123000",
+			input:    "AAAAAAAAAAAAAAAA00000000000000004111111111111111;2412123000",
 			wantErr:  true,
-			wantCode: errorcodes.Err10, // Changed from Err01 to Err10.
+			wantCode: errorcodes.Err10, // Source key parity error
 		},
 		{
 			name:     "CVK not double length",
 			input:    "0123456789ABCDEF4111111111111111;2412123000",
 			wantErr:  true,
-			wantCode: errorcodes.Err27,
+			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "Missing PAN delimiter",
-			input:    "0123456789ABCDEF0123456789ABCDEF41111111111111112412123000",
+			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE41111111111111112412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "Empty PAN",
-			input:    "0123456789ABCDEF0123456789ABCDEF;2412123000",
+			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE;2412123000",
+			wantErr:  true,
+			wantCode: errorcodes.Err15,
+		},
+		{
+			name:     "PAN too short (12 digits)",
+			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE123456789012;2412123000",
+			wantErr:  true,
+			wantCode: errorcodes.Err15,
+		},
+		{
+			name:     "PAN too long (20 digits)",
+			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE12345678901234567890;2412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "Not enough data for expDate and servCode",
-			input:    "0123456789ABCDEF0123456789ABCDEF4111111111111111;241212",
+			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;241212",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
-			name:     "GetVisaCVV internal error (e.g. bad PAN hex)",
-			input:    "0123456789ABCDEF0123456789ABCDEFNOTHEX;2412123000",
+			name:     "Invalid CVKA hex format in key pair",
+			input:    "INVALIDHEX0000000123456789ABCDEF4111111111111111;2412123000",
 			wantErr:  true,
-			wantCode: errorcodes.Err42,
+			wantCode: errorcodes.Err15,
+		},
+		{
+			name:     "Invalid CVKB hex format in key pair",
+			input:    "0123456789ABCDEFINVALIDHEX00000004111111111111111;2412123000",
+			wantErr:  true,
+			wantCode: errorcodes.Err15,
+		},
+		{
+			name:     "Key pair with invalid CVKA parity",
+			input:    "0000000000000000FEDCBA987654321F4111111111111111;2412123000",
+			wantErr:  true,
+			wantCode: errorcodes.Err10,
+		},
+		{
+			name:     "Key pair with invalid CVKB parity",
+			input:    "FEDCBA98765432100000000000000004111111111111111;2412123000",
+			wantErr:  true,
+			wantCode: errorcodes.Err10,
+		},
+		{
+			name:  "Valid CVV with different PAN length",
+			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111;2412123000",
+			want:  "CX00684",
+		},
+		{
+			name:  "Valid CVV with maximum PAN length",
+			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111111;2412123000",
+			want:  "CX00067",
+		},
+		{
+			name:  "Different expiry date and service code",
+			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2501999",
+			want:  "CX00926", // Different CVV expected due to different exp date and service code
 		},
 	}
 

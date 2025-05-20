@@ -224,14 +224,25 @@ func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error)
 		return nil, fmt.Errorf("invalid CVK length: expected 24 bytes, got %d", len(cvkRaw))
 	}
 
+	// Calculate padding length to make PAN a multiple of 8 bytes (16 hex chars)
+	paddedLength := ((len(panHex) + 15) / 16) * 16
+
+	// Right-pad PAN with zeros if needed
+	if len(panHex) < paddedLength {
+		panHex = fmt.Sprintf("%-*s", paddedLength, panHex)
+		// Replace spaces from Sprintf with zeros
+		panHex = strings.ReplaceAll(panHex, " ", "0")
+	}
+
 	// The key is already triple-length, so use it directly.
 	block, err := des.NewTripleDESCipher(cvkRaw)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TDES cipher: %w", err)
 	}
 
-	// Build TSP: expDate + serviceCode + nine zeros
-	block1Data := expDate + servCode + strings.Repeat("0", 9)
+	// Build TSP: expDate + serviceCode + zeros (padded to match PAN length)
+	zeroCount := paddedLength - len(expDate) - len(servCode)
+	block1Data := expDate + servCode + strings.Repeat("0", zeroCount)
 	// Encrypt and XOR
 	rawAcct, err := hex.DecodeString(panHex)
 	if err != nil {
