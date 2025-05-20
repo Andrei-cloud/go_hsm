@@ -19,6 +19,12 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	logInfo("CA: Starting PIN block translation.")
 	logDebug(fmt.Sprintf("CA: Input length: %d, hex: %x", len(input), input))
 
+	// Validate minimum input length: mode(1) + keytype(3) + scheme(0|1) + key(16|32|48) + scheme(0|1) + key(16|32|48) + pin length(2) + pin block(16) + format(2)
+	if len(data) < 1+3+16+16+2+16+2 {
+		logError("CA: Insufficient data length")
+		return nil, errorcodes.Err15
+	}
+
 	// Parse source TPK
 	logInfo("CA: Processing source TPK.")
 	srcScheme := data[0]
