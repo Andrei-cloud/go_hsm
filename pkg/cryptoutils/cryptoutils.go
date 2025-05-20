@@ -217,53 +217,80 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 // panHex: Primary Account Number as a hex string.
 // expDate: Expiration date in YYMM format.
 // servCode: Service code, 3 digits.
-// cvkRaw: The raw Card Verification Key bytes (must be 24 bytes for TDES EDE).
+// cvkRaw: The raw Card Verification Key bytes (must be 16 bytes for double-length key).
 func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error) {
-	// Validate CVK length.
-	if len(cvkRaw) != 24 {
-		return nil, fmt.Errorf("invalid CVK length: expected 24 bytes, got %d", len(cvkRaw))
+	// Step 1: Validate double-length (16-byte) key
+	if len(cvkRaw) != 16 {
+		return nil, fmt.Errorf(
+			"invalid CVK length: expected 16 bytes (double-length), got %d",
+			len(cvkRaw),
+		)
+	}
+	key1 := cvkRaw[:8]   // First half of the key
+	key2 := cvkRaw[8:16] // Second half of the key
+
+	// Step 2: Validate PAN length (13-19 digits)
+	if len(panHex) < 13 || len(panHex) > 19 {
+		return nil, fmt.Errorf("invalid PAN length: must be between 13 and 19 digits")
 	}
 
-	// Calculate padding length to make PAN a multiple of 8 bytes (16 hex chars)
-	paddedLength := ((len(panHex) + 15) / 16) * 16
-
-	// Right-pad PAN with zeros if needed
-	if len(panHex) < paddedLength {
-		panHex = fmt.Sprintf("%-*s", paddedLength, panHex)
-		// Replace spaces from Sprintf with zeros
-		panHex = strings.ReplaceAll(panHex, " ", "0")
+	// Steps 3-4: Validate expDate and servCode
+	if len(expDate) != 4 {
+		return nil, fmt.Errorf("invalid expiration date length: must be 4 characters")
+	}
+	if len(servCode) != 3 {
+		return nil, fmt.Errorf("invalid service code length: must be 3 characters")
 	}
 
-	// The key is already triple-length, so use it directly.
-	block, err := des.NewTripleDESCipher(cvkRaw)
+	// Step 5-6: Concatenate data and pad with zeros to 32 characters
+	data := panHex + expDate + servCode
+	if len(data) < 32 {
+		data = data + strings.Repeat("0", 32-len(data))
+	}
+
+	// Convert the first half of data to bytes for DES operations
+	data1Raw, err := hex.DecodeString(data[:16])
 	if err != nil {
-		return nil, fmt.Errorf("failed to create TDES cipher: %w", err)
+		return nil, fmt.Errorf("failed to decode first half of data: %w", err)
 	}
 
-	// Build TSP: expDate + serviceCode + zeros (padded to match PAN length)
-	zeroCount := paddedLength - len(expDate) - len(servCode)
-	block1Data := expDate + servCode + strings.Repeat("0", zeroCount)
-	// Encrypt and XOR
-	rawAcct, err := hex.DecodeString(panHex)
+	// Step 7: Encrypt first half of data with first half of key
+	block1, err := des.NewCipher(key1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create first DES cipher: %w", err)
 	}
-	d1 := make([]byte, len(rawAcct))
-	block.Encrypt(d1, rawAcct)
-	block1 := Raw2B(d1)
-	xored, err := XOR(block1, []byte(block1Data))
-	if err != nil {
-		return nil, err
-	}
-	// Final 3DES ECB encrypt
-	rawB, err := hex.DecodeString(string(xored))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode XORed result for GetVisaCVV: %w", err)
-	}
-	dst := make([]byte, len(rawB))
-	NewECBEncrypter(block).CryptBlocks(dst, rawB)
+	encrypted1 := make([]byte, 8)
+	block1.Encrypt(encrypted1, data1Raw)
 
-	return []byte(GetDigitsFromString(Raw2Str(dst), 3)), nil
+	// Step 8: XOR result with second half of data
+	data2Raw, err := hex.DecodeString(data[16:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode second half of data: %w", err)
+	}
+	xored := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		xored[i] = encrypted1[i] ^ data2Raw[i]
+	}
+
+	// Step 9: Encrypt result with first half of key
+	encrypted2 := make([]byte, 8)
+	block1.Encrypt(encrypted2, xored)
+
+	// Step 10: Decrypt with second half of key
+	block2, err := des.NewCipher(key2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create second DES cipher: %w", err)
+	}
+	decrypted := make([]byte, 8)
+	block2.Decrypt(decrypted, encrypted2)
+
+	// Step 11: Encrypt with first half of key again
+	finalEncrypted := make([]byte, 8)
+	block1.Encrypt(finalEncrypted, decrypted)
+
+	// Step 12: Get first 3 digits from result
+	hexResult := Raw2Str(finalEncrypted)
+	return []byte(GetDigitsFromString(hexResult, 3)), nil
 }
 
 // ParityOf returns 0 for even number of set bits, -1 for odd.

@@ -25,12 +25,12 @@ func TestExecuteCW(t *testing.T) {
 		{
 			name:  "Valid CVV calculation with good key",
 			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
-			want:  "CX00067",
+			want:  "CX00424",
 		},
 		{
 			name:  "Valid CVV calculation with variant key",
 			input: "U1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
-			want:  "CX00067",
+			want:  "CX00424",
 		},
 		{
 			name:     "Invalid input length - too short for CVK",
@@ -119,17 +119,17 @@ func TestExecuteCW(t *testing.T) {
 		{
 			name:  "Valid CVV with different PAN length",
 			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111;2412123000",
-			want:  "CX00684",
+			want:  "CX00906",
 		},
 		{
 			name:  "Valid CVV with maximum PAN length",
 			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111111;2412123000",
-			want:  "CX00067",
+			want:  "CX00145",
 		},
 		{
 			name:  "Different expiry date and service code",
 			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2501999",
-			want:  "CX00926", // Different CVV expected due to different exp date and service code
+			want:  "CX00790", // Different CVV expected due to different exp date and service code
 		},
 	}
 

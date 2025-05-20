@@ -188,23 +188,14 @@ func ExecuteCW(input []byte) ([]byte, error) {
 	logDebug(fmt.Sprintf("CW: Expiry date: %s, Service code: %s", expDateStr, servCodeStr))
 
 	logInfo("CW: Preparing CVK for CVV calculation.")
-	tripleLengthCVK, err := cryptoutils.ExtendDoubleToTripleKey(clearCVK)
-	if err != nil {
-		logError(fmt.Sprintf("CW: Failed to extend CVK: %v", err))
-		return nil, errorcodes.Err42
-	}
-	logDebug(
-		fmt.Sprintf("Triple-length CVK for GetVisaCVV: %s", common.FormatData(tripleLengthCVK)),
-	)
-
 	logDebug("Calculating CVV...")
 	// Calculate CVV using the utility function.
-	// PAN is passed as a hex string, expDate and servCode as digit strings, cvk as raw bytes.
+	// PAN is passed as a hex string, expDate and servCode as digit strings
 	cvvValueBytes, err := cryptoutils.GetVisaCVV(
 		panHexStr,
 		expDateStr,
 		servCodeStr,
-		tripleLengthCVK,
+		clearCVK,
 	)
 	if err != nil {
 		logDebug(fmt.Sprintf("Error calculating CVV: %v", err))
