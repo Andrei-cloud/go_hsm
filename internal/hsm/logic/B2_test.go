@@ -21,6 +21,24 @@ func TestExecuteB2(t *testing.T) {
 			expectedResponse: nil,
 			expectedError:    errorcodes.Err15,
 		},
+		{
+			name:             "Valid Input",
+			input:            []byte("0004TEST"),
+			expectedResponse: []byte("B300TEST"),
+			expectedError:    nil,
+		},
+		{
+			name:             "Invalid Length Field",
+			input:            []byte("ZZZZTEST"),
+			expectedResponse: nil,
+			expectedError:    errorcodes.Err15,
+		},
+		{
+			name:             "Length Mismatch",
+			input:            []byte("0008TEST"),
+			expectedResponse: nil,
+			expectedError:    errorcodes.Err15,
+		},
 		// TODO: Add more test cases
 	}
 
