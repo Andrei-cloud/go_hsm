@@ -3,7 +3,8 @@ module github.com/andrei-cloud/go_hsm
 go 1.24.2
 
 require (
-	github.com/andrei-cloud/anet v0.0.0-20250427111049-114167d09809
+	github.com/andrei-cloud/anet v0.1.1
+	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
@@ -33,7 +34,3 @@ require (
 	golang.org/x/text v0.21.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/andrei-cloud/anet => ../anet
-
-replace github.com/andrei-cloud/go_hsm => .

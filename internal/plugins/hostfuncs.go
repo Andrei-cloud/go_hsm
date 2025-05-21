@@ -111,39 +111,45 @@ func writeMemory(mod api.Module, ptr uint32, data []byte) error {
 	return nil
 }
 
-func (h *HostFunctions) logDebug(_ context.Context, mod api.Module, ptr, size uint32) {
+func (h *HostFunctions) logDebug(ctx context.Context, mod api.Module, ptr, size uint32) {
 	data, err := readMemory(mod, ptr, size)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to read debug log message")
+
 		return
 	}
-
+	requestID, _ := ctx.Value("request_id").(string)
 	log.Debug().
 		Str("source", "wasm").
+		Str("request_id", requestID).
 		Msg(string(data))
 }
 
-func (h *HostFunctions) logInfo(_ context.Context, mod api.Module, ptr, size uint32) {
+func (h *HostFunctions) logInfo(ctx context.Context, mod api.Module, ptr, size uint32) {
 	data, err := readMemory(mod, ptr, size)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to read info log message")
+
 		return
 	}
-
+	requestID, _ := ctx.Value("request_id").(string)
 	log.Info().
 		Str("source", "wasm").
+		Str("request_id", requestID).
 		Msg(string(data))
 }
 
-func (h *HostFunctions) logError(_ context.Context, mod api.Module, ptr, size uint32) {
+func (h *HostFunctions) logError(ctx context.Context, mod api.Module, ptr, size uint32) {
 	data, err := readMemory(mod, ptr, size)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to read error log message")
+
 		return
 	}
-
+	requestID, _ := ctx.Value("request_id").(string)
 	log.Error().
 		Str("source", "wasm").
+		Str("request_id", requestID).
 		Msg(string(data))
 }
 

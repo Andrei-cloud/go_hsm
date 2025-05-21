@@ -16,17 +16,19 @@ var (
 
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
-	Use:           "go_hsm",
-	Short:         "Hardware Security Module server and utilities",
-	Long:          `A flexible HSM server and utility tool for PIN block operations and other cryptographic functions for payment card processing.`,
+	Use:   "go_hsm",
+	Short: "Hardware Security Module server and utilities",
+	Long: `A flexible HSM server and utility tool for PIN block operations 
+	and other cryptographic functions for payment card processing.`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		// Initialize configuration before running any command
 		if err := config.Initialize(); err != nil {
 			return fmt.Errorf("failed to initialize configuration: %w", err)
 		}
 		cfg = config.Get()
+
 		return nil
 	},
 }
@@ -44,7 +46,7 @@ func init() {
 	// Add global flags that can override config file settings
 	rootCmd.PersistentFlags().
 		String("log-level", "info", "logging level (debug, info, warn, error)")
-	rootCmd.PersistentFlags().String("log-format", "text", "logging format (text, json)")
+	rootCmd.PersistentFlags().String("log-format", "", "logging format (human, json)")
 	rootCmd.PersistentFlags().String("plugin-path", "plugins", "path to plugin directory")
 
 	// Bind flags to viper
