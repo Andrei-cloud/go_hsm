@@ -2,6 +2,10 @@
 
 A Go-based Hardware Security Module (HSM) implementation compatible with Thales/Racal protocols, featuring a WASM-based plugin architecture for command extensibility and hot-reload.
 
+> **Unleash your creativity: Easily add new HSM commands as plugins—contribute your own or extend the system for your needs!**
+
+---
+
 ## Features
 
 - Memory-efficient buffer pooling for high-throughput environments.
@@ -9,6 +13,8 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - Hot-reload support: reload plugins at runtime with SIGHUP, no server restart required.
 - CLI for server management, plugin management, and cryptographic utilities.
 - Compatible with Thales/Racal HSM protocols and standard PIN block formats.
+- Table-driven tests and example-driven documentation for all exported APIs.
+- Structured logging and error handling for robust production and development use.
 
 ---
 
@@ -52,6 +58,7 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 ├── plugins/            # Compiled WASM plugins
 ├── Makefile            # Build and test automation
 ├── README.md           # Project documentation
+├── LICENSE             # Open source license (MIT)
 ```
 
 ---
@@ -168,4 +175,10 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
+This project is licensed under the MIT License for open source development and study purposes. See the LICENSE file for details.
+
+---
+
+## Author & Attribution
+
+Created and maintained by Andrey Babikov. Please reference the original author in derivative works or publications.
