@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/pkg/common"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -129,14 +131,17 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	atomic.AddInt32(&s.activeConns, 1)
 	defer atomic.AddInt32(&s.activeConns, -1)
 
+	requestID := uuid.NewString()
+
 	start := time.Now()
 	log.Debug().
 		Str("event", "handle_start").
 		Str("client_ip", client).
+		Str("request_id", requestID).
 		Msg("starting request handling")
 
 	if len(data) < 2 {
-		log.Error().Str("client_ip", client).Msg("malformed request")
+		log.Error().Str("client_ip", client).Str("request_id", requestID).Msg("malformed request")
 
 		return nil, errors.New("malformed request")
 	}
@@ -153,19 +158,20 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	if !ok {
 		log.Error().
 			Str("event", "plugin_manager_load_error").
+			Str("request_id", requestID).
 			Msg("failed to load plugin manager")
 
 		return nil, errors.New("plugin manager load failed")
 	}
 
-	// Execute command through plugin manager, pass empty slice for NC since it gets firmware from constant
 	execPayload := origPayload
 	if cmd == "NC" {
 		execPayload = []byte(s.hsmSvc.FirmwareVersion)
 	}
 
-	// Execute command through plugin manager
-	resp, execErr = pm.ExecuteCommand(cmd, execPayload)
+	// Pass requestID via context for plugin and plugin logs
+	ctx := context.WithValue(srvContextOrDefault(s), "request_id", requestID)
+	resp, execErr = pm.ExecuteCommandWithContext(ctx, cmd, execPayload)
 	if execErr != nil {
 		log.Error().
 			Str("event", "plugin_execution_error").
@@ -205,6 +211,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 			Str("event", "request_processed").
 			Str("client_ip", client).
 			Str("command", cmd).
+			Str("request_id", requestID).
 			Str("request", reqStr).
 			Str("response", respStr).
 			Str("duration", duration.String()).
@@ -215,6 +222,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 			Str("event", "request_processed").
 			Str("client_ip", client).
 			Str("command", cmd).
+			Str("request_id", requestID).
 			Str("request", reqStr).
 			Str("response", respStr).
 			Str("duration", duration.String()).
@@ -222,4 +230,8 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	}
 
 	return resp, nil
+}
+
+func srvContextOrDefault(_ *Server) context.Context {
+	return context.Background()
 }

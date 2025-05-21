@@ -272,6 +272,63 @@ func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error
 	return result, nil
 }
 
+// ExecuteCommandWithContext executes a command via its WASM plugin, passing a context for logging.
+func (pm *PluginManager) ExecuteCommandWithContext(
+	ctx context.Context,
+	cmd string,
+	input []byte,
+) ([]byte, error) {
+	pm.mu.RLock()
+	pool, ok := pm.plugins[cmd]
+	pm.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("unknown command: %s", cmd)
+	}
+	inst, err := pool.Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin instance: %w", err)
+	}
+	defer pool.Put(inst)
+
+	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to allocate memory: %w", err)
+	}
+
+	requestID, _ := ctx.Value("request_id").(string)
+	log.Debug().
+		Str("event", "plugin_execution").
+		Str("command", cmd).
+		Str("request_id", requestID).
+		Int("input_size", len(input)).
+		Hex("input", input).
+		Msg("executing plugin")
+
+	execCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	res, err := CallExecute(execCtx, inst.ExecuteFn, ptr, uint32(len(input)))
+	if err != nil {
+		return nil, fmt.Errorf("plugin execution failed: %w", err)
+	}
+
+	result, err := ReadBuffer(inst.Module, hsmplugin.Buffer(res))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	log.Debug().
+		Str("event", "plugin_response").
+		Str("command", cmd).
+		Str("request_id", requestID).
+		Int("output_size", len(result)).
+		Hex("output", result).
+		Msg("plugin execution complete")
+
+	return result, nil
+}
+
 // Close releases all resources.
 func (pm *PluginManager) Close() error {
 	pm.mu.Lock()

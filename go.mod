@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	github.com/andrei-cloud/anet v0.1.1
+	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
