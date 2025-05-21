@@ -3,14 +3,24 @@ package hsmplugin
 
 import (
 	"sync"
+
+	"github.com/andrei-cloud/anet"
 )
+
+const defaultRingSize = 32
+
+type bufferBucket struct {
+	ring     *anet.RingBuffer[[]byte]
+	pool     *sync.Pool
+	ringSize int
+}
 
 // BufferPool manages reusable byte slices to reduce allocations and improve performance
 // in high-throughput HSM operations. It maintains multiple pools of pre-allocated buffers
 // organized by size buckets that can be reused across multiple plugin invocations,
 // significantly reducing GC pressure and memory fragmentation.
 type BufferPool struct {
-	pools       map[int]*sync.Pool
+	buckets     map[int]*bufferBucket
 	sizeBuckets []int
 	mu          sync.RWMutex
 
@@ -37,19 +47,23 @@ type BufferPool struct {
 func NewBufferPool() *BufferPool {
 	// Define common buffer sizes for HSM operations.
 	sizeBuckets := []int{64, 128, 256, 512, 1024, 2048, 4096}
-	pools := make(map[int]*sync.Pool, len(sizeBuckets))
+	buckets := make(map[int]*bufferBucket, len(sizeBuckets))
 
 	for _, size := range sizeBuckets {
 		size := size // Capture for closure
-		pools[size] = &sync.Pool{
-			New: func() any {
-				return make([]byte, 0, size)
+		buckets[size] = &bufferBucket{
+			ring: anet.NewRingBuffer[[]byte](defaultRingSize),
+			pool: &sync.Pool{
+				New: func() any {
+					return make([]byte, 0, size)
+				},
 			},
+			ringSize: defaultRingSize,
 		}
 	}
 
 	return &BufferPool{
-		pools:          pools,
+		buckets:        buckets,
 		sizeBuckets:    sizeBuckets,
 		resizeHints:    make(map[int]int),
 		maxResizeHints: 1000, // Track up to 1000 size hints
@@ -63,6 +77,7 @@ func (bp *BufferPool) getBestBucketSize(size int) int {
 	bp.resizeHintsMu.RLock()
 	if hint, ok := bp.resizeHints[size]; ok {
 		bp.resizeHintsMu.RUnlock()
+
 		return hint
 	}
 	bp.resizeHintsMu.RUnlock()
@@ -108,10 +123,8 @@ func (bp *BufferPool) Get(size int) []byte {
 		return make([]byte, size)
 	}
 
-	// Get from pool
-	pool := bp.pools[bucketSize]
-	if pool == nil {
-		// Shouldn't happen if getBestBucketSize works correctly
+	bucket := bp.buckets[bucketSize]
+	if bucket == nil {
 		bp.statsMu.Lock()
 		bp.misses++
 		bp.statsMu.Unlock()
@@ -119,7 +132,15 @@ func (bp *BufferPool) Get(size int) []byte {
 		return make([]byte, size)
 	}
 
-	rawBuf := pool.Get()
+	if buf, ok := bucket.ring.Dequeue(); ok {
+		bp.statsMu.Lock()
+		bp.hits++
+		bp.statsMu.Unlock()
+
+		return buf[:size:cap(buf)]
+	}
+
+	rawBuf := bucket.pool.Get()
 	if buf, ok := rawBuf.([]byte); ok {
 		if cap(buf) == 0 {
 			bp.statsMu.Lock()
@@ -130,7 +151,6 @@ func (bp *BufferPool) Get(size int) []byte {
 			bp.hits++
 			bp.statsMu.Unlock()
 		}
-		// Return slice with correct length but full capacity
 
 		return buf[:size:cap(buf)]
 	}
@@ -154,14 +174,14 @@ func (bp *BufferPool) Prewarm(count int) {
 	defer bp.mu.RUnlock()
 
 	for _, size := range bp.sizeBuckets {
-		pool := bp.pools[size]
+		pool := bp.buckets[size]
 		if pool == nil {
 			continue
 		}
 
 		for range count {
 			b := make([]byte, 0, size)
-			pool.Put(&b)
+			pool.pool.Put(&b)
 		}
 	}
 }
@@ -184,28 +204,33 @@ func (bp *BufferPool) Put(buf []byte) {
 		return
 	}
 
-	// Find the appropriate bucket
 	bp.mu.RLock()
 	var targetSize int
+	var bucket *bufferBucket
 	for _, size := range bp.sizeBuckets {
 		if size >= bufCap {
 			targetSize = size
+			bucket = bp.buckets[size]
 			break
 		}
 	}
 
 	// If the buffer fits in a bucket, clear and return it
-	if targetSize > 0 && targetSize <= bp.sizeBuckets[len(bp.sizeBuckets)-1] {
+	if targetSize > 0 && targetSize <= bp.sizeBuckets[len(bp.sizeBuckets)-1] && bucket != nil {
 		// Clear sensitive data
 		for i := range buf {
 			buf[i] = 0
 		}
 		// Reset length but preserve capacity
 		buf = buf[:0:cap(buf)]
-		pool := bp.pools[targetSize]
-		if pool != nil {
-			pool.Put(&buf)
+
+		if ok := bucket.ring.Enqueue(buf); ok {
+			bp.mu.RUnlock()
+
+			return
 		}
+
+		bucket.pool.Put(buf)
 	}
 	bp.mu.RUnlock()
 }
@@ -259,11 +284,10 @@ func (bp *BufferPool) Trim() {
 	bp.mu.RLock()
 	defer bp.mu.RUnlock()
 
-	for _, pool := range bp.pools {
-		// Get and immediately discard all buffers
+	for _, bucket := range bp.buckets {
 		for {
-			buf := pool.Get()
-			if buf == nil {
+			_, ok := bucket.ring.Dequeue()
+			if !ok {
 				break
 			}
 		}
