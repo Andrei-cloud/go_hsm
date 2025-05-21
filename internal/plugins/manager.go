@@ -3,6 +3,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"github.com/andrei-cloud/go_hsm/pkg/hsmplugin"
 	"github.com/rs/zerolog/log"
 	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
@@ -22,22 +22,11 @@ import (
 type PluginManager struct {
 	ctx        context.Context //nolint:containedctx // Context is used for plugin lifecycle.
 	runtime    wazero.Runtime
-	plugins    map[string]*PluginInstance
+	plugins    map[string]*PluginInstancePool
 	hsm        *hsm.HSM
 	hostFuncs  *HostFunctions
 	bufferPool *hsmplugin.BufferPool
 	mu         sync.RWMutex
-}
-
-// PluginInstance holds a WASM module instance.
-type PluginInstance struct {
-	Module        api.Module
-	AllocFn       api.Function
-	ExecuteFn     api.Function
-	VersionFn     api.Function
-	DescriptionFn api.Function
-	AuthorFn      api.Function
-	mu            sync.Mutex
 }
 
 // NewPluginManager returns a PluginManager ready to load plugins.
@@ -47,7 +36,7 @@ func NewPluginManager(
 ) *PluginManager {
 	pm := &PluginManager{
 		ctx:        ctx,
-		plugins:    make(map[string]*PluginInstance),
+		plugins:    make(map[string]*PluginInstancePool),
 		hsm:        hsmInstance,
 		bufferPool: hsmplugin.NewBufferPool(),
 	}
@@ -79,76 +68,60 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		return fmt.Errorf("failed to register host functions: %w", err)
 	}
 
-	newPlugins := make(map[string]*PluginInstance)
+	newPlugins := make(map[string]*PluginInstancePool)
 
 	for _, f := range files {
 		if f.IsDir() || filepath.Ext(f.Name()) != ".wasm" {
 			continue
 		}
-
 		cmdCode := strings.TrimSuffix(f.Name(), ".wasm")
-
-		// Load and compile WASM module
 		wasmBytes, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
-			log.Debug().
-				Err(err).
-				Str("file", f.Name()).
-				Msg("failed to read plugin file")
-
+			log.Debug().Err(err).Str("file", f.Name()).Msg("failed to read plugin file")
 			continue
 		}
-
 		compiled, err := newRt.CompileModule(pm.ctx, wasmBytes)
 		if err != nil {
-			log.Debug().
-				Err(err).
-				Str("file", f.Name()).
-				Msg("failed to compile plugin module")
-
+			log.Debug().Err(err).Str("file", f.Name()).Msg("failed to compile plugin module")
 			continue
 		}
+		cfg := wazero.NewModuleConfig().WithName(cmdCode).WithStartFunctions()
+		factory := func() (*PluginInstance, error) {
+			instance, err := newRt.InstantiateModule(pm.ctx, compiled, cfg)
+			if err != nil {
+				return nil, err
+			}
+			allocFn := instance.ExportedFunction("Alloc")
+			executeFn := instance.ExportedFunction("Execute")
+			versionFn := instance.ExportedFunction("version")
+			descriptionFn := instance.ExportedFunction("description")
+			authorFn := instance.ExportedFunction("author")
+			if allocFn == nil || executeFn == nil || versionFn == nil || descriptionFn == nil ||
+				authorFn == nil {
+				return nil, errors.New("plugin missing required exports")
+			}
 
-		// Create module config
-		cfg := wazero.NewModuleConfig().
-			WithName(cmdCode).
-			WithStartFunctions()
-
-		// Instantiate module
-		instance, err := newRt.InstantiateModule(pm.ctx, compiled, cfg)
+			return &PluginInstance{
+				Module:        instance,
+				AllocFn:       allocFn,
+				ExecuteFn:     executeFn,
+				VersionFn:     versionFn,
+				DescriptionFn: descriptionFn,
+				AuthorFn:      authorFn,
+			}, nil
+		}
+		pool := &PluginInstancePool{
+			pool:    make(chan *PluginInstance, 10),
+			maxSize: 10,
+			factory: factory,
+		}
+		// Pre-fill pool with one instance
+		inst, err := factory()
 		if err != nil {
-			log.Debug().
-				Err(err).
-				Str("file", f.Name()).
-				Msg("failed to instantiate plugin module")
-
+			log.Debug().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin module")
 			continue
 		}
-
-		// Get required functions
-		allocFn := instance.ExportedFunction("Alloc")
-		executeFn := instance.ExportedFunction("Execute")
-		versionFn := instance.ExportedFunction("version")
-		descriptionFn := instance.ExportedFunction("description")
-		authorFn := instance.ExportedFunction("author")
-		if allocFn == nil || executeFn == nil || versionFn == nil ||
-			descriptionFn == nil || authorFn == nil {
-			log.Debug().
-				Str("file", f.Name()).
-				Msg("plugin missing required exports")
-
-			continue
-		}
-
-		// Create plugin instance
-		inst := &PluginInstance{
-			Module:        instance,
-			AllocFn:       allocFn,
-			ExecuteFn:     executeFn,
-			VersionFn:     versionFn,
-			DescriptionFn: descriptionFn,
-			AuthorFn:      authorFn,
-		}
+		pool.pool <- inst
 		// Validate plugin metadata
 		version, description, author := pm.getPluginMetadataFromInstance(inst)
 		if version == "N/A" || description == "N/A" || author == "N/A" {
@@ -159,7 +132,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				Str("author", author).
 				Msg("plugin metadata missing or malformed")
 		}
-		newPlugins[cmdCode] = inst
+		newPlugins[cmdCode] = pool
 	}
 
 	// Update runtime and plugins atomically
@@ -181,16 +154,16 @@ func (pm *PluginManager) LoadAll(dir string) error {
 // GetPluginMetadata returns the metadata for a given plugin command.
 func (pm *PluginManager) GetPluginMetadata(cmd string) (string, string, string) {
 	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	inst, ok := pm.plugins[cmd]
+	pool, ok := pm.plugins[cmd]
+	pm.mu.RUnlock()
 	if !ok {
 		return "N/A", "N/A", "N/A"
 	}
-
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-
+	inst, err := pool.Get()
+	if err != nil {
+		return "N/A", "N/A", "N/A"
+	}
+	defer pool.Put(inst)
 	version, description, author := pm.getPluginMetadataFromInstance(inst)
 
 	return version, description, author
@@ -248,15 +221,17 @@ func (pm *PluginManager) getPluginMetadataFromInstance(
 // ExecuteCommand executes a command via its WASM plugin.
 func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error) {
 	pm.mu.RLock()
-	inst, ok := pm.plugins[cmd]
+	pool, ok := pm.plugins[cmd]
 	pm.mu.RUnlock()
 
 	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", cmd)
 	}
-
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
+	inst, err := pool.Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plugin instance: %w", err)
+	}
+	defer pool.Put(inst)
 
 	// Allocate guest memory for input
 	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, input)
