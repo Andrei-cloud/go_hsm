@@ -127,6 +127,7 @@ func TestExecute%s(t *testing.T) {
 		}
 
 		stubPath := filepath.Join(pluginDir, "gen.go")
+		//nolint:lll // it is generated code
 		stubContent := fmt.Sprintf(
 			`//go:generate plugingen -cmd=%s -logic=github.com/andrei-cloud/go_hsm/internal/hsm/logic -version=%s -desc "%s" -author "%s" -out=.
 
