@@ -58,8 +58,7 @@ plugins: ## Build WASM plugins
 	fi
 
 run: ## Start HSM server with debug logging.
-	@GOHSM_LOG_LEVEL=debug go run ./cmd/go_hsm/main.go serve \
-		--plugin-dir=$(WASM_OUT_DIR)
+	@go run ./cmd/go_hsm/main.go serve --log-level=info --log-format=human
 
 run-release: ## Start HSM server in release mode.
 	@go run ./cmd/go_hsm/main.go serve \
