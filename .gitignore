@@ -1,0 +1,9 @@
+.DS_Store
+*.wasm
+go_hsm.code-workspace
+
+*github/*
+bin/*
+
+*.json
+bin/go_hsm
