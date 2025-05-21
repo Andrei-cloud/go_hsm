@@ -79,7 +79,7 @@ func main() {
 	flag.Parse()
 
 	if *cmd == "" || *logic == "" {
-		fmt.Fprintln(os.Stderr, "cmd and logic flags must be provided")
+		fmt.Fprintln(os.Stderr, "cmd and logic flags must be provided") //nolint:errcheck
 		os.Exit(1)
 	}
 
@@ -115,7 +115,9 @@ func generateWrapper(path string, data *PluginData) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	t := template.Must(template.New("wrapper").Parse(wrapperTemplate))
 	return t.Execute(f, data)

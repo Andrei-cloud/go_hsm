@@ -163,6 +163,7 @@ func GetDigitsFromString(ct string, length int) string {
 			break
 		}
 		if unicode.IsDigit(c) {
+			//nolint:all // WriteRune cannot fail for valid runes from a string, so error is ignored.
 			digits.WriteRune(c)
 		}
 	}
@@ -177,6 +178,7 @@ func GetDigitsFromString(ct string, length int) string {
 				continue
 			}
 			if val-10 >= 0 {
+				// WriteString cannot fail for valid strings, so error is ignored.
 				digits.WriteString(strconv.Itoa(int(val - 10)))
 			}
 		}
@@ -231,21 +233,21 @@ func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error)
 
 	// Step 2: Validate PAN length (13-19 digits)
 	if len(panHex) < 13 || len(panHex) > 19 {
-		return nil, fmt.Errorf("invalid PAN length: must be between 13 and 19 digits")
+		return nil, errors.New("invalid PAN length: must be between 13 and 19 digits")
 	}
 
 	// Steps 3-4: Validate expDate and servCode
 	if len(expDate) != 4 {
-		return nil, fmt.Errorf("invalid expiration date length: must be 4 characters")
+		return nil, errors.New("invalid expiration date length: must be 4 characters")
 	}
 	if len(servCode) != 3 {
-		return nil, fmt.Errorf("invalid service code length: must be 3 characters")
+		return nil, errors.New("invalid service code length: must be 3 characters")
 	}
 
 	// Step 5-6: Concatenate data and pad with zeros to 32 characters
 	data := panHex + expDate + servCode
 	if len(data) < 32 {
-		data = data + strings.Repeat("0", 32-len(data))
+		data += strings.Repeat("0", 32-len(data))
 	}
 
 	// Convert the first half of data to bytes for DES operations
@@ -290,6 +292,7 @@ func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error)
 
 	// Step 12: Get first 3 digits from result
 	hexResult := Raw2Str(finalEncrypted)
+
 	return []byte(GetDigitsFromString(hexResult, 3)), nil
 }
 
@@ -412,6 +415,7 @@ func ExtendDoubleToTripleKey(doubleKey []byte) ([]byte, error) {
 	tripleKey := make([]byte, 24)
 	copy(tripleKey, doubleKey)          // Copy K1K2 to the first 16 bytes.
 	copy(tripleKey[16:], doubleKey[:8]) // Copy K1 (first 8 bytes of doubleKey) to the last 8 bytes.
+
 	return tripleKey, nil
 }
 
