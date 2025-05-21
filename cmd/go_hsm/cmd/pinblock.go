@@ -45,6 +45,7 @@ Alternatively, extract the clear PIN from a PIN block using the --extract flag.`
 				return err
 			}
 			cmd.Printf("pin extracted (format %s): %s\n", formatCode, result)
+
 			return nil
 		}
 

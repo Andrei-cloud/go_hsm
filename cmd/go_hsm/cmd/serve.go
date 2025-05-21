@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/andrei-cloud/go_hsm/internal/config"
@@ -26,8 +27,17 @@ var serveCmd = &cobra.Command{
 		// Get configuration
 		cfg := config.Get()
 
-		// Initialize logger with config values
-		common.InitLogger(cfg.Log.Level == "debug", cfg.Log.Format == "human")
+		// Normalize log level and format from viper/config.
+		logLevel := viper.GetString("log.level")
+		logFormat := viper.GetString("log.format")
+		logLevel = strings.TrimSpace(strings.ToLower(logLevel))
+		logFormat = strings.TrimSpace(strings.ToLower(logFormat))
+
+		// Initialize logger using config values (with CLI flags overriding config via viper)
+		common.InitLogger(
+			logLevel == "debug",
+			logFormat == "human",
+		)
 
 		// Initialize the HSM instance
 		hsmInstance, err := hsm.NewHSM(hsm.FirmwareVersion, false)
