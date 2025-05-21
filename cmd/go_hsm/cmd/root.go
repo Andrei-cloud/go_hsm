@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 	and other cryptographic functions for payment card processing.`,
 	SilenceErrors: true,
 	SilenceUsage:  true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		// Initialize configuration before running any command
 		if err := config.Initialize(); err != nil {
 			return fmt.Errorf("failed to initialize configuration: %w", err)

@@ -13,12 +13,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// listCmd represents the list command
+// listCmd represents the list command.
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List installed plugins",
 	Long:  `List all installed HSM command plugins with their metadata.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		// Disable logging for CLI commands
 		log.Logger = log.Logger.Level(zerolog.Disabled)
 

@@ -16,14 +16,14 @@ var (
 	pluginAuthor  string
 )
 
-// pluginCmd represents the plugin command
+// pluginCmd represents the plugin command.
 var pluginCmd = &cobra.Command{
 	Use:   "plugin",
 	Short: "Plugin management commands",
 	Long:  `Commands for managing HSM command plugins.`,
 }
 
-// createCmd represents the create command
+// createCmd represents the create command.
 var createCmd = &cobra.Command{
 	Use:   "create NAME",
 	Short: "Create a new plugin",
@@ -121,7 +121,7 @@ func TestExecute%s(t *testing.T) {
 		}
 
 		// 2. Create the plugin stub directory and gen.go
-		pluginDir := filepath.Join("internal/commands/plugins", name)
+		pluginDir := filepath.Join("internal", "commands", "plugins", name)
 		if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create plugin directory: %w", err)
 		}
