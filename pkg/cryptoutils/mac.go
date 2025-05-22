@@ -7,17 +7,6 @@ import (
 	"fmt"
 )
 
-// padISO7816_4 pads msg with 0x80 then 0x00 until its length is a multiple of bs.
-func padISO7816_4(msg []byte, bs int) []byte {
-	out := append([]byte{}, msg...)
-	out = append(out, 0x80)
-	for len(out)%bs != 0 {
-		out = append(out, 0x00)
-	}
-
-	return out
-}
-
 // MAC8 computes an s-byte MAC (4 ≤ s ≤ 8) over msg using
 // ISO/IEC 9797-1 CBC-DES Method 1 or 3 (algo == 1 or 3).
 // ks must be 8 bytes (single-DES) or 16 bytes (two-key DES: k1||k2).

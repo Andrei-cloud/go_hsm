@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,17 @@ type ecb struct{ b cipher.Block }
 type ecbEncrypter ecb
 
 type ecbDecrypter ecb
+
+// padISO7816_4 pads msg with 0x80 then 0x00 until its length is a multiple of bs.
+func padISO7816_4(msg []byte, bs int) []byte {
+	out := slices.Concat([]byte{}, msg)
+	out = append(out, 0x80)
+	for len(out)%bs != 0 {
+		out = append(out, 0x00)
+	}
+
+	return out
+}
 
 // Raw2Str converts raw binary data to an uppercase hex string.
 func Raw2Str(raw []byte) string {

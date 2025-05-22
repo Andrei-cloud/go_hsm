@@ -11,14 +11,14 @@ import (
 )
 
 // DeriveICCKey derives the k-bit ICC Master Key per EMV A1.4 (Option A, B or C).
-func DeriveICCKey(pan, panSeq string, imk []byte, option string) ([]byte, error) {
+func DeriveICCKey(imk []byte, pan, panSeq, option string) ([]byte, error) {
 	switch strings.ToUpper(option) {
 	case "A":
-		return deriveOptionA(pan, panSeq, imk)
+		return deriveOptionA(imk, pan, panSeq)
 	case "B":
-		return deriveOptionB(pan, panSeq, imk)
+		return deriveOptionB(imk, pan, panSeq)
 	case "C":
-		return deriveOptionC(pan, panSeq, imk)
+		return deriveOptionC(imk, pan, panSeq)
 	default:
 		return nil, fmt.Errorf("unsupported derivation option %q", option)
 	}
@@ -26,7 +26,7 @@ func DeriveICCKey(pan, panSeq string, imk []byte, option string) ([]byte, error)
 
 // --- Option A (3DES only) ---------------------------------------------------.
 
-func deriveOptionA(pan, panSeq string, imk []byte) ([]byte, error) {
+func deriveOptionA(imk []byte, pan, panSeq string) ([]byte, error) {
 	if panSeq == "" {
 		panSeq = "00"
 	}
@@ -48,10 +48,10 @@ func deriveOptionA(pan, panSeq string, imk []byte) ([]byte, error) {
 
 // --- Option B (3DES + SHA-1 decimalization) --------------------------------.
 
-func deriveOptionB(pan, panSeq string, imk []byte) ([]byte, error) {
+func deriveOptionB(imk []byte, pan, panSeq string) ([]byte, error) {
 	// if PAN ≤ 16 digits, fall back to Option A.
 	if len(pan) <= 16 {
-		return deriveOptionA(pan, panSeq, imk)
+		return deriveOptionA(imk, pan, panSeq)
 	}
 	if panSeq == "" {
 		panSeq = "00"
@@ -77,7 +77,7 @@ func deriveOptionB(pan, panSeq string, imk []byte) ([]byte, error) {
 
 // --- Option C (AES) ---------------------------------------------------------.
 
-func deriveOptionC(pan, panSeq string, imk []byte) ([]byte, error) {
+func deriveOptionC(imk []byte, pan, panSeq string) ([]byte, error) {
 	if panSeq == "" {
 		panSeq = "00"
 	}
