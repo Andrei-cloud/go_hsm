@@ -432,3 +432,35 @@ func ExtendToDouble(singleKey []byte) []byte {
 func TruncateToSingle(doubleKey []byte) []byte {
 	return doubleKey[:len(doubleKey)/2]
 }
+
+// Chunk splits b into blocks of size sz. The last block may be shorter if needed.
+func Chunk(b []byte, sz int) [][]byte {
+	if sz <= 0 {
+		return nil
+	}
+	n := (len(b) + sz - 1) / sz
+	out := make([][]byte, n)
+	for i := 0; i < n; i++ {
+		start := i * sz
+		end := start + sz
+		if end > len(b) {
+			end = len(b)
+		}
+		out[i] = b[start:end]
+	}
+
+	return out
+}
+
+// XORBytes returns a^b for equal-length slices. Returns error if lengths differ.
+func XORBytes(a, b []byte) ([]byte, error) {
+	if len(a) != len(b) {
+		return nil, errors.New("xor: length mismatch")
+	}
+	out := make([]byte, len(a))
+	for i := range a {
+		out[i] = a[i] ^ b[i]
+	}
+
+	return out, nil
+}
