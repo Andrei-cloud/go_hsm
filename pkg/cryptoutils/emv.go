@@ -125,7 +125,23 @@ func derive3DESKey(imk, block8 []byte) ([]byte, error) {
 	if len(block8) != des.BlockSize {
 		return nil, errors.New("invalid block size for 3DES")
 	}
-	c, err := des.NewTripleDESCipher(imk)
+	var key24 []byte
+	switch len(imk) {
+	case 8:
+		key24 = make([]byte, 24)
+		copy(key24, imk)
+		copy(key24[8:], imk)
+		copy(key24[16:], imk)
+	case 16:
+		key24 = make([]byte, 24)
+		copy(key24, imk)
+		copy(key24[16:], imk[:8])
+	case 24:
+		key24 = imk
+	default:
+		return nil, errors.New("invalid key size for 3DES")
+	}
+	c, err := des.NewTripleDESCipher(key24)
 	if err != nil {
 		return nil, err
 	}
