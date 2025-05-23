@@ -79,7 +79,7 @@ func TestGenerateARQC18(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "visa cvn10 method1",
+			name:         "visa cvn18 method2",
 			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
 			data:         "0000000123000000000000000784800004800008402505220052BF45851800005E06011203A0B800",
 			pan:          "4111111111111111",
