@@ -4,13 +4,14 @@ import (
 	"crypto/aes"
 	"crypto/des"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 )
 
-// DeriveICCKey derives the k-bit ICC Master Key per EMV A1.4 (Option A, B or C).
+// DeriveICCKey derives the k-bit ICC Master Key (UDK) per EMV A1.4 (Option A, B or C).
 func DeriveICCKey(imk []byte, pan, panSeq, option string) ([]byte, error) {
 	switch strings.ToUpper(option) {
 	case "A":
@@ -37,8 +38,8 @@ func deriveOptionA(imk []byte, pan, panSeq string) ([]byte, error) {
 	} else if len(x) > 16 {
 		x = x[len(x)-16:]
 	}
-	// BCD-encode 16 digits → 8 bytes.
-	y, err := bcdEncode(x)
+
+	y, err := hex.DecodeString(x)
 	if err != nil {
 		return nil, err
 	}
@@ -125,23 +126,7 @@ func derive3DESKey(imk, block8 []byte) ([]byte, error) {
 	if len(block8) != des.BlockSize {
 		return nil, errors.New("invalid block size for 3DES")
 	}
-	var key24 []byte
-	switch len(imk) {
-	case 8:
-		key24 = make([]byte, 24)
-		copy(key24, imk)
-		copy(key24[8:], imk)
-		copy(key24[16:], imk)
-	case 16:
-		key24 = make([]byte, 24)
-		copy(key24, imk)
-		copy(key24[16:], imk[:8])
-	case 24:
-		key24 = imk
-	default:
-		return nil, errors.New("invalid key size for 3DES")
-	}
-	c, err := des.NewTripleDESCipher(key24)
+	c, err := des.NewTripleDESCipher(PrepareTripleDESKey(imk))
 	if err != nil {
 		return nil, err
 	}

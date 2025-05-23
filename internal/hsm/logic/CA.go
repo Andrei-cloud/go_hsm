@@ -183,7 +183,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		logError("CA: Failed to decode PIN block hex")
 		return nil, errorcodes.Err15
 	}
-	srcCipher, err := des.NewTripleDESCipher(prepareTripleDESKey(srcClear))
+	srcCipher, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(srcClear))
 	if err != nil {
 		logError(fmt.Sprintf("CA: TPK cipher initialization error: %v", err))
 		return nil, fmt.Errorf("tpk cipher: %w", err)
@@ -216,7 +216,7 @@ func ExecuteCA(input []byte) ([]byte, error) {
 		logError("CA: Failed to decode new PIN block hex")
 		return nil, errorcodes.Err15
 	}
-	dstCipher, err := des.NewTripleDESCipher(prepareTripleDESKey(dstClear))
+	dstCipher, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(dstClear))
 	if err != nil {
 		logError(fmt.Sprintf("CA: ZPK cipher initialization error: %v", err))
 		return nil, fmt.Errorf("zpk cipher: %w", err)

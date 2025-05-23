@@ -7,11 +7,12 @@ import (
 	"fmt"
 )
 
-// MAC8 computes an s-byte MAC (4 ≤ s ≤ 8) over msg using
+// CalculateMAC computes an s-byte MAC (4 ≤ s ≤ 8) over msg using
 // ISO/IEC 9797-1 CBC-DES Method 1 or 3 (algo == 1 or 3).
 // ks must be 8 bytes (single-DES) or 16 bytes (two-key DES: k1||k2).
-// s is the truncation length in bytes.
-func MAC8(msg, ks []byte, s, algo int) ([]byte, error) {
+// s is the truncation length in bytes
+// msg is already padded data.
+func CalculateMAC(msg, ks []byte, s, algo int) ([]byte, error) {
 	if s < 4 || s > 8 {
 		return nil, fmt.Errorf("invalid MAC length %d", s)
 	}
@@ -19,14 +20,13 @@ func MAC8(msg, ks []byte, s, algo int) ([]byte, error) {
 		return nil, fmt.Errorf("ks must be 8 or 16 bytes, got %d", len(ks))
 	}
 
-	// 1. Pad & split into 8-byte blocks
-	padded := padISO7816_4(msg, 8)
-	blocks := Chunk(padded, 8)
+	// 1. split into 8-byte blocks
+	blocks := Chunk(msg, 8)
 
-	// 2. CBC-DES with k1 and zero IV
+	// 2. CBC-3DES with k1 (prepared as triple-length) and zero IV
 	h := make([]byte, 8)
 	k1 := ks[:8]
-	cipher1, err := des.NewCipher(k1)
+	cipher1, err := des.NewTripleDESCipher(PrepareTripleDESKey(k1))
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func MAC8(msg, ks []byte, s, algo int) ([]byte, error) {
 		result = h
 	case algo == 3:
 		k2 := ks[8:16]
-		cipher2, err := des.NewCipher(k2)
+		cipher2, err := des.NewTripleDESCipher(PrepareTripleDESKey(k2))
 		if err != nil {
 			return nil, err
 		}

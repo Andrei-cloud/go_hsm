@@ -183,7 +183,7 @@ func ExecuteEC(input []byte) ([]byte, error) {
 
 	// Decrypt PIN block with ZPK
 	logInfo("EC: preparing to decrypt PIN block")
-	cipher, err := des.NewTripleDESCipher(prepareTripleDESKey(decryptedZpk))
+	cipher, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(decryptedZpk))
 	if err != nil {
 		logError("EC: failed to create ZPK cipher")
 		return nil, fmt.Errorf("create zpk cipher: %w", err)

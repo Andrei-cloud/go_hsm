@@ -7,24 +7,25 @@ import (
 )
 
 // GenerateARQC10 computes the 8-byte ARQC per Visa CVN10 algorithm.
-// sessionKey is the ICC Master Key for AC (16-byte DES3 key).
-// data is the concatenated tag data in the proper order.
+// issMKAC: Issuer Master Key for AC (16-byte DES key).
+// data: concatenated tag data in the proper order.
+// pan, psn: ASCII PAN and PSN used for ICC MK derivation.
 // Uses ISO7816-4 padding and DES3-CBC with zero IV.
-func GenerateARQC10(issMKAC []byte, pan, psn string, data []byte) ([]byte, error) {
+func GenerateARQC10(issMKAC, data []byte, pan, psn string) ([]byte, error) {
+	// 1. Derive ICC Master Key AC using Option A (3DES).
 	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "A")
 	if err != nil {
 		return nil, err
 	}
 
-	padded := padISO7816_4(data, des.BlockSize)
-	cipherBlock, err := des.NewTripleDESCipher(iccMKAC)
+	// 2. Apply ISO 7816-4 padding.
+	padded := padISO9797Method1(data, des.BlockSize)
+
+	// 3. Use 3DES-CBC with zero IV.
+	out, err := CalculateMAC(padded, iccMKAC, 8, 3)
 	if err != nil {
 		return nil, err
 	}
-	iv := make([]byte, des.BlockSize)
-	mode := cipher.NewCBCEncrypter(cipherBlock, iv)
-	out := make([]byte, len(padded))
-	mode.CryptBlocks(out, padded)
 
 	return out[len(out)-des.BlockSize:], nil
 }
@@ -38,7 +39,7 @@ func GenerateARPC10(issMKAC, arqc, arpcRc []byte, pan, psn string) ([]byte, erro
 
 	msg := slices.Concat(arqc, arpcRc)
 	// ISO9797-1 Algorithm 3: CBC-DES3 then single-DES decrypt/encrypt
-	return MAC8(msg, iccMKAC, des.BlockSize, 3)
+	return CalculateMAC(msg, iccMKAC, des.BlockSize, 3)
 }
 
 // GenerateARQC18 implements Visa CVN-18 ARQC calculation.
@@ -59,7 +60,7 @@ func GenerateARQC18(
 	}
 	// 2. derive session key: common method (ATC||00..00)
 	divers := slices.Concat(atc, make([]byte, 6)) // 8-byte block
-	skAC, err := DeriveSessionKey(iccMKAC, divers)
+	skAC, err := DeriveSessionKey(PrepareTripleDESKey(iccMKAC), divers)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func GenerateARPC18(
 	}
 	// derive session key
 	divers := slices.Concat(atc, make([]byte, 6))
-	skAC, err := DeriveSessionKey(iccMKAC, divers)
+	skAC, err := DeriveSessionKey(PrepareTripleDESKey(iccMKAC), divers)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +113,7 @@ func GenerateARPC18(
 	// pad
 	padded := padISO7816_4(msg, des.BlockSize)
 	// MAC Alg 3 (DES3-CBC then DES decrypt/encrypt)
-	fullMac, err := MAC8(padded, skAC, des.BlockSize, 3)
+	fullMac, err := CalculateMAC(padded, skAC, des.BlockSize, 3)
 	if err != nil {
 		return nil, err
 	}

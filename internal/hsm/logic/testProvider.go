@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
+	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
 const testLMKKeyHex = "0123456789ABCDEFFEDCBA9876543210"
@@ -40,7 +42,7 @@ func testEncryptWithLMK(plainKey, testKey []byte) ([]byte, error) {
 		return nil, errors.New("invalid plaintext key length")
 	}
 
-	block, err := des.NewTripleDESCipher(prepareTripleDESKey(testKey))
+	block, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(testKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
@@ -59,7 +61,7 @@ func testDecryptWithLMK(encryptedKey, testKey []byte) ([]byte, error) {
 		return nil, errors.New("invalid encrypted key length")
 	}
 
-	block, err := des.NewTripleDESCipher(prepareTripleDESKey(testKey))
+	block, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(testKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
