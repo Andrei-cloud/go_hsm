@@ -68,7 +68,7 @@ func deriveOptionB(imk []byte, pan, panSeq string) ([]byte, error) {
 	// decimalize into 16-digit string.
 	y := decimalize(h[:])
 	// BCD-encode → 8 bytes.
-	yBcd, err := bcdEncode(y)
+	yBcd, err := hex.DecodeString(y)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func deriveOptionC(imk []byte, pan, panSeq string) ([]byte, error) {
 	} else if len(x) > 32 {
 		x = x[len(x)-32:]
 	}
-	y, err := bcdEncode(x)
+	y, err := hex.DecodeString(x)
 	if err != nil {
 		return nil, err
 	}
@@ -155,25 +155,6 @@ func aesECBEncryptBlock(key, blk []byte) ([]byte, error) {
 	}
 	out := make([]byte, aes.BlockSize)
 	c.Encrypt(out, blk)
-
-	return out, nil
-}
-
-// bcdEncode converts an even-length string of decimal digits into BCD bytes.
-func bcdEncode(digits string) ([]byte, error) {
-	if len(digits)%2 != 0 {
-		return nil, errors.New("must be even number of digits for BCD")
-	}
-	out := make([]byte, len(digits)/2)
-	for i := range out {
-		hi := digits[2*i] - '0'
-		lo := digits[2*i+1] - '0'
-		if hi > 9 || lo > 9 {
-			return nil, fmt.Errorf("invalid digit in %q", digits)
-		}
-
-		out[i] = hi<<4 | lo
-	}
 
 	return out, nil
 }

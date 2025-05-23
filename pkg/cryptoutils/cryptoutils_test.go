@@ -281,29 +281,6 @@ func TestParityAndKeyParity(t *testing.T) {
 	}
 }
 
-func TestBcdEncode(t *testing.T) {
-	tests := []struct {
-		digits  string
-		want    []byte
-		wantErr bool
-	}{
-		{"12345678", []byte{0x12, 0x34, 0x56, 0x78}, false},
-		{"00000000", []byte{0x00, 0x00, 0x00, 0x00}, false},
-		{"13579", nil, true},  // odd length
-		{"12A456", nil, true}, // invalid char
-	}
-	for _, tt := range tests {
-		got, err := bcdEncode(tt.digits)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("bcdEncode(%q) error = %v, wantErr %v", tt.digits, err, tt.wantErr)
-			continue
-		}
-		if !tt.wantErr && !reflect.DeepEqual(got, tt.want) {
-			t.Errorf("bcdEncode(%q) = %v, want %v", tt.digits, got, tt.want)
-		}
-	}
-}
-
 func TestDecimalize(t *testing.T) {
 	hash, _ := hex.DecodeString("1234567890ABCDEF1234567890ABCDEF12345678")
 	got := decimalize(hash)
