@@ -196,7 +196,7 @@ func decimalize(hash []byte) string {
 func xor(a, b []byte) []byte {
 	n := len(a)
 	out := make([]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = a[i] ^ b[i]
 	}
 

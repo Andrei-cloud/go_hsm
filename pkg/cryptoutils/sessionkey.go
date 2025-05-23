@@ -64,7 +64,7 @@ func DeriveSessionKey(km, r []byte) ([]byte, error) {
 		switch n {
 		case des.BlockSize:
 			// DES3 for klen == 16 or 24
-			c, err := des.NewTripleDESCipher(km)
+			c, err := des.NewTripleDESCipher(PrepareTripleDESKey(km))
 			if err != nil {
 				return nil, err
 			}
@@ -82,7 +82,7 @@ func DeriveSessionKey(km, r []byte) ([]byte, error) {
 			return nil, fmt.Errorf("unsupported block size %d", n)
 		}
 
-		concat := slices.Concat(blk1, blk2)
+		concat := FixKeyParity(slices.Concat(blk1, blk2))
 		if len(concat) < klen {
 			return nil, fmt.Errorf(
 				"derived output %d bytes shorter than key length %d",
