@@ -64,6 +64,73 @@ func TestGenerateARQC10(t *testing.T) {
 	}
 }
 
+func TestGenerateARPC10(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		issMKACsting string
+		data         string
+		atc          string
+		arqc         string
+		pan          string
+		psn          string
+		rc           string
+		wantARPC     string
+		wantErr      bool
+	}{
+		{
+			name:         "cvn18 method2",
+			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
+			data:         "0000000123000000000000000784800004800008402505220052BF45851800005E06011203A0B800",
+			pan:          "4111111111111111",
+			psn:          "00",
+			atc:          "005E",
+			rc:           "3030",
+			arqc:         "076C5766F738E9A6",
+			wantARPC:     "85BC09B3A4809DE6",
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			arqc, err := hex.DecodeString(tt.arqc)
+			if err != nil {
+				t.Fatalf("rawData hex.DecodeString() error = %v", err)
+			}
+
+			issMKAC, err := hex.DecodeString(tt.issMKACsting)
+			if err != nil {
+				t.Fatalf("issMKAC hex.DecodeString() error = %v", err)
+			}
+
+			rawARPC, err := hex.DecodeString(tt.wantARPC)
+			if err != nil {
+				t.Fatalf("rawARPC hex.DecodeString() error = %v", err)
+			}
+
+			rc, err := hex.DecodeString(tt.rc)
+			if err != nil {
+				t.Fatalf("rc hex.DecodeString() error = %v", err)
+			}
+
+			got, err := GenerateARPC10(issMKAC, arqc, rc, tt.pan, tt.psn)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("GenerateARPC10() error = %v; wantErr %v", err, tt.wantErr)
+			}
+
+			if !bytes.Equal(got[:len(tt.wantARPC)/2], rawARPC) {
+				t.Errorf("GenerateARQC18() = %x; want %s", got[:len(tt.wantARPC)/2], tt.wantARPC)
+			}
+		})
+	}
+}
+
 func TestGenerateARQC18(t *testing.T) {
 	t.Parallel()
 

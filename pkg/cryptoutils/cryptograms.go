@@ -36,7 +36,13 @@ func GenerateARPC10(issMKAC, arqc, arpcRc []byte, pan, psn string) ([]byte, erro
 		return nil, err
 	}
 
-	msg := slices.Concat(arqc, arpcRc)
+	data := slices.Concat(arpcRc, make([]byte, 6))
+
+	msg, err := XORBytes(data, arqc)
+	if err != nil {
+		return nil, err
+	}
+
 	// ISO9797-1 Algorithm 3: CBC-DES3 then single-DES decrypt/encrypt
 	return CalculateMAC(msg, iccMKAC, des.BlockSize, 3)
 }
