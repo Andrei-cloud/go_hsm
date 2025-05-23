@@ -1,7 +1,6 @@
 package cryptoutils
 
 import (
-	"crypto/cipher"
 	"crypto/des"
 	"slices"
 )
@@ -49,9 +48,9 @@ func GenerateARPC10(issMKAC, arqc, arpcRc []byte, pan, psn string) ([]byte, erro
 // data: concatenated tag data in EMV order (9F02..9F10).
 func GenerateARQC18(
 	issMKAC []byte,
-	pan, psn string,
-	atc []byte,
 	data []byte,
+	atc []byte,
+	pan, psn string,
 ) ([]byte, error) {
 	// 1. derive ICC Master Key AC (Option B)
 	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "B")
@@ -60,23 +59,18 @@ func GenerateARQC18(
 	}
 	// 2. derive session key: common method (ATC||00..00)
 	divers := slices.Concat(atc, make([]byte, 6)) // 8-byte block
-	skAC, err := DeriveSessionKey(PrepareTripleDESKey(iccMKAC), divers)
+	skAC, err := DeriveSessionKey(iccMKAC, divers)
 	if err != nil {
 		return nil, err
 	}
 	// 3. pad data to 8-byte boundary
-	padded := padISO7816_4(data, des.BlockSize)
+	padded := padISO9797Method2(data, des.BlockSize)
 
 	// 4. 3DES-CBC with zero IV
-	cipherBlock, err := des.NewTripleDESCipher(skAC)
+	out, err := CalculateMAC(padded, skAC, des.BlockSize, 3)
 	if err != nil {
 		return nil, err
 	}
-	iv := make([]byte, des.BlockSize)
-	mode := cipher.NewCBCEncrypter(cipherBlock, iv)
-	out := make([]byte, len(padded))
-	mode.CryptBlocks(out, padded)
-
 	// 5. ARQC = final 8 bytes
 	return out[len(out)-des.BlockSize:], nil
 }
@@ -101,7 +95,7 @@ func GenerateARPC18(
 	}
 	// derive session key
 	divers := slices.Concat(atc, make([]byte, 6))
-	skAC, err := DeriveSessionKey(PrepareTripleDESKey(iccMKAC), divers)
+	skAC, err := DeriveSessionKey(iccMKAC, divers)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +105,7 @@ func GenerateARPC18(
 		msg = slices.Concat(msg, propAuthData)
 	}
 	// pad
-	padded := padISO7816_4(msg, des.BlockSize)
+	padded := padISO9797Method2(msg, des.BlockSize)
 	// MAC Alg 3 (DES3-CBC then DES decrypt/encrypt)
 	fullMac, err := CalculateMAC(padded, skAC, des.BlockSize, 3)
 	if err != nil {

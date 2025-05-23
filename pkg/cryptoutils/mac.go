@@ -88,7 +88,7 @@ func CMAC(msg, ks []byte, s int) ([]byte, error) {
 		}
 		blocks[len(blocks)-1] = last
 	} else {
-		padded := padISO7816_4(msg, blockSize)
+		padded := padISO9797Method2(msg, blockSize)
 		blocks = Chunk(padded, blockSize)
 		last, err := XORBytes(blocks[len(blocks)-1], k2)
 		if err != nil {

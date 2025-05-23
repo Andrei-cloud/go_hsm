@@ -23,15 +23,11 @@ type ecbEncrypter ecb
 
 type ecbDecrypter ecb
 
-// padISO7816_4 pads msg with 0x80 then 0x00 until its length is a multiple of bs.
-func padISO7816_4(msg []byte, bs int) []byte {
-	out := slices.Concat([]byte{}, msg)
-	out = append(out, 0x80)
-	for len(out)%bs != 0 {
-		out = append(out, 0x00)
-	}
-
-	return out
+// padISO9797Method2 implements ISO/IEC 9797-1 padding method 2 (EMV padding).
+// Adds 0x80 followed by the smallest number of 0x00 bytes to make data multiple of block size.
+// If data is already a multiple of block size and non-empty, no padding is added.
+func padISO9797Method2(msg []byte, bs int) []byte {
+	return padISO9797Method1(slices.Concat(msg, []byte{0x80}), bs)
 }
 
 // padISO9797Method1 implements ISO/IEC 9797-1 padding method 1 (VISA padding).
