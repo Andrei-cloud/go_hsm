@@ -100,10 +100,7 @@ func GenerateARPC18(
 		return nil, err
 	}
 	// build message: ARQC || CSU || optional proprietary data
-	msg := slices.Concat(arqc, csu)
-	if len(propAuthData) > 0 {
-		msg = slices.Concat(msg, propAuthData)
-	}
+	msg := slices.Concat(arqc, csu, propAuthData)
 	// pad
 	padded := padISO9797Method2(msg, des.BlockSize)
 	// MAC Alg 3 (DES3-CBC then DES decrypt/encrypt)

@@ -79,7 +79,7 @@ func TestGenerateARQC18(t *testing.T) {
 		wantErr      bool
 	}{
 		{
-			name:         "visa cvn18 method2",
+			name:         "cvn18 method2",
 			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
 			data:         "0000000123000000000000000784800004800008402505220052BF45851800005E06011203A0B800",
 			pan:          "4111111111111111",
@@ -123,6 +123,78 @@ func TestGenerateARQC18(t *testing.T) {
 
 			if !bytes.Equal(got[:len(tt.wantARQC)/2], rawARQC) {
 				t.Errorf("GenerateARQC18() = %x; want %s", got[:len(tt.wantARQC)/2], tt.wantARQC)
+			}
+		})
+	}
+}
+
+func TestGenerateARPC18(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		issMKACsting string
+		data         string
+		atc          string
+		arqc         string
+		pan          string
+		psn          string
+		csu          string
+		wantARPC     string
+		wantErr      bool
+	}{
+		{
+			name:         "cvn18 method2",
+			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
+			data:         "0000000123000000000000000784800004800008402505220052BF45851800005E06011203A0B800",
+			pan:          "4111111111111111",
+			psn:          "00",
+			atc:          "005E",
+			csu:          "00000000",
+			arqc:         "FDBA87A3C606B92F",
+			wantARPC:     "FA12E21A",
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			arqc, err := hex.DecodeString(tt.arqc)
+			if err != nil {
+				t.Fatalf("rawData hex.DecodeString() error = %v", err)
+			}
+
+			issMKAC, err := hex.DecodeString(tt.issMKACsting)
+			if err != nil {
+				t.Fatalf("issMKAC hex.DecodeString() error = %v", err)
+			}
+
+			atc, err := hex.DecodeString(tt.atc)
+			if err != nil {
+				t.Fatalf("atc hex.DecodeString() error = %v", err)
+			}
+
+			csu, err := hex.DecodeString(tt.csu)
+			if err != nil {
+				t.Fatalf("csu hex.DecodeString() error = %v", err)
+			}
+
+			rawARPC, err := hex.DecodeString(tt.wantARPC)
+			if err != nil {
+				t.Fatalf("rawARPC hex.DecodeString() error = %v", err)
+			}
+
+			got, err := GenerateARPC18(issMKAC, tt.pan, tt.psn, atc, arqc, csu, nil)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("GenerateARQC18() error = %v; wantErr %v", err, tt.wantErr)
+			}
+
+			if !bytes.Equal(got[:len(tt.wantARPC)/2], rawARPC) {
+				t.Errorf("GenerateARQC18() = %x; want %s", got[:len(tt.wantARPC)/2], tt.wantARPC)
 			}
 		})
 	}
