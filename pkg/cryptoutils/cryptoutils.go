@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,31 @@ type ecbEncrypter ecb
 
 type ecbDecrypter ecb
 
+// padISO9797Method2 implements ISO/IEC 9797-1 padding method 2 (EMV padding).
+// Adds 0x80 followed by the smallest number of 0x00 bytes to make data multiple of block size.
+// If data is already a multiple of block size and non-empty, no padding is added.
+func padISO9797Method2(msg []byte, bs int) []byte {
+	return padISO9797Method1(slices.Concat(msg, []byte{0x80}), bs)
+}
+
+// padISO9797Method1 implements ISO/IEC 9797-1 padding method 1 (VISA padding).
+// Adds the smallest number of 0x00 bytes to make data multiple of block size.
+// If data is already a multiple of block size and non-empty, no padding is added.
+func padISO9797Method1(data []byte, blockSize int) []byte {
+	remainder := len(data) % blockSize
+	if remainder == 0 && len(data) > 0 {
+		return data
+	}
+
+	if len(data) == 0 {
+		return make([]byte, blockSize)
+	}
+
+	padding := make([]byte, blockSize-remainder)
+
+	return slices.Concat(data, padding)
+}
+
 // Raw2Str converts raw binary data to an uppercase hex string.
 func Raw2Str(raw []byte) string {
 	return strings.ToUpper(hex.EncodeToString(raw))
@@ -30,6 +56,26 @@ func Raw2Str(raw []byte) string {
 // Raw2B returns the uppercase hex representation of raw data as bytes.
 func Raw2B(raw []byte) []byte {
 	return []byte(Raw2Str(raw))
+}
+
+// PrepareTripleDESKey extends double length key to triple length if needed.
+func PrepareTripleDESKey(key []byte) []byte {
+	var key24 []byte
+	switch len(key) {
+	case 8:
+		key24 = make([]byte, 24)
+		copy(key24, key)
+		copy(key24[8:], key)
+		copy(key24[16:], key)
+	case 16:
+		key24 = make([]byte, 24)
+		copy(key24, key)
+		copy(key24[16:], key[:8])
+	default:
+		key24 = key
+	}
+
+	return key24
 }
 
 // XOR takes two equal-length hex-encoded byte slices, XORs their raw bytes, and
@@ -431,4 +477,36 @@ func ExtendToDouble(singleKey []byte) []byte {
 // TruncateToSingle takes the first half of a double length key.
 func TruncateToSingle(doubleKey []byte) []byte {
 	return doubleKey[:len(doubleKey)/2]
+}
+
+// Chunk splits b into blocks of size sz. The last block may be shorter if needed.
+func Chunk(b []byte, sz int) [][]byte {
+	if sz <= 0 {
+		return nil
+	}
+	n := (len(b) + sz - 1) / sz
+	out := make([][]byte, n)
+	for i := 0; i < n; i++ {
+		start := i * sz
+		end := start + sz
+		if end > len(b) {
+			end = len(b)
+		}
+		out[i] = b[start:end]
+	}
+
+	return out
+}
+
+// XORBytes returns a^b for equal-length slices. Returns error if lengths differ.
+func XORBytes(a, b []byte) ([]byte, error) {
+	if len(a) != len(b) {
+		return nil, errors.New("xor: length mismatch")
+	}
+	out := make([]byte, len(a))
+	for i := range a {
+		out[i] = a[i] ^ b[i]
+	}
+
+	return out, nil
 }
