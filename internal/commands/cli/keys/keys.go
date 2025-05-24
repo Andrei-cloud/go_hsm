@@ -150,21 +150,30 @@ func runTypes(cmd *cobra.Command, _ []string) error {
 
 	// Create and configure tabwriter
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	defer w.Flush()
 
 	// Print header
-	fmt.Fprintln(w, "Code\tName\tLMK Pair\tVariant")
-	fmt.Fprintln(w, "----\t----\t--------\t-------")
+	if _, err := fmt.Fprintln(w, "Code\tName\tLMK Pair\tVariant"); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+	if _, err := fmt.Fprintln(w, "----\t----\t--------\t-------"); err != nil {
+		return fmt.Errorf("failed to write header separator: %w", err)
+	}
 
 	// Print key types in sorted order
 	for _, code := range codes {
 		kt := keyTypes[code]
-		fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
 			kt.Code,
 			kt.Name,
 			kt.LMKPair,
 			kt.VariantID,
-		)
+		); err != nil {
+			return fmt.Errorf("failed to write key type info: %w", err)
+		}
+	}
+
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("failed to flush output: %w", err)
 	}
 
 	return nil
@@ -195,7 +204,7 @@ func runGenerateKey(cmd *cobra.Command, _ []string) error {
 		return errors.New("scheme must be X (single), U (double), or T (triple)")
 	}
 
-	schemeChar := byte(scheme[0])
+	schemeChar := scheme[0]
 	var keyLen int
 	switch schemeChar {
 	case 'X':
@@ -295,12 +304,11 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Check key parity.
+	if !forceParity && !cryptoutils.CheckKeyParity(clearKey) {
+		return errors.New("key has invalid parity; use --force-parity to fix")
+	}
 	if !cryptoutils.CheckKeyParity(clearKey) {
-		if forceParity {
-			cryptoutils.FixKeyParity(clearKey)
-		} else {
-			return errors.New("key has invalid parity; use --force-parity to fix")
-		}
+		cryptoutils.FixKeyParity(clearKey)
 	}
 
 	// Load LMK set.
@@ -315,7 +323,7 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid key type: %w", err)
 	}
 
-	schemeChar := byte(scheme[0])
+	schemeChar := scheme[0]
 
 	// Calculate KCV.
 	kcv := crypto.CalculateKCV(clearKey)
@@ -354,7 +362,7 @@ func runCheckKey(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Extract scheme from key if not explicitly provided.
-	keyScheme := byte(encryptedKeyHex[0])
+	keyScheme := encryptedKeyHex[0]
 	keyHex := encryptedKeyHex[1:]
 
 	if scheme != "" {
@@ -363,7 +371,7 @@ func runCheckKey(cmd *cobra.Command, _ []string) error {
 		if scheme != "X" && scheme != "U" && scheme != "T" {
 			return errors.New("scheme must be X (single), U (double), or T (triple)")
 		}
-		keyScheme = byte(scheme[0])
+		keyScheme = scheme[0]
 	}
 
 	// Validate scheme character.
