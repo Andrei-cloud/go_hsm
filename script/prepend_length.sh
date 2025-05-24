@@ -15,11 +15,13 @@ counter=$(cat "$counterFile")
 nextCounter=$(((counter + 1) % 4294967296))
 printf '%s' "$nextCounter" > "$counterFile"
 
-# Read all input from stdin as binary data.
-message=$(cat)
+# Read all input from stdin as binary data and store in a temporary file.
+messageFile=$(mktemp)
+trap 'rm -f "$messageFile"' EXIT
+cat > "$messageFile"
 
 # Calculate the length of the message in bytes.
-messageLength=$(printf '%s' "$message" | wc -c | tr -d ' ')
+messageLength=$(wc -c < "$messageFile" | tr -d ' ')
 
 # Total length = header (4 bytes) + message length.
 totalLength=$((4 + messageLength))
@@ -41,4 +43,5 @@ lengthBin=$(printf '\\x%02x\\x%02x' "$high" "$low")
 headerBin=$(printf '\\x%02x\\x%02x\\x%02x\\x%02x' $((counter >> 24 & 0xFF)) $((counter >> 16 & 0xFF)) $((counter >> 8 & 0xFF)) $((counter & 0xFF)))
 
 # Prepend binary length, header, and original message.
-printf '%b' "$lengthBin$headerBin$message"
+printf '%b' "$lengthBin$headerBin"
+cat "$messageFile"

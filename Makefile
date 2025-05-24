@@ -56,7 +56,7 @@ plugins: ## Build WASM plugins
 	fi
 
 run: ## Start HSM server with debug logging.
-	@go run ./cmd/go_hsm/main.go serve --log-level=info --log-format=human
+	@go run ./cmd/go_hsm/main.go serve --log-level=debug --log-format=human
 
 build: ## Build HSM binary.
 	CGO_ENABLED=0 go build -o bin/go_hsm ./cmd/go_hsm/main.go

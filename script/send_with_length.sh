@@ -65,11 +65,13 @@ if [ -n "${messageFile:-}" ]; then
 	done
 else
 	printf 'sending message from stdin (%d times)\n' "$count" >&2
-	# Read stdin once and store it.
-	message=$(cat)
+	# Read stdin once and store it in a temporary file to preserve null bytes.
+	tempMessage=$(mktemp)
+	trap 'rm -f "$tempMessage"' EXIT
+	cat > "$tempMessage"
 	for ((i=1; i<=count; i++)); do
 		printf 'request %d/%d:\n' "$i" "$count" >&2
-		printf '%s' "$message" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
+		cat "$tempMessage" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
 		if [ "$i" -lt "$count" ]; then
 			printf '\n' >&2
 		fi

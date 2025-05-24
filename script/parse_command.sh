@@ -66,10 +66,10 @@ hex_to_decimal() {
 	}
 }
 
-# Function to process a single field.
+# Function to process a single field and write directly to the output file.
 process_field() {
 	local field="$1"
-	local output=""
+	local outputFile="$2"
 	
 	# Check if field has a prefix.
 	if [[ "$field" =~ ^([0-9]+)([BH]):(.*)$ ]]; then
@@ -83,7 +83,8 @@ process_field() {
 				if ! validate_hex_length "$value" "$size"; then
 					return 1
 				fi
-				output=$(hex_to_binary "$value")
+				# Write binary data directly to file to preserve null bytes.
+				printf '%s' "$value" | xxd -r -p >> "$outputFile"
 				;;
 			"H")
 				# Hex format - convert decimal value to hex and output as ASCII hex.
@@ -113,8 +114,8 @@ process_field() {
 					return 1
 				fi
 				
-				# Convert to uppercase and output as ASCII hex.
-				output=$(printf '%s' "$hexValue" | tr '[:lower:]' '[:upper:]')
+				# Convert to uppercase and write as ASCII hex.
+				printf '%s' "$(printf '%s' "$hexValue" | tr '[:lower:]' '[:upper:]')" >> "$outputFile"
 				;;
 			*)
 				printf 'error: unknown format: %s\n' "$format" >&2
@@ -136,14 +137,13 @@ process_field() {
 		if ! validate_hex_length "$hexData" ""; then
 			return 1
 		fi
-		# Output the converted binary data followed by the semicolon delimiter.
-		output="$(hex_to_binary "$hexData");"
+		# Write the converted binary data directly to file followed by the semicolon delimiter.
+		printf '%s' "$hexData" | xxd -r -p >> "$outputFile"
+		printf ';' >> "$outputFile"
 	else
 		# No prefix - pass as-is.
-		output="$field"
+		printf '%s' "$field" >> "$outputFile"
 	fi
-	
-	printf '%s' "$output"
 }
 
 # Parse the command string and build the binary message.
@@ -153,7 +153,7 @@ tempFile=$(mktemp)
 trap 'rm -f "$tempFile"' EXIT
 
 for field in "${fields[@]}"; do
-	if ! process_field "$field" >> "$tempFile"; then
+	if ! process_field "$field" "$tempFile"; then
 		printf 'error: failed to process field: %s\n' "$field" >&2
 		exit 1
 	fi
