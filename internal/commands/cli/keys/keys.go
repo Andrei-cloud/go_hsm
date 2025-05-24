@@ -162,10 +162,11 @@ func runTypes(cmd *cobra.Command, _ []string) error {
 	// Print key types in sorted order
 	for _, code := range codes {
 		kt := keyTypes[code]
-		if _, err := fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
+		lmkPairRange := fmt.Sprintf("%d-%d", kt.LMKPair*2, kt.LMKPair*2+1)
+		if _, err := fmt.Fprintf(w, "%s\t%s\t%s\t%d\n",
 			kt.Code,
 			kt.Name,
-			kt.LMKPair,
+			lmkPairRange,
 			kt.VariantID,
 		); err != nil {
 			return fmt.Errorf("failed to write key type info: %w", err)
