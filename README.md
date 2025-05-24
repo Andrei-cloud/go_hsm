@@ -141,6 +141,99 @@ The scripts automatically handle the Thales/Racal message format:
 
 The hexdump output shows both the raw binary data and ASCII representation, making it easy to verify message structure and content.
 
+### Advanced Testing with Binary Field Formatting
+
+For more complex HSM commands that require binary data fields, use the `parse_command.sh` script. This script supports various field formats and automatically handles binary data conversion.
+
+#### Script: `parse_command.sh`
+
+The `parse_command.sh` script parses commands with specialized field formatting and sends them to the HSM server.
+
+**Usage:**
+```bash
+./script/parse_command.sh <command_string> <host> <port>
+```
+
+**Field Format Support:**
+- `8B:1111111111111100` - 8 bytes binary (hex value converted to binary)
+- `2H:74` - 2 hex characters representing decimal value 74 as hex "4A"
+- `4B:52BF4585` - 4 bytes binary (hex value converted to binary)
+- `B:0000000123...;` - variable length binary (until ';', delimiter included in output)
+- `|` - field delimiter
+- No prefix - value passed as-is
+
+#### Example 3: Complex Command with Binary Fields
+
+```bash
+./script/parse_command.sh "KQ00U7475636CC30B93B493CF5EA53799EBCC|8B:1111111111111100|2B:005E|4B:52BF4585|2H:74|B:0000000123000000000000000784800004800008402505220052BF45851800005E06011203;|8B:076C5766F738E9A6" 127.0.0.1 1500
+```
+
+This command demonstrates:
+- **KQ00**: Base command with variant `U` and key data
+- **8B:1111111111111100**: 8-byte binary field from hex
+- **2B:005E**: 2-byte binary field from hex
+- **4B:52BF4585**: 4-byte binary field from hex  
+- **2H:74**: 2 hex characters (decimal 74 → "4A")
+- **B:...;**: Variable-length binary field with semicolon delimiter
+- **8B:076C5766F738E9A6**: Final 8-byte binary field
+
+The script automatically:
+1. Parses each field according to its prefix
+2. Converts hex strings to binary data
+3. Includes semicolon delimiters for variable-length fields
+4. Assembles the complete message
+5. Sends it using the standard message format
+
+#### Example 4: PIN Translation Command (CA)
+
+```bash
+./script/parse_command.sh "CA0|4B:12345678|B:1234567890ABCDEF;|001|002" 127.0.0.1 1500
+```
+
+This translates a PIN block from one format to another:
+- **CA0**: PIN translation command
+- **4B:12345678**: 4-byte source ZPK
+- **B:1234567890ABCDEF;**: Variable-length PIN block data
+- **001**: Source PIN block format
+- **002**: Target PIN block format
+
+### Testing Script Reference
+
+The HSM project includes several testing scripts in the `script/` directory:
+
+#### Core Scripts
+
+1. **`send_with_length.sh`** - Basic message sending with length prefix
+   ```bash
+   echo -ne 'NC' | ./script/send_with_length.sh 127.0.0.1 1500
+   ```
+
+2. **`parse_command.sh`** - Advanced command parsing with binary field support
+   ```bash
+   ./script/parse_command.sh "CMD|8B:hexdata|2H:74" 127.0.0.1 1500
+   ```
+
+3. **`prepend_length.sh`** - Length prefix utility (used internally)
+   ```bash
+   cat binary_file | ./script/prepend_length.sh > message_with_length
+   ```
+
+#### Script Integration
+
+The scripts work together to provide comprehensive testing capabilities:
+
+- **Simple commands**: Use `send_with_length.sh` for basic ASCII commands
+- **Complex commands**: Use `parse_command.sh` for commands requiring binary fields
+- **Custom workflows**: Combine scripts for advanced testing scenarios
+
+#### Message Format Handling
+
+All scripts automatically handle the Thales/Racal message format:
+- **Length prefix**: 2-byte big-endian message length
+- **Header**: 4-byte incremental counter
+- **Payload**: Command data (ASCII or binary)
+- **Response parsing**: Automatic hexdump display for verification
+
 ---
 
 ## CLI Commands
