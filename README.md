@@ -165,7 +165,7 @@ The `parse_command.sh` script parses commands with specialized field formatting 
 #### Example 3: Complex Command with Binary Fields
 
 ```bash
-./script/parse_command.sh "KQ00U7475636CC30B93B493CF5EA53799EBCC|8B:1111111111111100|2B:005E|4B:52BF4585|2H:74|B:0000000123000000000000000784800004800008402505220052BF45851800005E06011203;|8B:076C5766F738E9A6" 127.0.0.1 1500
+./script/parse_command.sh "KQ00U7475636CC30B93B493CF5EA53799EBCC|8B:1111111111111100|2B:005E|4B:52BF4585|2H:37|B:0000000123000000000000000784800004800008402505220052BF45851800005E06011203;|8B:076C5766F738E9A6" 127.0.0.1 1500
 ```
 
 This command demonstrates:
@@ -184,19 +184,6 @@ The script automatically:
 4. Assembles the complete message
 5. Sends it using the standard message format
 
-#### Example 4: PIN Translation Command (CA)
-
-```bash
-./script/parse_command.sh "CA0|4B:12345678|B:1234567890ABCDEF;|001|002" 127.0.0.1 1500
-```
-
-This translates a PIN block from one format to another:
-- **CA0**: PIN translation command
-- **4B:12345678**: 4-byte source ZPK
-- **B:1234567890ABCDEF;**: Variable-length PIN block data
-- **001**: Source PIN block format
-- **002**: Target PIN block format
-
 ### Testing Script Reference
 
 The HSM project includes several testing scripts in the `script/` directory:
@@ -208,12 +195,7 @@ The HSM project includes several testing scripts in the `script/` directory:
    echo -ne 'NC' | ./script/send_with_length.sh 127.0.0.1 1500
    ```
 
-2. **`parse_command.sh`** - Advanced command parsing with binary field support
-   ```bash
-   ./script/parse_command.sh "CMD|8B:hexdata|2H:74" 127.0.0.1 1500
-   ```
-
-3. **`prepend_length.sh`** - Length prefix utility (used internally)
+2. **`prepend_length.sh`** - Length prefix utility (used internally)
    ```bash
    cat binary_file | ./script/prepend_length.sh > message_with_length
    ```
