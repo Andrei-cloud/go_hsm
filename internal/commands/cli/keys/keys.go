@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/andrei-cloud/go_hsm/pkg/crypto"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
@@ -27,6 +29,7 @@ under Local Master Keys (LMK) with proper validation and parity checking.`,
 	cmd.AddCommand(newGenerateKeyCommand())
 	cmd.AddCommand(newImportKeyCommand())
 	cmd.AddCommand(newCheckKeyCommand())
+	cmd.AddCommand(newTypesCommand())
 
 	return cmd
 }
@@ -107,6 +110,64 @@ and outputs detailed information about the key type and scheme.`,
 	}
 
 	return cmd
+}
+
+func newTypesCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "types",
+		Short: "List all supported key types",
+		Long: `List all supported key types and their details.
+Shows the key type code, name, LMK pair index, and variant ID for each type.
+Use --pci flag to show PCI-HSM compliant key types.`,
+		RunE: runTypes,
+	}
+
+	cmd.Flags().Bool("pci", false, "Show PCI-HSM compliant key types")
+
+	return cmd
+}
+
+func runTypes(cmd *cobra.Command, _ []string) error {
+	pciMode, _ := cmd.Flags().GetBool("pci")
+
+	var keyTypes map[string]variantlmk.KeyType
+	if pciMode {
+		keyTypes = variantlmk.KeyTypesPCI
+		cmd.Println("PCI-HSM Compliant Key Types:")
+	} else {
+		keyTypes = variantlmk.KeyTypes
+		cmd.Println("Standard Key Types:")
+	}
+
+	// Get all key type codes
+	codes := make([]string, 0, len(keyTypes))
+	for code := range keyTypes {
+		codes = append(codes, code)
+	}
+
+	// Sort codes for consistent output
+	sort.Strings(codes)
+
+	// Create and configure tabwriter
+	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
+	defer w.Flush()
+
+	// Print header
+	fmt.Fprintln(w, "Code\tName\tLMK Pair\tVariant")
+	fmt.Fprintln(w, "----\t----\t--------\t-------")
+
+	// Print key types in sorted order
+	for _, code := range codes {
+		kt := keyTypes[code]
+		fmt.Fprintf(w, "%s\t%s\t%d\t%d\n",
+			kt.Code,
+			kt.Name,
+			kt.LMKPair,
+			kt.VariantID,
+		)
+	}
+
+	return nil
 }
 
 func runGenerateKey(cmd *cobra.Command, _ []string) error {
