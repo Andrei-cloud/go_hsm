@@ -107,7 +107,7 @@ func ExecuteFA(input []byte) ([]byte, error) {
 
 	// Decrypt ZPK under ZMK using triple DES
 	logInfo("FA: decrypting ZPK under ZMK")
-	block, err := des.NewTripleDESCipher(prepareTripleDESKey(clearZmk))
+	block, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(clearZmk))
 	if err != nil {
 		logError("FA: failed to create DES cipher for ZPK")
 		return nil, errorcodes.Err15

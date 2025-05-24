@@ -12,12 +12,12 @@ import (
 // PAN: The 11 rightmost digits of the PAN (excluding the check digit) are used.
 // The 12th digit is the check digit of the PAN.
 func encodeVISA1(pin, pan string) (string, error) {
-	if len(pan) < 16 {
-		return "", errInvalidPanLength
-	}
-
 	if pan == "" {
 		return "", errPanRequired
+	}
+
+	if len(pan) < 16 {
+		return "", errInvalidPanLength
 	}
 
 	// Block 1 (PIN data): PIN Length (1 hex char) + PIN + 'F' padding.
@@ -245,7 +245,10 @@ func encodeVISANEWOLDIN(newPin, oldPinAndUdkHex string) (string, error) {
 	udkHex := parts[1]
 
 	if len(oldPin) < 4 {
-		return "", errInvalidPinLength
+		return "", fmt.Errorf(
+			"%w: old pin too short for visa42",
+			errInvalidPinLength,
+		)
 	}
 	if len(udkHex) != 16 {
 		return "", fmt.Errorf(
@@ -253,7 +256,7 @@ func encodeVISANEWOLDIN(newPin, oldPinAndUdkHex string) (string, error) {
 			errInvalidPanLength,
 		)
 	}
-	if len(oldPin) < 4 || len(oldPin) > 12 { // Assuming old PIN also 4-12.
+	if len(oldPin) > 12 { // Assuming old PIN also 4-12.
 		return "", errInvalidPinLength
 	}
 

@@ -115,7 +115,7 @@ func ExecuteHC(input []byte) ([]byte, error) {
 
 	logInfo("HC: encrypting generated key under TMK")
 	tmkEncryptedKey := make([]byte, len(newKey))
-	block := prepareTripleDESKey(clearKey)
+	block := cryptoutils.PrepareTripleDESKey(clearKey)
 	cipher, err := des.NewTripleDESCipher(block)
 	if err != nil {
 		logError("HC: failed to create TMK cipher")

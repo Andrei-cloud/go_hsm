@@ -106,15 +106,6 @@ func getKeyLength(scheme byte) int {
 	}
 }
 
-// prepareTripleDESKey extends double length key to triple length if needed.
-func prepareTripleDESKey(key []byte) []byte {
-	if len(key) == 16 {
-		return append(key, key[:8]...)
-	}
-
-	return key
-}
-
 // encryptKeyUnderZMK encrypts clearKey using the provided ZMK.
 // It assumes the ZMK key type is "000" and derives the scheme ('U' or 'T') from the length of zmkBytes.
 func encryptKeyUnderZMK(clearKey, zmkBytes []byte) ([]byte, error) {
@@ -135,7 +126,7 @@ func encryptKeyUnderZMK(clearKey, zmkBytes []byte) ([]byte, error) {
 		return nil, errors.Join(errors.New("decrypt zmk"), err)
 	}
 
-	zmkBlock, err := des.NewTripleDESCipher(prepareTripleDESKey(rawZmk))
+	zmkBlock, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(rawZmk))
 	if err != nil {
 		return nil, errors.Join(errors.New("create zmk cipher"), err)
 	}
