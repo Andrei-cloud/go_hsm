@@ -12,6 +12,7 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - [Implemented HSM Commands](#implemented-hsm-commands)
 - [Quick Start](#quick-start)
 - [Testing the HSM Server](#testing-the-hsm-server)
+- [CLI Commands](#cli-commands)
 - [Project Structure](#project-structure)
 - [Plugin System Overview](#plugin-system-overview)
 - [Server Operation](#server-operation)
@@ -79,6 +80,10 @@ The following HSM commands are currently implemented as WASM plugins:
    ```bash
    ./bin/go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
    ```
+5. Generate cryptographic keys:
+   ```bash
+   ./bin/go_hsm keys generate --type 000 --scheme X
+   ```
 
 ## Testing the HSM Server
 
@@ -135,6 +140,197 @@ The scripts automatically handle the Thales/Racal message format:
 - **Payload**: The actual HSM command and response
 
 The hexdump output shows both the raw binary data and ASCII representation, making it easy to verify message structure and content.
+
+---
+
+## CLI Commands
+
+The `go_hsm` CLI provides several commands for HSM operations and management. Below are the key commands available:
+
+### Key Management Commands
+
+The `keys` command provides subcommands for key generation and import operations under Local Master Keys (LMK).
+
+#### Generate Keys
+
+Generate random cryptographic keys with proper LMK encryption:
+
+```bash
+./bin/go_hsm keys generate --type 000 --scheme U
+```
+
+**Options:**
+- `--type`: Key type code (000, 001, 002, etc.)
+- `--scheme`: LMK encryption scheme (X=single, U=double, T=triple length) - defaults to U
+- `--clear`: Display the clear key value (for testing/development only)
+- `--pci`: Enable PCI compliance mode
+
+**Examples:**
+
+Generate a ZMK (Zone Master Key) with double-length scheme:
+```bash
+./bin/go_hsm keys generate --type 000 --scheme U
+```
+Output:
+```
+Key Type: Name: ZMK, Code: 000, LMKPairIndex: 2, VariantID: 0
+Key Scheme: U
+Encrypted Key: UC734ACEC91D7DBBBB2EA63EAF3F6E4DA
+KCV: E5EEC3
+```
+
+Generate a ZPK (Zone PIN Key) with single-length scheme and show clear key:
+```bash
+./bin/go_hsm keys generate --type 001 --scheme X --clear
+```
+Output:
+```
+Key Type: Name: ZPK, Code: 001, LMKPairIndex: 3, VariantID: 0
+Key Scheme: X
+Encrypted Key: X05419331EC21E4B2
+KCV: 78A6D9
+Clear Key: DF40519B0775B3B9
+```
+
+Generate a PVK (PIN Verification Key) with triple-length scheme:
+```bash
+./bin/go_hsm keys generate --type 002 --scheme T
+```
+Output:
+```
+Key Type: Name: PVK/Generic, Code: 002, LMKPairIndex: 7, VariantID: 0
+Key Scheme: T
+Encrypted Key: T7A4F2E108196A74279084233FC75A4E05FFCFE594A2E3DF0
+KCV: 2D6D77
+```
+
+Generate a key in PCI compliance mode:
+```bash
+./bin/go_hsm keys generate --type 001 --scheme X --pci
+```
+Output:
+```
+Key Type: Name: ZPK, Code: 001, LMKPairIndex: 3, VariantID: 0
+Key Scheme: X
+Encrypted Key: XA6968DC16A7B66B3
+KCV: A37A9C
+```
+
+#### Import Keys
+
+Import clear keys with automatic validation and LMK encryption:
+
+```bash
+./bin/go_hsm keys import --key DF40519B0775B3B9 --type 001 --scheme X
+```
+
+**Options:**
+- `--key`: Clear key in hexadecimal format (16, 32, or 48 hex characters)
+- `--type`: Key type code (000, 001, 002, etc.)
+- `--scheme`: LMK encryption scheme (optional, auto-detected based on key length if not specified)
+- `--force-parity`: Fix key parity if invalid (DES keys only)
+- `--pci`: Enable PCI compliance mode
+
+**Examples:**
+
+Import a single-length key with explicit scheme:
+```bash
+./bin/go_hsm keys import --key DF40519B0775B3B9 --type 001 --scheme X
+```
+Output:
+```
+Key Type: Name: ZPK, Code: 001, LMKPairIndex: 3, VariantID: 0
+Key Scheme: X
+Encrypted Key: X05419331EC21E4B2
+KCV: 78A6D9
+```
+
+Import a double-length key with automatic scheme detection:
+```bash
+./bin/go_hsm keys import --key 1234567890ABCDEF1234567890ABCDEF --type 000 --force-parity
+```
+Output:
+```
+Warning: Key parity was invalid and has been fixed
+Key Type: Name: ZMK, Code: 000, LMKPairIndex: 2, VariantID: 0
+Key Scheme: U
+Encrypted Key: U04A3A0285B653284CB52D0F5C1E3E835
+KCV: A50201
+```
+
+Import a triple-length key with automatic scheme detection:
+```bash
+./bin/go_hsm keys import --key 1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF --type 002 --force-parity
+```
+Output:
+```
+Warning: Key parity was invalid and has been fixed
+Key Type: Name: PVK/Generic, Code: 002, LMKPairIndex: 7, VariantID: 0
+Key Scheme: T
+Encrypted Key: TE0D7478DC363B5E2BE08F7253E80A37DDB4817AD5700B96B
+KCV: A50201
+```
+
+Import with force parity correction:
+```bash
+./bin/go_hsm keys import --key DF40519B0775B3B8 --type 001 --scheme X --force-parity
+```
+Output:
+```
+Warning: Key parity was invalid and has been fixed
+Key Type: Name: ZPK, Code: 001, LMKPairIndex: 3, VariantID: 0
+Key Scheme: X
+Encrypted Key: X05419331EC21E4B2
+KCV: 78A6D9
+```
+
+#### Key Types Reference
+
+| Type | Name | Description |
+|------|------|-------------|
+| 000 | ZMK | Zone Master Key |
+| 001 | ZPK | Zone PIN Key |
+| 002 | PVK/Generic | PIN Verification Key |
+| 003 | TMK | Terminal Master Key |
+| 004 | TPK | Terminal PIN Key |
+| 009 | ZMAC | Zone MAC Key |
+
+#### LMK Schemes Reference
+
+| Scheme | Description | Key Length |
+|--------|-------------|------------|
+| X | Single-length DES | 8 bytes (16 hex chars) |
+| U | Double-length 3DES | 16 bytes (32 hex chars) |
+| T | Triple-length 3DES | 24 bytes (48 hex chars) |
+
+#### Error Handling
+
+The CLI provides comprehensive error checking and validation:
+
+- **Key parity validation**: DES keys are automatically checked for odd parity
+- **Automatic scheme detection**: Key length determines scheme if not specified
+- **Invalid hex format**: Clear error messages for non-hexadecimal input
+- **Invalid key lengths**: Must be 16, 32, or 48 hexadecimal characters
+- **PCI compliance**: Secure handling in production environments
+
+If a key fails parity validation without `--force-parity`, the command will exit with an error. Use `--force-parity` to automatically correct parity bits before importing.
+
+### Other CLI Commands
+
+#### Server Management
+```bash
+# Start HSM server
+./bin/go_hsm serve --port 1500 --plugin-dir=./plugins
+
+# Generate PIN blocks
+./bin/go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
+```
+
+#### Plugin Management
+```bash
+# Create new plugin
+./bin/go_hsm plugin create FO --desc "Format Output" --version 1.0.0 --author "Alice"
+```
 
 ---
 
