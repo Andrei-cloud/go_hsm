@@ -121,8 +121,8 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 		return "", errPanNoDigits
 	}
 
-	// For ISO0, 12 digits is too short (needs at least 13: 12 rightmost excluding check digit)
-	if !fromLeft && len(panDigits) < 12 {
+	// For ISO0, we need at least 13 digits to extract 12 rightmost excluding check digit.
+	if !fromLeft && len(panDigits) < 13 {
 		return "", errInvalidPanLength
 	}
 
@@ -134,11 +134,7 @@ func get12PanDigits(pan string, fromLeft bool) (string, error) {
 		return panDigits[:12], nil
 	}
 
-	// handle case where panDigits is already the 12 rightmost excluding check digit.
-	if len(panDigits) == 12 {
-		return panDigits, nil
-	}
-
+	// For rightmost extraction, we need at least 13 digits to get 12 rightmost excluding check digit.
 	panWithoutCheckDigit := panDigits[:len(panDigits)-1]
 	if len(panWithoutCheckDigit) < 12 {
 		return "", errInvalidPanLength

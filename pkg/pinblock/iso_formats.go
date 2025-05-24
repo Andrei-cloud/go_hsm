@@ -24,6 +24,7 @@ func encodeISO0(pin, pan string) (string, error) {
 			panDigits += string(r)
 		}
 	}
+	// pan can be provided as 12 right-most digits excluding  check digit.
 	if len(panDigits) < 12 {
 		return "", errInvalidPanLength
 	}
@@ -335,15 +336,12 @@ func decodeISO4(_, _ string) (string, error) {
 // This was an existing interpretation. Based on Thales spec, ISO1 (Format 05) itself uses random padding.
 // So ECI1 and ISO1 become effectively the same under this interpretation.
 func encodeECI1(pin, pan string) (string, error) {
-	// Per Thales spec for Format 05 (ISO1), padding is random.
-	// The original code for encodeISO1 used 'F' padding, which was incorrect.
-	// Now encodeISO1 uses GetRandomHexDigit(), so ECI1 can directly call it.
-	// PAN is not used by ISO1 encoding itself.
-	return encodeISO1(pin, pan)
+	// ECI1 format is not implemented.
+	return "", errFormatNotImplemented
 }
 
 // decodeECI1 decodes an ECI Format 1 PIN block, same as ISO1 decoding.
 func decodeECI1(pinBlockHex, pan string) (string, error) {
-	// PAN is not used by ISO1 decoding itself.
-	return decodeISO1(pinBlockHex, pan)
+	// ECI1 format is not implemented.
+	return "", errFormatNotImplemented
 }

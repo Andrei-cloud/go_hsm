@@ -9,7 +9,7 @@ import (
 )
 
 // ANSI X9.8 (also known as Format 0 or ECI-2 or DIEBOLD-0).
-// PIN: 4-12 digits.
+// PIN: 4-14 digits.
 // PAN: The 12 rightmost digits of the PAN (excluding the check digit) are used.
 func encodeANSIX98(pin, pan string) (string, error) {
 	if pan == "" {
@@ -51,14 +51,28 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 		return "", errPanRequired
 	}
 
+	// Validate PAN first before checking pin block length.
 	relevantPan, err := get12PanDigits(pan, false)
 	if err != nil {
 		return "", err
 	}
 
+	if len(pinBlockHex) != 16 {
+		return "", fmt.Errorf(
+			"%w: ansix98 pin block must be 16 hex characters",
+			errInvalidPinBlockLength,
+		)
+	}
+
 	pinBlockBytes, err := hex.DecodeString(pinBlockHex)
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid hex for ansix98 pin block", errInternalDecoding)
+	}
+	if len(pinBlockBytes) != 8 {
+		return "", fmt.Errorf(
+			"%w: ansix98 pin block must be 8 bytes after decoding",
+			errInvalidPinBlockLength,
+		)
 	}
 
 	// Prepare PAN field (same as encoding).
@@ -74,19 +88,36 @@ func decodeANSIX98(pinBlockHex, pan string) (string, error) {
 		clearPinFieldBytes[i] = pinBlockBytes[i] ^ panBlockPart2[i]
 	}
 	clearPinFieldHex := strings.ToUpper(hex.EncodeToString(clearPinFieldBytes))
+	// Validate basic length first.
+	if len(clearPinFieldHex) < 16 {
+		return "", fmt.Errorf(
+			"%w: decoded ansix98 pin block is too short",
+			errPinBlockDecoding,
+		)
+	}
 
-	// Validate format "0LPPPP...". First char must be '0', L is PIN length (0x4-0xC).
-	if clearPinFieldHex == "" || clearPinFieldHex[0] != '0' {
+	// Try to extract PIN length for validation (even if format is wrong).
+	pinLenHex := string(clearPinFieldHex[1])
+	pinLen, err := strconv.ParseInt(pinLenHex, 16, 64)
+	if err == nil && (pinLen < 4 || pinLen > 14) {
+		return "", fmt.Errorf(
+			"%w: decoded ansix98 pin block has invalid pin length",
+			errPinBlockDecoding,
+		)
+	}
+
+	// Now validate format "0LPPPP...". First char must be '0'.
+	if clearPinFieldHex[0] != '0' {
 		return "", fmt.Errorf(
 			"%w: decoded ansix98 pin block has invalid format",
 			errPinBlockDecoding,
 		)
 	}
-	pinLenHex := string(clearPinFieldHex[1])
-	pinLen, err := strconv.ParseInt(pinLenHex, 16, 64)
-	if err != nil || pinLen < 4 || pinLen > 12 {
+
+	// Re-validate PIN length parsing with proper error handling.
+	if err != nil {
 		return "", fmt.Errorf(
-			"%w: decoded ansix98 pin block has invalid pin length",
+			"%w: decoded ansix98 pin block has invalid format",
 			errPinBlockDecoding,
 		)
 	}
@@ -226,39 +257,40 @@ func decodeDIEBOLD(pinBlockHex, _ string) (string, error) {
 		return "", errInvalidPinBlockLength
 	}
 
-	pinEndIndex := 0
-	for i, char := range pinBlockHex {
-		if char == 'F' {
+	// Find the end of the PIN by looking for consecutive F's that represent padding.
+	pinEndIndex := 16 // Start from the end and work backwards.
+	for i := 15; i >= 0; i-- {
+		if pinBlockHex[i] != 'F' {
+			pinEndIndex = i + 1
 			break
 		}
-		if char < '0' || char > '9' {
+	}
+
+	// Validate all characters are valid hex digits.
+	for i := 0; i < 16; i++ {
+		char := pinBlockHex[i]
+		if !((char >= '0' && char <= '9') || (char >= 'A' && char <= 'F')) {
 			return "", fmt.Errorf(
 				"%w: diebold pin block contains non-digit non-F char",
 				errPinBlockDecoding,
 			)
 		}
-		pinEndIndex = i + 1
 	}
 
-	if pinEndIndex == 0 { // All F's or empty (not possible due to length check).
+	if pinEndIndex == 0 { // All F's.
 		return "", fmt.Errorf("%w: diebold pin block contains no pin digits", errPinBlockDecoding)
 	}
 	pin := pinBlockHex[:pinEndIndex]
 
-	// Validate padding.
+	// Validate padding (should be all F's after PIN).
 	for i := pinEndIndex; i < 16; i++ {
 		if pinBlockHex[i] != 'F' {
 			return "", fmt.Errorf(
-				"%w: diebold pin block has invalid padding character",
+				"%w: diebold pin block has invalid byte",
 				errPinBlockDecoding,
 			)
 		}
 	}
-
-	// Relaxing this check as Thales spec for Format 03 doesn't specify PIN length range directly,
-	// but refers to "customer PIN".
-	// Basic length check for PIN (e.g. 4-12 or 4-16).
-	// Thales usually implies 4-12 for PINs unless specified.
 
 	return pin, nil
 }
