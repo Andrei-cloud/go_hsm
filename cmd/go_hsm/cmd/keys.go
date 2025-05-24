@@ -228,6 +228,122 @@ which will fix the parity before importing.`,
 	},
 }
 
+// checkKeyCmd represents the key check subcommand.
+var checkKeyCmd = &cobra.Command{
+	Use:   "check",
+	Short: "Check and verify an encrypted key under LMK",
+	Long: `Check and verify an encrypted key under Local Master Key (LMK).
+The command decrypts the key, verifies its parity, calculates the Key Check Value (KCV),
+and outputs detailed information about the key type and scheme.`,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		// Get command flags.
+		encryptedKeyHex, _ := cmd.Flags().GetString("key")
+		keyType, _ := cmd.Flags().GetString("type")
+		scheme, _ := cmd.Flags().GetString("scheme")
+		pciMode, _ := cmd.Flags().GetBool("pci")
+
+		// Validate encrypted key format.
+		if len(encryptedKeyHex) < 2 {
+			return errors.New("encrypted key must include scheme prefix")
+		}
+
+		// Extract scheme from key if not explicitly provided.
+		keyScheme := encryptedKeyHex[0]
+		keyHex := encryptedKeyHex[1:]
+
+		if scheme != "" {
+			// Use explicitly provided scheme.
+			scheme = strings.ToUpper(scheme)
+			if len(scheme) != 1 {
+				return errors.New("scheme must be a single character")
+			}
+			schemeChar := scheme[0]
+			if schemeChar != 'X' && schemeChar != 'U' && schemeChar != 'T' {
+				return fmt.Errorf("invalid scheme: %c (valid: X, U, T)", schemeChar)
+			}
+			keyScheme = schemeChar
+		} else {
+			// Use scheme from key prefix.
+			if keyScheme != 'X' && keyScheme != 'U' && keyScheme != 'T' {
+				return fmt.Errorf("invalid scheme in key: %c (valid: X, U, T)", keyScheme)
+			}
+		}
+
+		// Decode encrypted key.
+		encryptedKey, err := hex.DecodeString(keyHex)
+		if err != nil {
+			return fmt.Errorf("invalid encrypted key format: %w", err)
+		}
+
+		// Validate key length based on scheme.
+		expectedLength := 0
+		switch keyScheme {
+		case 'X':
+			expectedLength = 8 // Single length
+		case 'U':
+			expectedLength = 16 // Double length
+		case 'T':
+			expectedLength = 24 // Triple length
+		}
+
+		if len(encryptedKey) != expectedLength {
+			return fmt.Errorf(
+				"invalid key length for scheme %c: got %d bytes, expected %d",
+				keyScheme,
+				len(encryptedKey),
+				expectedLength,
+			)
+		}
+
+		// Validate key type.
+		variantlmk.SetPCIComplianceMode(pciMode)
+		kt, err := variantlmk.GetKeyTypeDetails(keyType, pciMode)
+		if err != nil {
+			return fmt.Errorf("invalid key type: %w", err)
+		}
+
+		// Load LMK set.
+		lmkSet, err := variantlmk.LoadDefaultLMKSet()
+		if err != nil {
+			return fmt.Errorf("failed to load LMK set: %w", err)
+		}
+
+		// Decrypt key under LMK.
+		clearKey, err := variantlmk.DecryptKeyUnderScheme(
+			keyType,
+			keyScheme,
+			encryptedKey,
+			lmkSet,
+			false,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt key under LMK: %w", err)
+		}
+
+		// Verify key parity.
+		if !cryptoutils.CheckKeyParity(clearKey) {
+			return errors.New("key parity check failed")
+		}
+
+		// Calculate KCV.
+		kcv := crypto.CalculateKCV(clearKey)
+
+		// Output results.
+		cmd.Printf("Key Type: %s\n", kt.String())
+		cmd.Printf("Key Scheme: %c\n", keyScheme)
+		cmd.Printf(
+			"Encrypted Key: %c%s\n",
+			keyScheme,
+			strings.ToUpper(hex.EncodeToString(encryptedKey)),
+		)
+		cmd.Printf("KCV: %s\n", strings.ToUpper(hex.EncodeToString(kcv)))
+		cmd.Printf("Key Length: %d bytes\n", len(clearKey))
+		cmd.Printf("Parity Check: PASSED\n")
+
+		return nil
+	},
+}
+
 func init() {
 	// Add keys command to root.
 	rootCmd.AddCommand(keysCmd)
@@ -235,6 +351,7 @@ func init() {
 	// Add subcommands to keys command.
 	keysCmd.AddCommand(generateKeyCmd)
 	keysCmd.AddCommand(importKeyCmd)
+	keysCmd.AddCommand(checkKeyCmd)
 
 	// Generate key command flags.
 	generateKeyCmd.Flags().String("type", "", "Key type code (e.g. 000, 001, 002)")
@@ -257,6 +374,20 @@ func init() {
 		panic(err)
 	}
 	if err := importKeyCmd.MarkFlagRequired("type"); err != nil {
+		panic(err)
+	}
+
+	// Check key command flags.
+	checkKeyCmd.Flags().String("key", "", "Encrypted key with scheme prefix (e.g. U1234...)")
+	checkKeyCmd.Flags().String("type", "", "Key type code (e.g. 000, 001, 002)")
+	checkKeyCmd.Flags().
+		String("scheme", "", "Key scheme override (X=single, U=double, T=triple length)")
+	checkKeyCmd.Flags().Bool("pci", false, "Enable PCI compliance mode")
+
+	if err := checkKeyCmd.MarkFlagRequired("key"); err != nil {
+		panic(err)
+	}
+	if err := checkKeyCmd.MarkFlagRequired("type"); err != nil {
 		panic(err)
 	}
 }
