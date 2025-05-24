@@ -6,6 +6,24 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 
 ---
 
+## Table of Contents
+
+- [Features](#features)
+- [Implemented HSM Commands](#implemented-hsm-commands)
+- [Quick Start](#quick-start)
+- [Testing the HSM Server](#testing-the-hsm-server)
+- [Project Structure](#project-structure)
+- [Plugin System Overview](#plugin-system-overview)
+- [Server Operation](#server-operation)
+- [Development Workflow](#development-workflow)
+- [Makefile Targets](#makefile-targets)
+- [Security Features](#security-features)
+- [Contributing](#contributing)
+- [License](#license)
+- [Author & Attribution](#author--attribution)
+
+---
+
 ## Features
 
 - ☑️ Memory-efficient buffer pooling for high-throughput environments.
@@ -18,6 +36,26 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - ☑️ **Complete support for standard Thales test Variant LMK**.
 - ⏳ Key block (TR-31) support (pending).
 - ⏳ Additional HSM commands (pending).
+
+---
+
+## Implemented HSM Commands
+
+The following HSM commands are currently implemented as WASM plugins:
+
+| Command | Description |
+|---------|-------------|
+| **A0** | Generate a random key |
+| **B2** | Echo test command | 
+| **BU** | Generate Key Check Value |
+| **CA** | Translate PIN block |
+| **CW** | Generate CVV |
+| **CY** | Verify CVV |
+| **DC** | Translate and verify PIN |
+| **EC** | Verify Terminal PIN with offset |
+| **FA** | Translate ZMK to ZPK |
+| **HC** | Generate TMK/TPK/PVK |
+| **NC** | Network diagnostics |
 
 ---
 
@@ -41,6 +79,62 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
    ```bash
    ./bin/go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
    ```
+
+## Testing the HSM Server
+
+Once the server is running, you can test HSM commands using the provided scripts. Here are some examples:
+
+### Example 1: Generate Key (A0 Command)
+```bash
+echo -ne 'A00001U' | ./script/send_with_length.sh 127.0.0.1 1500
+```
+
+**Output:**
+```
+sending message from stdin (1 times)
+request 1/1:
+00000000  00 0b 00 00 03 7f 41 30  30 30 30 31 55           |......A00001U|
+0000000d
+00000000  00 2f 00 00 03 7f 41 31  30 30 55 33 35 42 36 45  |./....A100U35B6E|
+00000010  44 35 34 43 41 30 42 38  39 36 39 38 30 43 31 32  |D54CA0B896980C12|
+00000020  44 46 44 34 36 45 42 30  42 39 35 46 37 42 38 35  |DFD46EB0B95F7B85|
+00000030  38                                                |8|
+00000031
+```
+
+This shows:
+- **Request**: `A00001U` (Generate key with key type `000` mode `1` and modifier `U`)
+- **Response**: `A100U35B6ED54CA0B896980C12DFD46EB0B95F7B858` (Success with generated key)
+
+### Example 2: Network Connect (NC Command)
+```bash
+echo -ne 'NC' | ./script/send_with_length.sh 127.0.0.1 1500
+```
+
+**Output:**
+```
+sending message from stdin (1 times)
+request 1/1:
+00000000  00 06 00 00 03 80 4e 43                           |......NC|
+00000008
+00000000  00 21 00 00 03 80 4e 44  30 30 30 30 30 30 30 30  |.!....ND00000000|
+00000010  30 30 30 30 30 30 30 30  30 30 37 30 30 30 2d 45  |00000000007000-E|
+00000020  30 30 30                                          |000|
+00000023
+```
+
+This shows:
+- **Request**: `NC` (Diagnostics)
+- **Response**: `ND00000000000000007000-E000` (Network status with firmware version information)
+
+### Understanding the Message Format
+
+The scripts automatically handle the Thales/Racal message format:
+- **2-byte length prefix**: Total message length (header + payload)
+- **4-byte header**: Incremental counter for message tracking
+- **Payload**: The actual HSM command and response
+
+The hexdump output shows both the raw binary data and ASCII representation, making it easy to verify message structure and content.
 
 ---
 
@@ -147,13 +241,13 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 
 ## Makefile Targets
 
-- `make build`      - Build the HSM CLI/server binary.
+- `make help`       - Display help screen with available targets.
+- `make gen`        - Generate new plugin code and WASM wrappers.
 - `make plugins`    - Build all WASM plugins (or a single one with `CMD=NAME`).
-- `make gen`        - Generate plugin wrappers for all commands.
-- `make test`       - Run all Go tests.
-- `make clean`      - Remove built binaries and plugins.
-- `make cli`        - Build the CLI binary.
-- `make install`    - Install CLI to `$GOPATH/bin`.
+- `make run`        - Start HSM server with debug logging on port 1500.
+- `make build`      - Build the HSM CLI/server binary.
+- `make test`       - Run all Go tests with verbose output.
+- `make clean`      - Clean built binaries and plugins from bin/ and plugins/ directories.
 
 ---
 
@@ -162,7 +256,6 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - Secure random key generation and cryptographic operations.
 - WASM-based isolation for plugin execution.
 - Secure memory handling and LMK protection.
-- Command-level authorization and audit logging.
 
 ---
 
