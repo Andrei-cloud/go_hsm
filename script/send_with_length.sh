@@ -47,9 +47,9 @@ fi
 # Function to send a single message.
 sendMessage() {
 	if [ -n "${messageFile:-}" ]; then
-		cat "$messageFile" | "$(dirname "$0")/prepend_length.sh" | tee >(printf 'sent (hex): ' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf 'received (hex): ' >&2; hexdump -C >&2)
+		cat "$messageFile" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
 	else
-		"$(dirname "$0")/prepend_length.sh" | tee >(printf 'sent (hex): ' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf 'received (hex): ' >&2; hexdump -C >&2)
+		"$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
 	fi
 }
 
@@ -69,7 +69,7 @@ else
 	message=$(cat)
 	for ((i=1; i<=count; i++)); do
 		printf 'request %d/%d:\n' "$i" "$count" >&2
-		printf '%s' "$message" | "$(dirname "$0")/prepend_length.sh" | tee >(printf 'sent (hex): ' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf 'received (hex): ' >&2; hexdump -C >&2)
+		printf '%s' "$message" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
 		if [ "$i" -lt "$count" ]; then
 			printf '\n' >&2
 		fi
