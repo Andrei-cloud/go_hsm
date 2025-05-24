@@ -117,3 +117,33 @@ func GenerateARPC18(
 	// ARPC = first 4 bytes
 	return fullMac[:4], nil
 }
+
+// GenerateARQC22 implements Visa CVN-22 ARQC calculation.
+// issMKAC: 16-byte Issuer Master Key for AC (DES key)
+// pan, psn: ASCII PAN and PSN used for ICC MK derivation
+// atc: 2-byte application transaction counter
+// data: concatenated tag data in EMV order (9F02..9F10).
+func GenerateARQC22(
+	issMKAC []byte,
+	data []byte,
+	atc []byte,
+	pan, psn string,
+) ([]byte, error) {
+	return GenerateARQC18(issMKAC, data, atc, pan, psn)
+}
+
+// GenerateARPC22 implements Visa CVN-22 ARPC (method 2).
+// issMKAC: 16-byte Issuer Master Key for AC (DES key)
+// pan, psn: ASCII PAN and PSN used for ICC MK derivation
+// atc: 2-byte application transaction counter
+// arqc: 8-byte ARQC
+// csu: 4-byte card status update
+// propAuthData: optional 0–8 bytes Proprietary Authentication Data.
+func GenerateARPC22(
+	issMKAC []byte,
+	pan, psn string,
+	atc []byte,
+	arqc, csu, propAuthData []byte,
+) ([]byte, error) {
+	return GenerateARPC18(issMKAC, pan, psn, atc, arqc, csu, propAuthData)
+}

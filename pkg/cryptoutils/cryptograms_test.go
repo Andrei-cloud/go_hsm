@@ -266,3 +266,77 @@ func TestGenerateARPC18(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateARQC22(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		issMKACsting string
+		data         string
+		atc          string
+		arqc         []byte
+		pan          string
+		psn          string
+		wantARQC     []byte
+		wantErr      bool
+	}{
+		{
+			name:         "cvn22 method2",
+			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
+			data:         "0000000123000000000000000784800004800008402505220052BF45851800005E06011203A0B800",
+			pan:          "4111111111111111",
+			psn:          "00",
+			atc:          "005E",
+			wantARQC:     []byte("FDBA87A3C606B92F"),
+			wantErr:      false,
+		},
+		{
+			name:         "cvn22 method2 test 2",
+			issMKACsting: "0123456789ABCDEFFEDCBA9876543210",
+			data:         "0000000040000000000000000124800004800001241911050152BF45851800001C06011203A0B800",
+			pan:          "1234567890123456",
+			psn:          "00",
+			atc:          "001C",
+			wantARQC:     []byte("7A788EA6B8A3E733"),
+			wantErr:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rawData, err := hex.DecodeString(tt.data)
+			if err != nil {
+				t.Fatalf("rawData hex.DecodeString() error = %v", err)
+			}
+
+			rawARQC, err := hex.DecodeString(string(tt.wantARQC))
+			if err != nil {
+				t.Fatalf("rawARQC hex.DecodeString() error = %v", err)
+			}
+
+			issMKAC, err := hex.DecodeString(tt.issMKACsting)
+			if err != nil {
+				t.Fatalf("issMKAC hex.DecodeString() error = %v", err)
+			}
+
+			atc, err := hex.DecodeString(tt.atc)
+			if err != nil {
+				t.Fatalf("atc hex.DecodeString() error = %v", err)
+			}
+
+			got, err := GenerateARQC22(issMKAC, rawData, atc, tt.pan, tt.psn)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("GenerateARQC22() error = %v; wantErr %v", err, tt.wantErr)
+			}
+
+			if !bytes.Equal(got[:len(tt.wantARQC)/2], rawARQC) {
+				t.Errorf("GenerateARQC22() = %x; want %s", got[:len(tt.wantARQC)/2], tt.wantARQC)
+			}
+		})
+	}
+}
