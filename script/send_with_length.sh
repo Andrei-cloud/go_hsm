@@ -46,11 +46,29 @@ fi
 
 # Function to send a single message.
 sendMessage() {
+	local requestFile=$(mktemp)
+	local responseFile=$(mktemp)
+	
 	if [ -n "${messageFile:-}" ]; then
-		cat "$messageFile" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
+		cat "$messageFile" | "$(dirname "$0")/prepend_length.sh" > "$requestFile"
 	else
-		"$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
+		"$(dirname "$0")/prepend_length.sh" > "$requestFile"
 	fi
+	
+	# Show request
+	hexdump -C "$requestFile" >&2
+
+	# Send request and capture response using netcat with brief sleep to allow server response.
+	(
+		cat "$requestFile"
+		sleep 0.01
+	) | nc "$host" "$port" > "$responseFile"
+
+	# Show response
+	hexdump -C "$responseFile" >&2
+
+	# Clean up temp files
+	rm -f "$requestFile" "$responseFile"
 }
 
 # Send messages based on count.
@@ -71,7 +89,7 @@ else
 	cat > "$tempMessage"
 	for ((i=1; i<=count; i++)); do
 		printf 'request %d/%d:\n' "$i" "$count" >&2
-		cat "$tempMessage" | "$(dirname "$0")/prepend_length.sh" | tee >(printf '' >&2; hexdump -C >&2) | nc "$host" "$port" | (printf '' >&2; hexdump -C >&2)
+		messageFile="$tempMessage" sendMessage
 		if [ "$i" -lt "$count" ]; then
 			printf '\n' >&2
 		fi
