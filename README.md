@@ -57,6 +57,7 @@ The following HSM commands are currently implemented as WASM plugins:
 | **FA** | Translate ZMK to ZPK |
 | **HC** | Generate TMK/TPK/PVK |
 | **NC** | Network diagnostics |
+| **KQ** | ARQC verification and/or ARPC generation |
 
 ---
 
@@ -163,72 +164,28 @@ The `parse_command.sh` script parses commands with specialized field formatting 
 - No prefix - value passed as-is
 
 #### Example 3: Complex Command with Binary Fields
-
 ```bash
 ./script/parse_command.sh "KQ00U7475636CC30B93B493CF5EA53799EBCC|8B:1111111111111100|2B:005E|4B:52BF4585|2H:37|B:0000000123000000000000000784800004800008402505220052BF45851800005E06011203;|8B:076C5766F738E9A6" 127.0.0.1 1500
 ```
 
-This command demonstrates:
-- **KQ00**: Base command with variant `U` and key data
-- **8B:1111111111111100**: 8-byte binary field from hex
-- **2B:005E**: 2-byte binary field from hex
-- **4B:52BF4585**: 4-byte binary field from hex  
-- **2H:74**: 2 hex characters (decimal 74 → "4A")
-- **B:...;**: Variable-length binary field with semicolon delimiter
-- **8B:076C5766F738E9A6**: Final 8-byte binary field
+Output:
+```
+parsed message hex: 4b5130305537343735363336434333304239334234393343463545413533373939454243431111111111111100005e52bf458532350000000123000000000000000784800004800008402505220052bf45851800005e060112033b076c5766f738e9a6
+sending message from stdin (1 times)
+request 1/1:
+00000000  00 67 00 00 03 b7 4b 51  30 30 55 37 34 37 35 36  |.g....KQ00U74756|
+00000010  33 36 43 43 33 30 42 39  33 42 34 39 33 43 46 35  |36CC30B93B493CF5|
+00000020  45 41 35 33 37 39 39 45  42 43 43 11 11 11 11 11  |EA53799EBCC.....|
+00000030  11 11 00 00 5e 52 bf 45  85 32 35 00 00 00 01 23  |....^R.E.25....#|
+00000040  00 00 00 00 00 00 00 07  84 80 00 04 80 00 08 40  |...............@|
+00000050  25 05 22 00 52 bf 45 85  18 00 00 5e 06 01 12 03  |%.".R.E....^....|
+00000060  3b 07 6c 57 66 f7 38 e9  a6                       |;.lWf.8..|
+00000069
+00000000  00 08 00 00 03 b7 4b 52  30 30                    |......KR00|
+0000000a
+```
 
-The script automatically:
-1. Parses each field according to its prefix
-2. Converts hex strings to binary data
-3. Includes semicolon delimiters for variable-length fields
-4. Assembles the complete message
-5. Sends it using the standard message format
-
-### Testing Script Reference
-
-The HSM project includes several testing scripts in the `script/` directory:
-
-#### Core Scripts
-
-1. **`send_with_length.sh`** - Basic message sending with length prefix
-   ```bash
-   echo -ne 'NC' | ./script/send_with_length.sh 127.0.0.1 1500
-   ```
-
-2. **`prepend_length.sh`** - Length prefix utility (used internally)
-   ```bash
-   cat binary_file | ./script/prepend_length.sh > message_with_length
-   ```
-
-#### Script Integration
-
-The scripts work together to provide comprehensive testing capabilities:
-
-- **Simple commands**: Use `send_with_length.sh` for basic ASCII commands
-- **Complex commands**: Use `parse_command.sh` for commands requiring binary fields
-- **Custom workflows**: Combine scripts for advanced testing scenarios
-
-#### Message Format Handling
-
-All scripts automatically handle the Thales/Racal message format:
-- **Length prefix**: 2-byte big-endian message length
-- **Header**: 4-byte incremental counter
-- **Payload**: Command data (ASCII or binary)
-- **Response parsing**: Automatic hexdump display for verification
-
----
-
-## CLI Commands
-
-The `go_hsm` CLI provides several commands for HSM operations and management. Below are the key commands available:
-
-### Key Management Commands
-
-The `keys` command provides subcommands for key generation and import operations under Local Master Keys (LMK).
-
-#### Generate Keys
-
-Generate random cryptographic keys with proper LMK encryption:
+#### Example 4: ARQC Verification / ARPC Generation (KQ Command)
 
 ```bash
 ./bin/go_hsm keys generate --type 000 --scheme U
