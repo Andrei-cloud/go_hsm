@@ -32,11 +32,12 @@ func deriveEncryptionAndMACKeys(lmk []byte, keyLenBytes int) ([]byte, []byte, er
 
 			mac, err := computeAESCMAC(lmk, blk)
 			if err != nil {
-				return nil, fmt.Errorf("AES-CMAC derivation failed: %v", err)
+				return nil, fmt.Errorf("aes-cmac derivation failed: %v", err)
 			}
 
 			out = append(out, mac...)
 		}
+
 		return out[:keyLenBytes], nil
 	}
 

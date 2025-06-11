@@ -11,16 +11,16 @@ import (
 func computeAESCMAC(key []byte, data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("AES cipher init failed: %v", err)
+		return nil, fmt.Errorf("aes cipher init failed: %v", err)
 	}
 	blockSize := block.BlockSize()
 
-	// Generate subkeys K1 and K2.
+	// Generate subkeys k1 and k2.
 	zero := make([]byte, blockSize)
-	L := make([]byte, blockSize)
-	block.Encrypt(L, zero)
-	K1 := subkeyGenerate(L)
-	K2 := subkeyGenerate(K1)
+	l := make([]byte, blockSize)
+	block.Encrypt(l, zero)
+	k1 := subkeyGenerate(l)
+	k2 := subkeyGenerate(k1)
 
 	var lastBlock []byte
 	dataLen := len(data)
@@ -34,34 +34,34 @@ func computeAESCMAC(key []byte, data []byte) ([]byte, error) {
 		copy(padded, data[dataLen-padLen:])
 		padded[padLen] = 0x80
 
-		lastBlock = xorBlock(padded, K2)
+		lastBlock = xorBlock(padded, k2)
 		data = data[:dataLen-padLen]
 	} else {
 		// no padding for full block.
-		lastBlock = xorBlock(data[dataLen-blockSize:], K1)
+		lastBlock = xorBlock(data[dataLen-blockSize:], k1)
 		data = data[:dataLen-blockSize]
 	}
 
 	// CBC-MAC with IV = zero.
-	X := make([]byte, blockSize)
+	x := make([]byte, blockSize)
 	for i := 0; i < len(data); i += blockSize {
-		blockIn := xorBlock(X, data[i:i+blockSize])
-		block.Encrypt(X, blockIn)
+		blockIn := xorBlock(x, data[i:i+blockSize])
+		block.Encrypt(x, blockIn)
 	}
 
 	// process final block.
-	blockIn := xorBlock(X, lastBlock)
-	block.Encrypt(X, blockIn)
+	blockIn := xorBlock(x, lastBlock)
+	block.Encrypt(x, blockIn)
 
 	mac := make([]byte, blockSize)
-	copy(mac, X)
+	copy(mac, x)
 
 	return mac, nil
 }
 
 // subkeyGenerate shifts block left by 1 bit and XORs with Rb if MSB was set.
 func subkeyGenerate(b []byte) []byte {
-	const Rb = 0x87
+	const rb = 0x87
 	n := len(b)
 	out := make([]byte, n)
 	carry := byte(0)
@@ -72,7 +72,7 @@ func subkeyGenerate(b []byte) []byte {
 	}
 
 	if (b[0] & 0x80) != 0 {
-		out[n-1] ^= Rb
+		out[n-1] ^= rb
 	}
 
 	return out

@@ -1,18 +1,18 @@
-// filepath: pkg/keyblocklmk/unwrap.go
 package keyblocklmk
 
 import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"errors"
 	"fmt"
 )
 
 // UnwrapKeyBlock decrypts a key block using the LMK and returns the Header and clear key.
-func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
+func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	// Minimum length: 16-byte header + 8-byte MAC.
 	if len(keyBlock) < 16+8 {
-		return nil, nil, fmt.Errorf("key block too short.")
+		return nil, nil, errors.New("key block too short")
 	}
 
 	// Parse header.
@@ -20,29 +20,39 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 	if err := header.fromBytes(keyBlock[:16]); err != nil {
 		return nil, nil, fmt.Errorf("invalid header: %v", err)
 	}
-
 	// Determine MAC length by format.
-	format := 'R'
+	// Check if this is a Thales 'S' format based on version field
+	format := 'R'           // Default to TR-31
+	macLen := aes.BlockSize // 16 bytes for TR-31
+
 	if header.Version == 'S' {
 		format = 'S'
-	}
-	macLen := aes.BlockSize
-	if format == 'S' {
 		macLen = 8
+	} else {
+		// For version '1' (AES), we need to determine format another way.
+		// Check if the total length suggests 8-byte MAC vs 16-byte MAC.
+		if len(keyBlock) >= 24 { // minimum: 16 header + 8 MAC
+			// Calculate expected length with 8-byte MAC vs 16-byte MAC
+			// This is a heuristic: if remainder after header is 8 mod 16, likely 8-byte MAC
+			remainder := (len(keyBlock) - 16) % 16
+			if remainder == 8 {
+				format = 'S'
+				macLen = 8
+			}
+		}
 	}
-
 	// Parse optional blocks.
 	offset := 16
 	optCount := int(header.OptionalBlocks)
 	for i := 0; i < optCount; i++ {
 		if offset+3 > len(keyBlock) {
-			return nil, nil, fmt.Errorf("truncated optional block.")
+			return nil, nil, errors.New("truncated optional block")
 		}
 
 		length := int(keyBlock[offset+2])
 		blockEnd := offset + 3 + length
 		if blockEnd > len(keyBlock) {
-			return nil, nil, fmt.Errorf("optional block length out of range.")
+			return nil, nil, errors.New("optional block length out of range")
 		}
 
 		offset = blockEnd
@@ -50,7 +60,7 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 
 	// Extract ciphertext and MAC.
 	if len(keyBlock) < offset+macLen {
-		return nil, nil, fmt.Errorf("key block data too short for MAC.")
+		return nil, nil, errors.New("key block data too short for MAC")
 	}
 
 	cipherText := keyBlock[offset : len(keyBlock)-macLen]
@@ -68,7 +78,7 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 
 	calcFull, err := computeAESCMAC(kbak, append(macInput, cipherText...))
 	if err != nil {
-		return nil, nil, fmt.Errorf("CMAC computation failed: %v", err)
+		return nil, nil, fmt.Errorf("cmac computation failed: %v", err)
 	}
 
 	macCalc := calcFull
@@ -78,7 +88,7 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 
 	// Verify MAC.
 	if !bytes.Equal(recvMac, macCalc) {
-		return nil, nil, fmt.Errorf("MAC verification failed.")
+		return nil, nil, errors.New("mac verification failed")
 	}
 
 	// Decrypt ciphertext using AES-CBC with IV = header bytes.
@@ -89,7 +99,7 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 
 	cipherBlockObj, err := aes.NewCipher(kbek)
 	if err != nil {
-		return nil, nil, fmt.Errorf("AES cipher init failed: %v", err)
+		return nil, nil, fmt.Errorf("aes cipher init failed: %v", err)
 	}
 
 	cbc := cipher.NewCBCDecrypter(cipherBlockObj, headerBytes)
@@ -98,14 +108,14 @@ func UnwrapKeyBlock(lmk []byte, keyBlock []byte) (*Header, []byte, error) {
 
 	// Remove length prefix and padding.
 	if len(plainPadded) < 2 {
-		return nil, nil, fmt.Errorf("decrypted data too short.")
+		return nil, nil, errors.New("decrypted data too short")
 	}
 
 	keyBits := int(plainPadded[0])<<8 | int(plainPadded[1])
 	expectedBytes := (keyBits + 7) / 8
 
 	if expectedBytes > len(plainPadded)-2 {
-		return nil, nil, fmt.Errorf("invalid key length in data.")
+		return nil, nil, errors.New("invalid key length in data")
 	}
 
 	clearKey := plainPadded[2 : 2+expectedBytes]

@@ -16,5 +16,6 @@ func (o OptionalBlock) Marshal() []byte {
 	buf = append(buf, []byte(o.Tag)...)
 	buf = append(buf, byte(len(o.Value)))
 	buf = append(buf, o.Value...)
+
 	return buf
 }

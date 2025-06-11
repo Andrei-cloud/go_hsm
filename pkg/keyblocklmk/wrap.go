@@ -5,7 +5,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"errors"
 	"fmt"
+	"slices"
 )
 
 // WrapKeyBlock encrypts a clear key under the LMK in a key block format ('S' or 'R').
@@ -25,7 +27,7 @@ func WrapKeyBlock(
 	// build length-prefixed plaintext.
 	keyBits := len(key) * 8
 	lengthField := []byte{byte(keyBits >> 8), byte(keyBits & 0xFF)}
-	plain := append(lengthField, key...)
+	plain := slices.Concat(lengthField, key)
 
 	// apply TR-31 padding to multiple of AES block size.
 	blockSize := aes.BlockSize
@@ -49,20 +51,38 @@ func WrapKeyBlock(
 		return nil, err
 	}
 	if len(headerBytes) != blockSize {
-		return nil, fmt.Errorf("header length invalid")
+		return nil, errors.New("header length invalid")
 	}
 
 	cipherBlock, err := aes.NewCipher(kbek)
 	if err != nil {
-		return nil, fmt.Errorf("AES cipher init failed: %v", err)
+		return nil, fmt.Errorf("aes cipher init failed: %v", err)
 	}
 	iv := headerBytes
 	cbc := cipher.NewCBCEncrypter(cipherBlock, iv)
 	ciphertext := make([]byte, len(plain))
 	cbc.CryptBlocks(ciphertext, plain)
 
-	// compute AES-CMAC over header, optional blocks, and ciphertext.
-	macInput := make([]byte, 0, len(headerBytes)+len(ciphertext))
+	// assemble final key block: header, optional blocks, ciphertext, and MAC.
+	// First, calculate the total length excluding the length field itself
+	optionalBlocksSize := 0
+	for _, opt := range optBlocks {
+		optionalBlocksSize += len(opt.Marshal())
+	}
+
+	authFieldSize := aes.BlockSize
+	if format == 'S' {
+		authFieldSize = 8
+	}
+
+	totalLen := len(headerBytes) + optionalBlocksSize + len(ciphertext) + authFieldSize
+
+	// Update the header with the correct length before computing MAC
+	lengthStr := fmt.Sprintf("%04d", totalLen)
+	copy(headerBytes[1:5], []byte(lengthStr))
+
+	// Now compute AES-CMAC over header, optional blocks, and ciphertext with correct length.
+	macInput := make([]byte, 0, len(headerBytes)+len(ciphertext)+optionalBlocksSize)
 	macInput = append(macInput, headerBytes...)
 	for _, opt := range optBlocks {
 		macInput = append(macInput, opt.Marshal()...)
@@ -70,18 +90,19 @@ func WrapKeyBlock(
 	macInput = append(macInput, ciphertext...)
 	authFull, err := computeAESCMAC(kbak, macInput)
 	if err != nil {
-		return nil, fmt.Errorf("CMAC computation failed: %v", err)
+		return nil, fmt.Errorf("cmac computation failed: %v", err)
 	}
 	authField := authFull
 	if format == 'S' {
 		authField = authFull[:8]
 	}
 
-	// assemble final key block: header, optional blocks, ciphertext, and MAC.
-	result := make([]byte, 0, len(headerBytes)+len(ciphertext)+len(authField))
+	// Assemble the final result
+	result := make([]byte, 0, totalLen)
 	result = append(result, headerBytes...)
 	for _, opt := range optBlocks {
-		result = append(result, opt.Marshal()...)
+		optBytes := opt.Marshal()
+		result = append(result, optBytes...)
 	}
 	result = append(result, ciphertext...)
 	result = append(result, authField...)
