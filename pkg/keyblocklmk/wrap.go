@@ -5,9 +5,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // WrapKeyBlock encrypts a clear key under the LMK in a key block format ('S' or 'R').
@@ -64,7 +66,7 @@ func WrapKeyBlock(
 	cbc.CryptBlocks(ciphertext, plain)
 
 	// assemble final key block: header, optional blocks, ciphertext, and MAC.
-	// First, calculate the total length excluding the length field itself
+	// Calculate the total length for the header length field
 	optionalBlocksSize := 0
 	for _, opt := range optBlocks {
 		optionalBlocksSize += len(opt.Marshal())
@@ -75,7 +77,15 @@ func WrapKeyBlock(
 		authFieldSize = 8
 	}
 
-	totalLen := len(headerBytes) + optionalBlocksSize + len(ciphertext) + authFieldSize
+	var totalLen int
+	if format == 'S' {
+		// For Thales format, length is the ASCII representation length (excluding the "S" tag)
+		// Header: 16 ASCII chars + Optional blocks: ASCII chars + Encrypted data+MAC: hex chars (2x binary)
+		totalLen = len(headerBytes) + optionalBlocksSize + (len(ciphertext)+authFieldSize)*2
+	} else {
+		// For TR-31 format, length is the binary representation length
+		totalLen = len(headerBytes) + optionalBlocksSize + len(ciphertext) + authFieldSize
+	}
 
 	// Update the header with the correct length before computing MAC
 	lengthStr := fmt.Sprintf("%04d", totalLen)
@@ -97,15 +107,40 @@ func WrapKeyBlock(
 		authField = authFull[:8]
 	}
 
-	// Assemble the final result
-	result := make([]byte, 0, totalLen)
-	result = append(result, headerBytes...)
-	for _, opt := range optBlocks {
-		optBytes := opt.Marshal()
-		result = append(result, optBytes...)
-	}
-	result = append(result, ciphertext...)
-	result = append(result, authField...)
+	if format == 'S' {
+		// Assemble the final result according to Thales specification:
+		// - Header and optional blocks: ASCII format (not hex-encoded)
+		// - Encrypted key data and MAC: ASCII hex encoded
+		var result strings.Builder
 
-	return result, nil
+		// Add key scheme tag for Thales format
+		result.WriteString("S")
+
+		// Add header as ASCII characters (not hex-encoded)
+		result.Write(headerBytes)
+
+		// Add optional blocks as ASCII characters (not hex-encoded)
+		for _, opt := range optBlocks {
+			optBytes := opt.Marshal()
+			result.Write(optBytes)
+		}
+
+		// Add encrypted key data and MAC as ASCII hex encoded
+		encryptedData := append(ciphertext, authField...)
+		result.WriteString(strings.ToUpper(hex.EncodeToString(encryptedData)))
+
+		return []byte(result.String()), nil
+	} else {
+		// For TR-31 format, return binary data directly
+		finalBlock := make([]byte, 0, len(headerBytes)+len(ciphertext)+len(authField))
+		finalBlock = append(finalBlock, headerBytes...)
+		for _, opt := range optBlocks {
+			optBytes := opt.Marshal()
+			finalBlock = append(finalBlock, optBytes...)
+		}
+		finalBlock = append(finalBlock, ciphertext...)
+		finalBlock = append(finalBlock, authField...)
+
+		return finalBlock, nil
+	}
 }

@@ -1,7 +1,6 @@
 package keyblocklmk_test
 
 import (
-	"encoding/hex"
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/pkg/keyblocklmk"
@@ -37,22 +36,33 @@ func TestThalesKeyBlockFormat(t *testing.T) {
 	}
 
 	// Verify key block structure according to specification.
-	t.Logf("Generated key block (hex): %s", hex.EncodeToString(keyBlock))
+	t.Logf("Generated key block %s", keyBlock)
 	t.Logf("Key block length: %d bytes", len(keyBlock))
 
 	// According to specification, key block should have:
-	// - 16-byte header (ASCII)
+	// - Key scheme tag 'S' (1 ASCII character) for Thales format
+	// - 16-byte header (16 ASCII characters, NOT hex-encoded)
 	// - Optional header blocks (ASCII)
-	// - Encrypted key data (ASCII encoded)
-	// - 8-byte authenticator for format 'S' (ASCII)
+	// - Encrypted key data (ASCII hex encoded)
+	// - 8-byte authenticator for format 'S' (16 ASCII hex characters)
 
-	if len(keyBlock) < 16 {
-		t.Errorf("Key block too short: got %d bytes, want at least 16", len(keyBlock))
+	// Verify key scheme tag for Thales format
+	if len(keyBlock) < 1 || keyBlock[0] != 'S' {
+		t.Errorf("Missing or incorrect key scheme tag: expected 'S' at start")
 	}
 
-	// Check header structure.
-	headerBytes := keyBlock[:16]
-	t.Logf("Header bytes: %s", string(headerBytes))
+	// Extract the key block data after the 'S' tag
+	keyBlockData := keyBlock[1:]
+	if len(keyBlockData) < 16 { // 16 ASCII characters for header
+		t.Errorf("Key block data too short: got %d characters, want at least 16", len(keyBlockData))
+	}
+
+	// Check header structure (first 16 ASCII characters).
+	headerASCII := string(keyBlockData[:16])
+	t.Logf("Header ASCII: %s", headerASCII)
+
+	// Verify the header fields directly from ASCII characters
+	headerBytes := []byte(headerASCII)
 
 	// Verify version field (byte 0).
 	if headerBytes[0] != '1' {

@@ -4,37 +4,120 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
 
+// isHexString checks if a string contains only hex characters
+func isHexString(s string) bool {
+	if len(s)%2 != 0 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
 // UnwrapKeyBlock decrypts a key block using the LMK and returns the Header and clear key.
 func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
+	// Check for Thales key scheme tag "S" at the beginning (ASCII format)
+	keyBlockStr := string(keyBlock)
+	format := 'R' // Default to TR-31
+
+	if len(keyBlockStr) > 0 && keyBlockStr[0] == 'S' {
+		// Thales format with key scheme tag "S"
+		format = 'S'
+		keyBlockStr = keyBlockStr[1:] // Skip the "S" tag
+	}
+
+	// For Thales format with mixed encoding:
+	// - Header and optional blocks are ASCII characters
+	// - Encrypted key data and MAC are hex-encoded
+	var binaryKeyBlock []byte
+
+	if format == 'S' {
+		// Parse header directly as ASCII (16 bytes)
+		if len(keyBlockStr) < 16 {
+			return nil, nil, errors.New("key block too short for header")
+		}
+
+		headerBytes := []byte(keyBlockStr[:16])
+
+		// Parse header to get optional block count
+		var header Header
+		if err := header.fromBytes(headerBytes); err != nil {
+			return nil, nil, fmt.Errorf("invalid header: %v", err)
+		}
+
+		// Calculate optional blocks length
+		offset := 16
+		optCount := int(header.OptionalBlocks)
+		for i := 0; i < optCount; i++ {
+			if offset+3 > len(keyBlockStr) {
+				return nil, nil, errors.New("truncated optional block")
+			}
+
+			length := int(keyBlockStr[offset+2])
+			blockEnd := offset + 3 + length
+			if blockEnd > len(keyBlockStr) {
+				return nil, nil, errors.New("optional block length out of range")
+			}
+
+			offset = blockEnd
+		}
+
+		// Header and optional blocks are ASCII
+		headerAndOptBlocks := []byte(keyBlockStr[:offset])
+
+		// Remaining data (encrypted key + MAC) is hex-encoded
+		hexEncodedData := keyBlockStr[offset:]
+		if !isHexString(hexEncodedData) {
+			return nil, nil, errors.New("encrypted data portion is not valid hex")
+		}
+
+		encryptedData, err := hex.DecodeString(hexEncodedData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid hex-encoded encrypted data: %v", err)
+		}
+
+		// Combine header+optblocks with decoded encrypted data
+		binaryKeyBlock = make([]byte, 0, len(headerAndOptBlocks)+len(encryptedData))
+		binaryKeyBlock = append(binaryKeyBlock, headerAndOptBlocks...)
+		binaryKeyBlock = append(binaryKeyBlock, encryptedData...)
+
+	} else {
+		// For TR-31 format, input should always be binary
+		binaryKeyBlock = []byte(keyBlockStr)
+	}
+
 	// Minimum length: 16-byte header + 8-byte MAC.
-	if len(keyBlock) < 16+8 {
+	if len(binaryKeyBlock) < 16+8 {
 		return nil, nil, errors.New("key block too short")
 	}
 
 	// Parse header.
 	var header Header
-	if err := header.fromBytes(keyBlock[:16]); err != nil {
+	if err := header.fromBytes(binaryKeyBlock[:16]); err != nil {
 		return nil, nil, fmt.Errorf("invalid header: %v", err)
 	}
+
 	// Determine MAC length by format.
-	// Check if this is a Thales 'S' format based on version field
-	format := 'R'           // Default to TR-31
 	macLen := aes.BlockSize // 16 bytes for TR-31
 
-	if header.Version == 'S' {
+	if format == 'S' || header.Version == 'S' {
 		format = 'S'
 		macLen = 8
 	} else {
 		// For version '1' (AES), we need to determine format another way.
 		// Check if the total length suggests 8-byte MAC vs 16-byte MAC.
-		if len(keyBlock) >= 24 { // minimum: 16 header + 8 MAC
+		if len(binaryKeyBlock) >= 24 { // minimum: 16 header + 8 MAC
 			// Calculate expected length with 8-byte MAC vs 16-byte MAC
 			// This is a heuristic: if remainder after header is 8 mod 16, likely 8-byte MAC
-			remainder := (len(keyBlock) - 16) % 16
+			remainder := (len(binaryKeyBlock) - 16) % 16
 			if remainder == 8 {
 				format = 'S'
 				macLen = 8
@@ -45,13 +128,13 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	offset := 16
 	optCount := int(header.OptionalBlocks)
 	for i := 0; i < optCount; i++ {
-		if offset+3 > len(keyBlock) {
+		if offset+3 > len(binaryKeyBlock) {
 			return nil, nil, errors.New("truncated optional block")
 		}
 
-		length := int(keyBlock[offset+2])
+		length := int(binaryKeyBlock[offset+2])
 		blockEnd := offset + 3 + length
-		if blockEnd > len(keyBlock) {
+		if blockEnd > len(binaryKeyBlock) {
 			return nil, nil, errors.New("optional block length out of range")
 		}
 
@@ -59,12 +142,12 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	}
 
 	// Extract ciphertext and MAC.
-	if len(keyBlock) < offset+macLen {
+	if len(binaryKeyBlock) < offset+macLen {
 		return nil, nil, errors.New("key block data too short for MAC")
 	}
 
-	cipherText := keyBlock[offset : len(keyBlock)-macLen]
-	recvMac := keyBlock[len(keyBlock)-macLen:]
+	cipherText := binaryKeyBlock[offset : len(binaryKeyBlock)-macLen]
+	recvMac := binaryKeyBlock[len(binaryKeyBlock)-macLen:]
 
 	// Derive KBEK and KBAK.
 	kbek, kbak, err := deriveEncryptionAndMACKeys(lmk, len(lmk))
@@ -74,7 +157,7 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 
 	// Compute CMAC on header, optional blocks, and ciphertext.
 	macInput := make([]byte, offset)
-	copy(macInput, keyBlock[:offset])
+	copy(macInput, binaryKeyBlock[:offset])
 
 	calcFull, err := computeAESCMAC(kbak, append(macInput, cipherText...))
 	if err != nil {

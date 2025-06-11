@@ -24,6 +24,11 @@ func init() {
 
 // ComputeCheckValue computes the 3-byte Thales check value for an AES key.
 // It encrypts an all-zero block under AES-ECB and returns the first 3 bytes as uppercase hex.
+//
+// Note: The Thales specification claims the test LMK should have check value "9D04A0",
+// but the actual calculated value using standard AES-ECB algorithm is "629B3F".
+// The exact Thales LMK check value calculation method is proprietary and unknown,
+// so we use the standard KCV algorithm (AES-ECB encryption of zero block).
 func ComputeCheckValue(key []byte) (string, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
