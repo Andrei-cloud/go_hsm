@@ -87,6 +87,7 @@ func getKeyUsageMeaning(u string) string {
 	if m, ok := usage[u]; ok {
 		return m
 	}
+
 	return "Unknown key usage."
 }
 
@@ -214,11 +215,13 @@ func getOptionalBlockDataMeaning(identifier, data string) string {
 		if data == "00" {
 			return "Current mechanism"
 		}
+
 		return fmt.Sprintf("Encryption method: %s", data)
 	case "02": // Key Block Authentication.
 		if data == "00" {
 			return "Current mechanism"
 		}
+
 		return fmt.Sprintf("Authentication method: %s", data)
 	case "03": // Start Date/Time.
 		if len(data) >= 13 {
@@ -230,6 +233,7 @@ func getOptionalBlockDataMeaning(identifier, data string) string {
 				data[11:13],
 			)
 		}
+
 		return fmt.Sprintf("Start date/time: %s", data)
 	case "04": // End Date/Time.
 		if len(data) >= 13 {
@@ -241,6 +245,7 @@ func getOptionalBlockDataMeaning(identifier, data string) string {
 				data[11:13],
 			)
 		}
+
 		return fmt.Sprintf("End date/time: %s", data)
 	case "05": // Text.
 		return fmt.Sprintf("Text data: %s", data)

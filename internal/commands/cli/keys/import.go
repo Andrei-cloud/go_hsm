@@ -3,6 +3,7 @@ package keys
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -108,13 +109,12 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 
 	// Check and fix parity if needed.
 	parityOK := cryptoutils.CheckKeyParity(clearKey)
-	if !parityOK {
-		if forceParity {
-			cmd.Printf("Warning: Key has invalid parity, fixing...\n")
-			clearKey = cryptoutils.FixKeyParity(clearKey)
-		} else {
-			return fmt.Errorf("key has invalid DES parity (use --force-parity to fix)")
-		}
+	if !parityOK && !forceParity {
+		return errors.New("key has invalid DES parity (use --force-parity to fix)")
+	}
+	if !parityOK && forceParity {
+		cmd.Printf("Warning: Key has invalid parity, fixing...\n")
+		clearKey = cryptoutils.FixKeyParity(clearKey)
 	}
 
 	// Calculate KCV.
