@@ -314,7 +314,15 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 
 	// Display encrypted key data.
 	cmd.Printf("\nEncrypted Key Data (%d bytes)\n", encryptedKeyLength)
-	encryptedKeyHex := strings.ToUpper(hex.EncodeToString(encryptedKey))
+
+	var encryptedKeyHex string
+	if scheme == 'S' || scheme == 'K' {
+		// For Thales format, encrypted key data is already hex-encoded ASCII.
+		encryptedKeyHex = strings.ToUpper(string(encryptedKey))
+	} else {
+		// For TR-31 format, convert binary data to hex.
+		encryptedKeyHex = strings.ToUpper(hex.EncodeToString(encryptedKey))
+	}
 
 	// Display in rows of 32 hex characters (16 bytes per row).
 	const bytesPerRow = 16
@@ -328,7 +336,13 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 
 	// Display MAC.
 	cmd.Printf("\nKey Block Authenticator (MAC)\n")
-	cmd.Println(strings.ToUpper(hex.EncodeToString(mac)))
+	if scheme == 'S' || scheme == 'K' {
+		// For Thales format, MAC is already hex-encoded ASCII.
+		cmd.Println(strings.ToUpper(string(mac)))
+	} else {
+		// For TR-31 format, convert binary MAC to hex.
+		cmd.Println(strings.ToUpper(hex.EncodeToString(mac)))
+	}
 
 	// Summary.
 	cmd.Printf("\nKey Block Summary:\n")
