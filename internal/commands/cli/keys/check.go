@@ -189,29 +189,29 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 	// Display header as table.
 	cmd.Println("Header (16 bytes)")
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "Offset\tField\tValue\tMeaning")
-	fmt.Fprintf(w, "0\tVersion ID\t%c\t%s\n", header[0], getVersionMeaning(header[0]))
-	fmt.Fprintf(w, "1-4\tKey Block length\t%s\tTotal length of key block: %d bytes\n",
+	_, _ = fmt.Fprintln(w, "Offset\tField\tValue\tMeaning")
+	_, _ = fmt.Fprintf(w, "0\tVersion ID\t%c\t%s\n", header[0], getVersionMeaning(header[0]))
+	_, _ = fmt.Fprintf(w, "1-4\tKey Block length\t%s\tTotal length of key block: %d bytes\n",
 		asciiLen, blockLen)
-	fmt.Fprintf(w, "5-6\tKey usage\t%s\t%s\n", usageCode, getKeyUsageMeaning(usageCode))
-	fmt.Fprintf(w, "7\tAlgorithm\t%c\t%s\n", algorithm, getAlgorithmMeaning(algorithm))
-	fmt.Fprintf(w, "8\tMode of use\t%c\t%s\n", modeOfUse, getModeOfUseMeaning(modeOfUse))
-	fmt.Fprintf(
+	_, _ = fmt.Fprintf(w, "5-6\tKey usage\t%s\t%s\n", usageCode, getKeyUsageMeaning(usageCode))
+	_, _ = fmt.Fprintf(w, "7\tAlgorithm\t%c\t%s\n", algorithm, getAlgorithmMeaning(algorithm))
+	_, _ = fmt.Fprintf(w, "8\tMode of use\t%c\t%s\n", modeOfUse, getModeOfUseMeaning(modeOfUse))
+	_, _ = fmt.Fprintf(
 		w,
 		"9-10\tKey Version Number\t%s\t%s\n",
 		versionNum,
 		getKeyVersionMeaning(versionNum),
 	)
-	fmt.Fprintf(
+	_, _ = fmt.Fprintf(
 		w,
 		"11\tExportability\t%c\t%s\n",
 		exportability,
 		getExportabilityMeaning(exportability),
 	)
-	fmt.Fprintf(w, "12-13\tNumber of optional blocks\t%s\t%d optional blocks\n",
+	_, _ = fmt.Fprintf(w, "12-13\tNumber of optional blocks\t%s\t%d optional blocks\n",
 		optCountStr, optCount)
-	fmt.Fprintf(w, "14-15\tLMK ID\t%s\t%s\n", reserved, getLMKIDMeaning(reserved))
-	w.Flush()
+	_, _ = fmt.Fprintf(w, "14-15\tLMK ID\t%s\t%s\n", reserved, getLMKIDMeaning(reserved))
+	_ = w.Flush()
 
 	// Parse optional header blocks.
 	totalOptionalLength := 0
@@ -254,26 +254,26 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 
 			cmd.Printf("Optional Header %d\n", i+1)
 			wOpt := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-			fmt.Fprintln(wOpt, "Field\tValue\tMeaning")
-			fmt.Fprintf(
+			_, _ = fmt.Fprintln(wOpt, "Field\tValue\tMeaning")
+			_, _ = fmt.Fprintf(
 				wOpt,
 				"Identifier\t%s\t%s\n",
 				identifier,
 				getOptionalBlockMeaning(identifier),
 			)
-			fmt.Fprintf(wOpt, "Length\t%s\t%d\n", lengthStr, blockLength)
+			_, _ = fmt.Fprintf(wOpt, "Length\t%s\t%d\n", lengthStr, blockLength)
 
 			if dataLength > 0 {
-				fmt.Fprintf(
+				_, _ = fmt.Fprintf(
 					wOpt,
 					"Data\t%s\t%s\n",
 					dataStr,
 					getOptionalBlockDataMeaning(identifier, dataStr),
 				)
 			} else {
-				fmt.Fprintln(wOpt, "Data\t\t(no data)")
+				_, _ = fmt.Fprintln(wOpt, "Data\t\t(no data)")
 			}
-			wOpt.Flush()
+			_ = wOpt.Flush()
 
 			offset += int(blockLength)
 			totalOptionalLength += int(blockLength)
