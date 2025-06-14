@@ -9,7 +9,7 @@ import (
 	"fmt"
 )
 
-// isHexString checks if a string contains only hex characters
+// isHexString checks if a string contains only hex characters.
 func isHexString(s string) bool {
 	if len(s)%2 != 0 {
 		return false
@@ -19,6 +19,7 @@ func isHexString(s string) bool {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -28,10 +29,10 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	keyBlockStr := string(keyBlock)
 	format := 'R' // Default to TR-31
 
-	if len(keyBlockStr) > 0 && keyBlockStr[0] == 'S' {
-		// Thales format with key scheme tag "S"
+	if keyBlockStr != "" && keyBlockStr[0] == 'S' {
+		// Thales format with key scheme tag "S".
 		format = 'S'
-		keyBlockStr = keyBlockStr[1:] // Skip the "S" tag
+		keyBlockStr = keyBlockStr[1:] // Skip the "S" tag.
 	}
 
 	// For Thales format with mixed encoding:
@@ -40,57 +41,49 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	var binaryKeyBlock []byte
 
 	if format == 'S' {
-		// Parse header directly as ASCII (16 bytes)
+		// Parse header directly as ASCII (16 bytes).
 		if len(keyBlockStr) < 16 {
 			return nil, nil, errors.New("key block too short for header")
 		}
-
 		headerBytes := []byte(keyBlockStr[:16])
 
-		// Parse header to get optional block count
+		// Parse header to get optional block count.
 		var header Header
 		if err := header.fromBytes(headerBytes); err != nil {
 			return nil, nil, fmt.Errorf("invalid header: %v", err)
 		}
-
-		// Calculate optional blocks length
-		offset := 16
+		// Calculate optional blocks length.
+		asciiOffset := 16
 		optCount := int(header.OptionalBlocks)
 		for i := 0; i < optCount; i++ {
-			if offset+3 > len(keyBlockStr) {
+			if asciiOffset+3 > len(keyBlockStr) {
 				return nil, nil, errors.New("truncated optional block")
 			}
-
-			length := int(keyBlockStr[offset+2])
-			blockEnd := offset + 3 + length
+			length := int(keyBlockStr[asciiOffset+2])
+			blockEnd := asciiOffset + 3 + length
 			if blockEnd > len(keyBlockStr) {
 				return nil, nil, errors.New("optional block length out of range")
 			}
-
-			offset = blockEnd
+			asciiOffset = blockEnd
 		}
+		// Header and optional blocks are ASCII.
+		headerAndOptBlocks := []byte(keyBlockStr[:asciiOffset])
 
-		// Header and optional blocks are ASCII
-		headerAndOptBlocks := []byte(keyBlockStr[:offset])
-
-		// Remaining data (encrypted key + MAC) is hex-encoded
-		hexEncodedData := keyBlockStr[offset:]
+		// Remaining data (encrypted key + MAC) is hex-encoded.
+		hexEncodedData := keyBlockStr[asciiOffset:]
 		if !isHexString(hexEncodedData) {
 			return nil, nil, errors.New("encrypted data portion is not valid hex")
 		}
-
 		encryptedData, err := hex.DecodeString(hexEncodedData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("invalid hex-encoded encrypted data: %v", err)
 		}
-
-		// Combine header+optblocks with decoded encrypted data
+		// Combine header+optblocks with decoded encrypted data.
 		binaryKeyBlock = make([]byte, 0, len(headerAndOptBlocks)+len(encryptedData))
 		binaryKeyBlock = append(binaryKeyBlock, headerAndOptBlocks...)
 		binaryKeyBlock = append(binaryKeyBlock, encryptedData...)
-
 	} else {
-		// For TR-31 format, input should always be binary
+		// For TR-31 format, input should always be binary.
 		binaryKeyBlock = []byte(keyBlockStr)
 	}
 
@@ -111,22 +104,23 @@ func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	if format == 'S' || header.Version == 'S' {
 		format = 'S'
 		macLen = 8
-	} else {
+	} else if len(binaryKeyBlock) >= 24 {
 		// For version '1' (AES), we need to determine format another way.
 		// Check if the total length suggests 8-byte MAC vs 16-byte MAC.
-		if len(binaryKeyBlock) >= 24 { // minimum: 16 header + 8 MAC
-			// Calculate expected length with 8-byte MAC vs 16-byte MAC
-			// This is a heuristic: if remainder after header is 8 mod 16, likely 8-byte MAC
-			remainder := (len(binaryKeyBlock) - 16) % 16
-			if remainder == 8 {
-				format = 'S'
-				macLen = 8
-			}
+		// Calculate expected length with 8-byte MAC vs 16-byte MAC
+		// This is a heuristic: if remainder after header is 8 mod 16, likely 8-byte MAC
+		remainder := (len(binaryKeyBlock) - 16) % 16
+		if remainder == 8 {
+			format = 'S'
+			macLen = 8
 		}
 	}
+
 	// Parse optional blocks.
-	offset := 16
-	optCount := int(header.OptionalBlocks)
+	var (
+		offset   = 16
+		optCount = int(header.OptionalBlocks)
+	)
 	for i := 0; i < optCount; i++ {
 		if offset+3 > len(binaryKeyBlock) {
 			return nil, nil, errors.New("truncated optional block")

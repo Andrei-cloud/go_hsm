@@ -44,7 +44,7 @@ func (h Header) toBytes() ([]byte, error) {
 // fromBytes parses a 16-byte slice into a Header.
 func (h *Header) fromBytes(data []byte) error {
 	if len(data) != 16 {
-		return fmt.Errorf("header must be 16 bytes, got %d.", len(data))
+		return fmt.Errorf("header must be 16 bytes, got %d", len(data))
 	}
 	h.Version = data[0]
 	// Skip bytes 1-4 (Key Block Length) as they're calculated during assembly.

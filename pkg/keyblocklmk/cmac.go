@@ -8,50 +8,72 @@ import (
 )
 
 // computeAESCMAC computes the AES CMAC of data using key K (16 or 32 bytes for AES-128/256).
-func computeAESCMAC(key []byte, data []byte) ([]byte, error) {
+func computeAESCMAC(key, data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("aes cipher init failed: %v", err)
+		return nil, fmt.Errorf("aes cipher init failed: %w", err)
 	}
 	blockSize := block.BlockSize()
 
 	// Generate subkeys k1 and k2.
+	// This follows RFC 4493, Section 2.3.
 	zero := make([]byte, blockSize)
 	l := make([]byte, blockSize)
+	// L = AES-K(0^n).
 	block.Encrypt(l, zero)
+
 	k1 := subkeyGenerate(l)
 	k2 := subkeyGenerate(k1)
 
-	var lastBlock []byte
-	dataLen := len(data)
-	if dataLen == 0 || dataLen%blockSize != 0 {
-		// padding required.
-		padLen := blockSize
-		if dataLen%blockSize != 0 {
-			padLen = dataLen % blockSize
-		}
-		padded := make([]byte, blockSize)
-		copy(padded, data[dataLen-padLen:])
-		padded[padLen] = 0x80
+	dataToProcessInCBC := data
+	var lastBlockXORedWithKey []byte // This will be (M_n XOR K1) or (Padded_M_n XOR K2)
 
-		lastBlock = xorBlock(padded, k2)
-		data = data[:dataLen-padLen]
-	} else {
-		// no padding for full block.
-		lastBlock = xorBlock(data[dataLen-blockSize:], k1)
-		data = data[:dataLen-blockSize]
+	switch {
+	case len(data) == 0:
+		// Case 1: Message length is 0 (M_len = 0).
+		// Pad to one block (0x80 || 0...0) and XOR with K2.
+		// The "message" for CBC processing is empty.
+		// The final block to encrypt is ( (0x80 || 0...0) XOR K2 ) XOR IV (which is 0).
+		padded := make([]byte, blockSize)
+		padded[0] = 0x80 // M_last = M_n || 1 || 0...0
+		lastBlockXORedWithKey = xorBlock(padded, k2)
+		dataToProcessInCBC = []byte{} // Ensure CBC loop does not run.
+	case len(data)%blockSize == 0:
+		// Case 2: Message length is a non-zero multiple of block size (M_len > 0, M_len mod n = 0).
+		// Last block is M_n. XOR with K1.
+		// Process M_1 to M_{n-1} in CBC.
+		lastBlockData := data[len(data)-blockSize:]
+		lastBlockXORedWithKey = xorBlock(lastBlockData, k1)
+		dataToProcessInCBC = data[:len(data)-blockSize]
+	default:
+		// Case 3: Message length is not a multiple of block size (M_len > 0, M_len mod n != 0).
+		// Pad the last block (M_n || 1 || 0...0) and XOR with K2.
+		// Process M_1 to M_{n-1} in CBC.
+		lastPartialBlockLen := len(data) % blockSize
+
+		padded := make([]byte, blockSize)
+		copy(padded, data[len(data)-lastPartialBlockLen:])
+		padded[lastPartialBlockLen] = 0x80
+		// Remaining bytes of 'padded' are already zero.
+
+		lastBlockXORedWithKey = xorBlock(padded, k2)
+		dataToProcessInCBC = data[:len(data)-lastPartialBlockLen]
 	}
 
 	// CBC-MAC with IV = zero.
-	x := make([]byte, blockSize)
-	for i := 0; i < len(data); i += blockSize {
-		blockIn := xorBlock(x, data[i:i+blockSize])
-		block.Encrypt(x, blockIn)
+	// X_0 = 0^n
+	// For i = 1 to n-1: X_i = AES-K( M_i XOR X_{i-1} )
+	x := make([]byte, blockSize) // Chaining variable (X_i), starts as IV (zeros / X_0).
+	for i := 0; i < len(dataToProcessInCBC); i += blockSize {
+		blockIn := xorBlock(x, dataToProcessInCBC[i:i+blockSize]) // M_i XOR X_{i-1}
+		block.Encrypt(x, blockIn)                                 // X_i = AES-K( M_i XOR X_{i-1} )
 	}
 
-	// process final block.
-	blockIn := xorBlock(x, lastBlock)
-	block.Encrypt(x, blockIn)
+	// Process final block.
+	// T = AES-K( M_n^* XOR X_{n-1} )
+	// where M_n^* is lastBlockXORedWithKey.
+	finalInputToAES := xorBlock(x, lastBlockXORedWithKey)
+	block.Encrypt(x, finalInputToAES) // Final encryption, result is T (the MAC).
 
 	mac := make([]byte, blockSize)
 	copy(mac, x)
@@ -82,7 +104,7 @@ func subkeyGenerate(b []byte) []byte {
 func xorBlock(a, b []byte) []byte {
 	n := len(a)
 	out := make([]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = a[i] ^ b[i]
 	}
 

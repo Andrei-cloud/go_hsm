@@ -2,10 +2,8 @@
 package keyblocklmk
 
 import (
-	"crypto/aes"
 	"encoding/hex"
 	"fmt"
-	"strings"
 )
 
 const (
@@ -20,26 +18,4 @@ func init() {
 	if err != nil {
 		panic(fmt.Errorf("invalid default aes lmk hex: %w", err))
 	}
-}
-
-// ComputeCheckValue computes the 3-byte Thales check value for an AES key.
-// It encrypts an all-zero block under AES-ECB and returns the first 3 bytes as uppercase hex.
-//
-// Note: The Thales specification claims the test LMK should have check value "9D04A0",
-// but the actual calculated value using standard AES-ECB algorithm is "629B3F".
-// The exact Thales LMK check value calculation method is proprietary and unknown,
-// so we use the standard KCV algorithm (AES-ECB encryption of zero block).
-func ComputeCheckValue(key []byte) (string, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", fmt.Errorf("aes cipher init failed: %w", err)
-	}
-
-	zeros := make([]byte, aes.BlockSize)
-	encrypted := make([]byte, aes.BlockSize)
-	block.Encrypt(encrypted, zeros)
-
-	val := hex.EncodeToString(encrypted[:3])
-
-	return strings.ToUpper(val), nil
 }

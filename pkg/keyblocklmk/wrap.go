@@ -126,21 +126,21 @@ func WrapKeyBlock(
 		}
 
 		// Add encrypted key data and MAC as ASCII hex encoded
-		encryptedData := append(ciphertext, authField...)
+		encryptedData := slices.Concat(ciphertext, authField)
 		result.WriteString(strings.ToUpper(hex.EncodeToString(encryptedData)))
 
 		return []byte(result.String()), nil
-	} else {
-		// For TR-31 format, return binary data directly
-		finalBlock := make([]byte, 0, len(headerBytes)+len(ciphertext)+len(authField))
-		finalBlock = append(finalBlock, headerBytes...)
-		for _, opt := range optBlocks {
-			optBytes := opt.Marshal()
-			finalBlock = append(finalBlock, optBytes...)
-		}
-		finalBlock = append(finalBlock, ciphertext...)
-		finalBlock = append(finalBlock, authField...)
-
-		return finalBlock, nil
 	}
+
+	// For TR-31 format, return binary data directly
+	finalBlock := make([]byte, 0, len(headerBytes)+len(ciphertext)+len(authField))
+	finalBlock = append(finalBlock, headerBytes...)
+	for _, opt := range optBlocks {
+		optBytes := opt.Marshal()
+		finalBlock = append(finalBlock, optBytes...)
+	}
+	finalBlock = append(finalBlock, ciphertext...)
+	finalBlock = append(finalBlock, authField...)
+
+	return finalBlock, nil
 }

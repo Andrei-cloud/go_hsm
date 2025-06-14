@@ -106,5 +106,6 @@ func equal(a, b []byte) bool {
 			return false
 		}
 	}
+
 	return true
 }

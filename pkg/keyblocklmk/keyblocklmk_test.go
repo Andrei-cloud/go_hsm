@@ -373,20 +373,3 @@ func TestUnwrapErrorConditions(t *testing.T) {
 		})
 	}
 }
-
-// TestComputeCheckValue verifies default test LMK check value matches known.
-func TestComputeCheckValue(t *testing.T) {
-	t.Parallel()
-
-	check, err := keyblocklmk.ComputeCheckValue(keyblocklmk.DefaultTestAESLMK)
-	if err != nil {
-		t.Fatalf("ComputeCheckValue error: %v", err)
-	}
-	// Note: The Thales specification shows check value 9D04A0, but with the given LMK
-	// 9B71333A13F9FAE72F9D0E2DAB4AD6784718012F9244033F3F26A2DE0C8AA11A
-	// the actual check value is 629B3F (AES-ECB encryption of zeros, first 3 bytes).
-	const want = "629B3F"
-	if check != want {
-		t.Errorf("check value = %s, want %s", check, want)
-	}
-}
