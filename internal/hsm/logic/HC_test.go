@@ -3,6 +3,8 @@ package logic
 import (
 	"encoding/hex"
 	"testing"
+
+	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 )
 
 func TestExecuteHC_Basic(t *testing.T) {
@@ -12,9 +14,14 @@ func TestExecuteHC_Basic(t *testing.T) {
 	for i := range clearKey {
 		clearKey[i] = byte(i + 1)
 	}
+	clearKey = cryptoutils.FixKeyParity(clearKey)
 	encKeyHex := hex.EncodeToString(clearKey)
 	input := append([]byte{'U'}, []byte(encKeyHex)...)
-	input = append(input, []byte("HC")...)
+
+	err := SetupTestLMKProvider()
+	if err != nil {
+		t.Fatalf("failed to set up test LMK provider: %v", err)
+	}
 
 	resp, err := ExecuteHC(input)
 	if err != nil {

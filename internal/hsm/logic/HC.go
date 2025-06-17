@@ -14,7 +14,7 @@ func ExecuteHC(input []byte) ([]byte, error) {
 	logInfo("HC: starting key generation")
 
 	// Fast fail: must have at least enough for minimal key (16 hex) + 'HC' (2)
-	if len(input) < 18 {
+	if len(input) < 16 {
 		logError("HC: input too short for key and command code")
 		return nil, errorcodes.Err15
 	}
@@ -32,7 +32,7 @@ func ExecuteHC(input []byte) ([]byte, error) {
 		keyHexLen = keyLen * 2
 		logDebug(fmt.Sprintf("HC: key length: %d bytes (%d hex chars)", keyLen, keyHexLen))
 
-		if len(input) < 1+keyHexLen+2 {
+		if len(input) < 1+keyHexLen {
 			logError("HC: insufficient data for key with scheme")
 			return nil, errorcodes.Err15
 		}
@@ -57,7 +57,7 @@ func ExecuteHC(input []byte) ([]byte, error) {
 		logInfo("HC: processing optional fields")
 		input = input[1:]
 		// Only skip up to 3 optional fields if present, but do not require them
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if len(input) == 0 {
 				break
 			}
