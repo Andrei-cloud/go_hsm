@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/andrei-cloud/go_hsm/pkg/crypto"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
 	"github.com/spf13/cobra"
@@ -118,10 +119,7 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Calculate KCV.
-	kcv, err := cryptoutils.KeyCV(clearKey, 3)
-	if err != nil {
-		return fmt.Errorf("failed to calculate KCV: %w", err)
-	}
+	kcv := crypto.CalculateKCV(clearKey)
 
 	// Encrypt under variant LMK.
 	encrypted, err := variantlmk.EncryptKeyUnderScheme(
