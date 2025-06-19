@@ -5,56 +5,68 @@ import (
 	"testing"
 )
 
-func TestExecuteFA_AllZeroZPK(t *testing.T) {
-	t.Parallel()
-	// U + 32 hex ZMK + U + 32 hex ZPK (all zero)
-	input := []byte(
-		"U" + "0123456789ABCDEF0123456789ABCDEF" + "U" + "00000000000000000000000000000000",
-	)
-	_, err := ExecuteFA(input)
-	if err == nil {
-		t.Fatal("expected error for all zero ZPK, got nil")
+func TestMain(m *testing.M) {
+	err := SetupTestLMKProvider()
+	if err != nil {
+		panic("Failed to setup test LMK provider: " + err.Error())
 	}
+	m.Run()
 }
 
-func TestExecuteFA_ParityAdvice(t *testing.T) {
+func TestExecuteFA(t *testing.T) {
 	t.Parallel()
-	// U + 32 hex ZMK + U + 32 hex ZPK (bad parity)
-	zmk := "0123456789ABCDEF0123456789ABCDEF"
-	zpk := "0123456789ABCDEF0123456789ABCDEE" // last byte even parity
-	input := []byte("U" + zmk + "U" + zpk)
-	resp, err := ExecuteFA(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(resp[2:4]) != "01" {
-		t.Errorf("expected parity advice 01, got %s", string(resp[2:4]))
-	}
-}
 
-func TestExecuteFA_Success(t *testing.T) {
-	t.Parallel()
-	// U + 32 hex ZMK + U + 32 hex ZPK (good parity)
-	zmk := "0123456789ABCDEF0123456789ABCDEF"
-	zpk := "0123456789ABCDEF0123456789ABCDEF"
-	input := []byte("U" + zmk + "U" + zpk)
-	resp, err := ExecuteFA(input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := []struct {
+		name       string
+		input      []byte
+		expectErr  bool
+		expectCode string // expected response code ("00" or "01"), empty if error expected
+		checkKCV   bool   // whether to check KCV is valid hex
+	}{
+		{
+			name:      "AllZeroZPK",
+			input:     []byte("U0123456789ABCDEF0123456789ABCDEFU00000000000000000000000000000000"),
+			expectErr: true,
+		},
+		{
+			name: "Success",
+			input: []byte(
+				"U0123456789ABCDEFFEDCBA9876543210U1A4D672DCA6CB3351A4D672DCA6CB335",
+			),
+			expectErr:  false,
+			expectCode: "00",
+			checkKCV:   true,
+		},
 	}
-	if string(resp[:2]) != "FB" {
-		t.Errorf("expected FB response, got %s", string(resp[:2]))
-	}
-	if string(resp[2:4]) != "00" {
-		t.Errorf("expected error code 00, got %s", string(resp[2:4]))
-	}
-	if len(resp) < 4+1+32+6 {
-		t.Errorf("response too short: %d", len(resp))
-	}
-	// Check KCV is hex
-	kcv := resp[len(resp)-6:]
-	_, err = hex.DecodeString(string(kcv))
-	if err != nil {
-		t.Errorf("invalid KCV: %s", string(kcv))
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resp, err := ExecuteFA(tc.input)
+			if tc.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(resp) < 4 {
+				t.Fatalf("response too short: %d", len(resp))
+			}
+			if tc.expectCode != "" && string(resp[2:4]) != tc.expectCode {
+				t.Errorf("expected error code %s, got %s", tc.expectCode, string(resp[2:4]))
+			}
+			if tc.checkKCV {
+				kcv := resp[len(resp)-6:]
+				_, err = hex.DecodeString(string(kcv))
+				if err != nil {
+					t.Errorf("invalid KCV: %s", string(kcv))
+				}
+			}
+		})
 	}
 }

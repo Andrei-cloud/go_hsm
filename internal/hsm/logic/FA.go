@@ -89,6 +89,18 @@ func ExecuteFA(input []byte) ([]byte, error) {
 		logError("FA: invalid ZPK hex format")
 		return nil, errorcodes.Err15
 	}
+	// Check for all-zero ZPK input (before decryption)
+	allZeroZpkInput := true
+	for _, b := range zpkBytes {
+		if b != 0 {
+			allZeroZpkInput = false
+			break
+		}
+	}
+	if allZeroZpkInput {
+		logError("FA: all zero ZPK input detected")
+		return nil, errorcodes.Err11
+	}
 	logDebug(fmt.Sprintf("FA: encrypted ZPK value: %x", zpkBytes))
 
 	// Decrypt ZMK under LMK (pair 04-05, key type 000)
@@ -97,6 +109,19 @@ func ExecuteFA(input []byte) ([]byte, error) {
 	if err != nil {
 		logError("FA: ZMK decryption failed")
 		return nil, errorcodes.Err68
+	}
+
+	// Check for all-zero ZMK
+	allZeroZmk := true
+	for _, b := range clearZmk {
+		if b != 0 {
+			allZeroZmk = false
+			break
+		}
+	}
+	if allZeroZmk {
+		logError("FA: all zero ZMK detected")
+		return nil, errorcodes.Err11
 	}
 
 	logInfo("FA: verifying ZMK parity")
@@ -133,12 +158,10 @@ func ExecuteFA(input []byte) ([]byte, error) {
 	}
 
 	// Check ZPK parity (advice only)
-	zpkParityError := false
 	logInfo("FA: checking ZPK parity")
 	if !cryptoutils.CheckKeyParity(clearZpk) {
-		logInfo("FA: fixing ZPK parity")
-		zpkParityError = true
-		clearZpk = cryptoutils.FixKeyParity(clearZpk)
+		logError("FA: ZPK parity check failed")
+		return nil, errorcodes.Err10
 	}
 
 	// Encrypt ZPK under LMK (pair 06-07, key type 001)
@@ -160,11 +183,7 @@ func ExecuteFA(input []byte) ([]byte, error) {
 
 	logInfo("FA: formatting response")
 	resp := []byte("FB")
-	if zpkParityError {
-		resp = append(resp, []byte("01")...)
-	} else {
-		resp = append(resp, []byte("00")...)
-	}
+	resp = append(resp, []byte("00")...)
 	resp = appendEncryptedKeyToResponse(resp, lmkScheme, lmkEncryptedZpk)
 	resp = append(resp, kcv...)
 
