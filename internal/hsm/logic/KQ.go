@@ -177,7 +177,7 @@ func ExecuteKQ(input []byte) ([]byte, error) {
 	index += 2
 
 	// Validate transaction data length.
-	if transactionDataLength < 1 || transactionDataLength > 255 {
+	if transactionDataLength < 1 || transactionDataLength > 252 {
 		logError("KQ: Invalid transaction data length")
 		return nil, errorcodes.Err80
 	}
