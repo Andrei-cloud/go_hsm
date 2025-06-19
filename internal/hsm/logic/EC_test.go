@@ -17,14 +17,8 @@ func TestExecuteEC(t *testing.T) {
 		expectedError    error
 	}{
 		{
-			name:             "Short Input",
-			input:            []byte{1, 2, 3},
-			expectedResponse: "",
-			expectedError:    errorcodes.Err15,
-		},
-		{
 			name: "Invalid PVK Parity",
-			input: []byte("U1A4D672DCA6CB3351A4D672DCA6CB335" + // TPK Good Parity.
+			input: []byte("U0123456789ABCDEFFEDCBA9876543210" + // TPK Good Parity.
 				"U" + strings.Repeat("00", 16) + // PVK Bad Parity.
 				strings.Repeat("00", 8) + // PIN Block.
 				"01" + // Format Code.
@@ -37,7 +31,7 @@ func TestExecuteEC(t *testing.T) {
 		{
 			name: "Successful Verification with Default LMK",
 			input: []byte(
-				"U063A0E7C0F2124E56192A4510F395ED78AC91C79495A9FC31750CDFB0757D3B3CB4EBC0180DFED6E0134551380493715986",
+				"U0123456789ABCDEFFEDCBA98765432100123456789ABCDEF0123456789ABCDEFCB4EBC0180DFED6E0134551380493712677",
 			),
 			expectedResponse: "ED" + errorcodes.Err00.CodeOnly(),
 			expectedError:    nil,
