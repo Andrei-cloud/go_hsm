@@ -24,14 +24,6 @@ type BufferPool struct {
 	sizeBuckets []int
 	mu          sync.RWMutex
 
-	// Metrics for pool usage
-	hits        int64        // Counter for buffer reuse hits
-	misses      int64        // Counter for buffer allocation misses
-	allocations int64        // Counter for total allocations
-	oversized   int64        // Counter for buffers that exceeded the largest bucket
-	resized     int64        // Counter for buffer resizes
-	statsMu     sync.RWMutex // Separate mutex for statistics to avoid contention
-
 	// Resize hints track common buffer sizes to optimize bucket allocation
 	resizeHints    map[int]int // Maps requested sizes to actual sizes
 	resizeHintsMu  sync.RWMutex
@@ -105,61 +97,29 @@ func (bp *BufferPool) Get(size int) []byte {
 	bp.mu.RLock()
 	defer bp.mu.RUnlock()
 
-	// Track total allocations
-	bp.statsMu.Lock()
-	bp.allocations++
-	bp.statsMu.Unlock()
-
 	// Get optimal bucket size using hints
 	bucketSize := bp.getBestBucketSize(size)
 
 	// Check if we need an oversized buffer
 	if bucketSize > bp.sizeBuckets[len(bp.sizeBuckets)-1] {
-		bp.statsMu.Lock()
-		bp.oversized++
-		bp.misses++
-		bp.statsMu.Unlock()
-
 		return make([]byte, size)
 	}
 
 	bucket := bp.buckets[bucketSize]
 	if bucket == nil {
-		bp.statsMu.Lock()
-		bp.misses++
-		bp.statsMu.Unlock()
-
 		return make([]byte, size)
 	}
 
 	if buf, ok := bucket.ring.Dequeue(); ok {
-		bp.statsMu.Lock()
-		bp.hits++
-		bp.statsMu.Unlock()
-
 		return buf[:size:cap(buf)]
 	}
 
 	rawBuf := bucket.pool.Get()
 	if buf, ok := rawBuf.([]byte); ok {
-		if cap(buf) == 0 {
-			bp.statsMu.Lock()
-			bp.misses++
-			bp.statsMu.Unlock()
-		} else {
-			bp.statsMu.Lock()
-			bp.hits++
-			bp.statsMu.Unlock()
-		}
-
 		return buf[:size:cap(buf)]
 	}
 
 	// Something went wrong with the type assertion
-	bp.statsMu.Lock()
-	bp.misses++
-	bp.statsMu.Unlock()
-
 	return make([]byte, size)
 }
 
@@ -181,7 +141,7 @@ func (bp *BufferPool) Prewarm(count int) {
 
 		for range count {
 			b := make([]byte, 0, size)
-			pool.pool.Put(&b)
+			pool.pool.Put(b)
 		}
 	}
 }
@@ -233,49 +193,6 @@ func (bp *BufferPool) Put(buf []byte) {
 		bucket.pool.Put(buf)
 	}
 	bp.mu.RUnlock()
-}
-
-// Stats returns a map of statistics about the buffer pool's performance.
-// The statistics include:
-// - allocations: Total number of buffer requests
-// - hits: Number of times an existing buffer was reused
-// - misses: Number of times a new buffer had to be allocated
-// - oversized: Number of buffers that exceeded the largest bucket size
-// - hit_rate_pct: Percentage of requests that were served from the pool
-// - bucket_stats: Map of per-bucket statistics.
-func (bp *BufferPool) Stats() map[string]any {
-	bp.statsMu.RLock()
-	defer bp.statsMu.RUnlock()
-
-	stats := make(map[string]any)
-	stats["allocations"] = bp.allocations
-	stats["hits"] = bp.hits
-	stats["misses"] = bp.misses
-	stats["oversized"] = bp.oversized
-	stats["resized"] = bp.resized
-
-	// Calculate hit rate as percentage
-	if bp.allocations > 0 {
-		hitRate := float64(bp.hits) / float64(bp.allocations) * 100.0
-		stats["hit_rate_pct"] = hitRate
-	} else {
-		stats["hit_rate_pct"] = 0.0
-	}
-
-	return stats
-}
-
-// ResetStats resets all performance counters to zero.
-// This is useful for gathering statistics over specific time periods.
-func (bp *BufferPool) ResetStats() {
-	bp.statsMu.Lock()
-	defer bp.statsMu.Unlock()
-
-	bp.allocations = 0
-	bp.hits = 0
-	bp.misses = 0
-	bp.oversized = 0
-	bp.resized = 0
 }
 
 // Trim releases unused buffers from the pools to the garbage collector.

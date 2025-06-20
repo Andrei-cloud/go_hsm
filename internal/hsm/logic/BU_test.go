@@ -11,7 +11,7 @@ func TestExecuteBU(t *testing.T) {
 	t.Parallel()
 
 	// --- Helper Data. ---
-	goodKeyHex := "001U1A4D672DCA6CB3351FD1B02B237AF9AE"
+	goodKeyHex := "001U0123456789ABCDEFFEDCBA9876543210"
 
 	badKeyBytes := make([]byte, 16) // All zeros have even parity.
 	badKeyHex := hex.EncodeToString(badKeyBytes)

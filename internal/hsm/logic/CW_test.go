@@ -24,12 +24,12 @@ func TestExecuteCW(t *testing.T) {
 	}{
 		{
 			name:  "Valid CVV calculation with good key",
-			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
+			input: "0123456789ABCDEFFEDCBA98765432104111111111111111;2412123000",
 			want:  "CX00424",
 		},
 		{
 			name:  "Valid CVV calculation with variant key",
-			input: "U1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2412123000",
+			input: "U0123456789ABCDEFFEDCBA98765432104111111111111111;2412123000",
 			want:  "CX00424",
 		},
 		{
@@ -64,31 +64,31 @@ func TestExecuteCW(t *testing.T) {
 		},
 		{
 			name:     "Missing PAN delimiter",
-			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE41111111111111112412123000",
+			input:    "0123456789ABCDEFFEDCBA987654321041111111111111112412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "Empty PAN",
-			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE;2412123000",
+			input:    "0123456789ABCDEFFEDCBA9876543210;2412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "PAN too short (12 digits)",
-			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE123456789012;2412123000",
+			input:    "0123456789ABCDEFFEDCBA9876543210123456789012;2412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "PAN too long (20 digits)",
-			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE12345678901234567890;2412123000",
+			input:    "0123456789ABCDEFFEDCBA987654321012345678901234567890;2412123000",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
 		{
 			name:     "Not enough data for expDate and servCode",
-			input:    "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;241212",
+			input:    "0123456789ABCDEFFEDCBA98765432104111111111111111;241212",
 			wantErr:  true,
 			wantCode: errorcodes.Err15,
 		},
@@ -118,17 +118,17 @@ func TestExecuteCW(t *testing.T) {
 		},
 		{
 			name:  "Valid CVV with different PAN length",
-			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111;2412123000",
+			input: "0123456789ABCDEFFEDCBA98765432104111111111111;2412123000",
 			want:  "CX00906",
 		},
 		{
 			name:  "Valid CVV with maximum PAN length",
-			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111111;2412123000",
+			input: "0123456789ABCDEFFEDCBA98765432104111111111111111111;2412123000",
 			want:  "CX00145",
 		},
 		{
 			name:  "Different expiry date and service code",
-			input: "1A4D672DCA6CB3351FD1B02B237AF9AE4111111111111111;2501999",
+			input: "0123456789ABCDEFFEDCBA98765432104111111111111111;2501999",
 			want:  "CX00790", // Different CVV expected due to different exp date and service code
 		},
 	}

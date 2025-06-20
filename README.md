@@ -35,7 +35,7 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - ☑️ Table-driven tests and example-driven documentation for all exported APIs.
 - ☑️ Structured logging and error handling for robust production and development use.
 - ☑️ **Complete support for standard Thales test Variant LMK**.
-- ⏳ Key block (TR-31) support (pending).
+- ☑️ **Key block (TR-31 and Thales) support with parsing and validation**.
 - ⏳ Additional HSM commands (pending).
 
 ---
@@ -347,6 +347,74 @@ The CLI provides comprehensive error checking and validation:
 
 If a key fails parity validation without `--force-parity`, the command will exit with an error. Use `--force-parity` to automatically correct parity bits before importing.
 
+**Key Block Parsing Options:**
+- `--keyblock`: Key block string to parse (Thales 'S', 'K', or TR-31 'R' format)
+- `--lmk-index`: LMK index for key block validation (optional)
+
+**Example: Parse Thales Key Block**
+```bash
+./bin/go_hsm keys check --keyblock S1009651TB00S00003F7FA0520BABA0C6A99E88E82D48040FA4826CA256996A532A1E0059A90B472E477C5926420CA4C7
+```
+Output:
+```
+Header (16 bytes)
+Offset   Field                       Value   Meaning
+0        Version ID                  1       Thales Key Block protected by an AES key
+1-4      Key Block length            0096    Total length of key block: 96 bytes
+5-6      Key usage                   51      3DES Terminal Key Encryption (TMK)
+7        Algorithm                   T       3-DES
+8        Mode of use                 B       Both encrypt and decrypt
+9-10     Key Version Number          00      Key versioning not used
+11       Exportability               S       Sensitive; all other export possibilities permitted
+12-13    Number of optional blocks   00      0 optional blocks
+14-15    LMK ID                      00      LMK ID 00 (default LMK)
+
+Encrypted Key Data (72 bytes)
+3F7FA0520BABA0C6A99E88E82D48040F
+A4826CA256996A532A1E0059A90B472E
+477C5926
+
+Key Block Authenticator (MAC)
+420CA4C7
+
+Key Block Summary:
+- Format: S (Thales Secure Key Block)
+- Total Length: 96 bytes
+- Header: 16 bytes
+- Optional Headers: 0 bytes (0 blocks)
+- Encrypted Key Data: 72 bytes
+- MAC: 8 bytes
+
+Key block parsed successfully. Provide --lmk-index to validate.
+```
+
+#### Key Block Format Support
+
+The go_hsm system now includes comprehensive support for industry-standard key blocks:
+
+**Supported Formats:**
+- **Thales 'S' Format**: Proprietary Thales key block format with 8-byte MAC
+- **TR-31 'R' Format**: Standard ANSI X9 TR-31 key blocks with 16-byte MAC
+- **Mixed Encoding**: Thales format with ASCII headers and hex-encoded data
+
+**Key Block Features:**
+- **Header Parsing**: Complete analysis of 16-byte headers with field-by-field breakdown
+- **Optional Blocks**: Support for optional header blocks with TLV structure parsing
+- **MAC Verification**: Integrity checking using AES-CMAC authentication
+- **Multiple Algorithms**: Support for AES and 3DES key protection
+- **Format Detection**: Automatic detection of key block format and structure
+
+**Key Block Structure Analysis:**
+The check command provides detailed analysis including:
+- Version identification (AES vs 3DES protection)
+- Key usage codes and meanings
+- Algorithm and mode of use
+- Exportability restrictions  
+- Optional header block parsing
+- Encrypted key data visualization
+- MAC/authenticator verification
+- Summary statistics
+
 ### Other CLI Commands
 
 #### Server Management
@@ -363,6 +431,77 @@ If a key fails parity validation without `--force-parity`, the command will exit
 # Create new plugin
 ./bin/go_hsm plugin create FO --desc "Format Output" --version 1.0.0 --author "Alice"
 ```
+
+---
+
+## Key Block Implementation (keyblocklmk Package)
+
+The `keyblocklmk` package provides comprehensive implementation of Thales and TR-31 key block standards, representing a significant enhancement over the main branch's basic variant LMK support.
+
+### Key Differences from Main Branch
+
+#### Main Branch Capabilities
+- **Variant LMK System**: Traditional Thales Variant LMK encryption using static variant bytes
+- **DES-based Protection**: 3DES encryption with variant-modified LMK pairs
+- **Basic Key Management**: Generate, import, and check keys with simple schemes (X, U, T)
+- **Limited Standards Support**: Proprietary Thales variant scheme only
+
+#### New Key Block Branch Features
+
+**Enhanced Cryptographic Foundation:**
+- **AES-256 LMK**: Modern AES-256 base Local Master Key instead of DES-based variants
+- **CMAC-based Key Derivation**: Cryptographically secure key derivation using AES-CMAC per ISO 20038
+- **Strong MAC Authentication**: AES-CMAC for integrity protection instead of basic checksums
+
+**Industry Standard Compliance:**
+- **TR-31 Support**: Full ANSI X9 TR-31 key block standard implementation
+- **Thales Format 'S'**: Native support for Thales proprietary key block format  
+- **Mixed Format Handling**: Automatic detection and parsing of different key block types
+- **Header Field Parsing**: Complete analysis of 16-byte headers with semantic interpretation
+
+**Advanced Key Protection:**
+- **Key Block Encryption**: Secure key wrapping using derived KBEK (Key Block Encryption Key)
+- **Integrity Binding**: MAC covers both key data and metadata for tamper detection
+- **Optional Header Blocks**: Support for extensible metadata in TLV format
+- **Format-Specific MAC**: 8-byte MAC for Thales 'S', 16-byte MAC for TR-31 'R'
+
+#### Key Block Structure
+```
+┌─────────────────┬─────────────────┬─────────────────┬─────────────────┐
+│ Header (16B)    │ Optional Blocks │ Encrypted Key   │ MAC (8B/16B)    │
+│ - Version       │ - TLV Structure │ - AES-CBC       │ - AES-CMAC      │
+│ - Usage/Algorithm│ - Metadata     │ - Length prefix │ - Truncated (S) │
+│ - Exportability │ - Extensions    │ - Random padding│ - Full MAC (R)  │
+└─────────────────┴─────────────────┴─────────────────┴─────────────────┘
+```
+
+#### Security Enhancements
+- **IV Binding**: CBC IV derived from header ensures header integrity
+- **Authenticated Encryption**: MAC covers header + optional blocks + ciphertext  
+- **Length Protection**: Key bit length embedded in plaintext prevents substitution
+- **Format Validation**: Comprehensive parsing with error detection
+
+### Use Cases and Benefits
+
+**Enterprise Integration:**
+- **HSM Interoperability**: Compatible with Thales payShield, SafeNet, and other HSMs
+- **Standard Compliance**: Meets PCI DSS requirements for key protection
+- **Audit Trail**: Detailed parsing for compliance reporting
+- **Migration Support**: Bridge between proprietary and standard formats
+
+**Development and Testing:**
+- **Format Validation**: Verify key block structure and integrity
+- **Debugging Tools**: Field-by-field analysis for troubleshooting
+- **Test Vector Support**: Compatible with industry test vectors
+- **Cross-Platform**: Pure Go implementation for portability
+
+**Security Advantages:**
+- **Cryptographic Agility**: Modern AES-256 foundation
+- **Tamper Detection**: Strong MAC authentication  
+- **Forward Compatibility**: Extensible header format
+- **Standards Alignment**: Industry-proven key protection methods
+
+The key block implementation represents a significant advancement in cryptographic key management, moving from proprietary variant schemes to industry-standard key protection mechanisms while maintaining backward compatibility and ease of use.
 
 ---
 

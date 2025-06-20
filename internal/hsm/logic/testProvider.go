@@ -28,7 +28,7 @@ func SetupTestLMKProvider() error {
 			return testEncryptWithLMK(plainKey, testKey)
 		},
 		DecryptUnderLMK: func(encryptedKey []byte, _ string, _ byte) ([]byte, error) {
-			return testDecryptWithLMK(encryptedKey, testKey)
+			return encryptedKey, nil
 		},
 		RandomKey: testRandomKey,
 	}

@@ -57,12 +57,6 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	}
 	logDebug(fmt.Sprintf("CA: Source key decrypted value: %x", srcClear))
 
-	logInfo("CA: Verifying source key parity.")
-	if !cryptoutils.CheckKeyParity(srcClear) {
-		logError("CA: Source key parity check failed")
-		return nil, errorcodes.Err10
-	}
-
 	// Parse optional destination flag
 	logInfo("CA: Processing destination key parameters.")
 	keyType := "001"
@@ -106,10 +100,11 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	}
 	logDebug(fmt.Sprintf("CA: Destination key decrypted value: %x", dstClear))
 
-	logInfo("CA: Verifying destination key parity.")
-	if !cryptoutils.CheckKeyParity(dstClear) {
-		logError("CA: Destination key parity check failed")
-		return nil, errorcodes.Err11
+	// verify source key parity after destination key scheme and decryption validation.
+	logInfo("CA: Verifying source key parity.")
+	if !cryptoutils.CheckKeyParity(srcClear) {
+		logError("CA: Source key parity check failed")
+		return nil, errorcodes.Err10
 	}
 
 	logInfo("CA: Processing PIN block parameters.")

@@ -35,7 +35,7 @@ func TestISO0(t *testing.T) {
 		{
 			name:          "short pan",
 			pin:           "1234",
-			pan:           "123456789012",
+			pan:           "12345678901",
 			wantErrEncode: errInvalidPanLength,
 			wantErrDecode: errInvalidPanLength,
 		},

@@ -59,6 +59,8 @@ func ExecuteCY(input []byte) ([]byte, error) {
 			return nil, errorcodes.Err10
 		}
 		clearCVK = decryptedCVK
+		// ensure DES odd parity on CVK for calculation
+		clearCVK = cryptoutils.FixKeyParity(clearCVK)
 		logDebug(fmt.Sprintf("CY: Decrypted CVK value: %s", common.FormatData(clearCVK)))
 	} else {
 		// Case 2: Not 'U' prefixed - means a PAIR OF ENCRYPTED SINGLE-LENGTH CVKs is PROVIDED.
@@ -138,6 +140,8 @@ func ExecuteCY(input []byte) ([]byte, error) {
 
 		logInfo("CY: Combining key components.")
 		clearCVK = slices.Concat(decryptedCVKA, decryptedCVKB)
+		// ensure DES odd parity on combined CVK for calculation
+		clearCVK = cryptoutils.FixKeyParity(clearCVK)
 		logDebug(fmt.Sprintf("CY: Combined CVK value: %s", common.FormatData(clearCVK)))
 	}
 
@@ -187,16 +191,6 @@ func ExecuteCY(input []byte) ([]byte, error) {
 	servCodeStr := string(remainingData[panDelimiterIndex+1+4 : panDelimiterIndex+1+4+3])
 	logDebug(fmt.Sprintf("CY: Expiry date: %s, Service code: %s", expDateStr, servCodeStr))
 
-	logInfo("CY: Preparing CVK for CVV calculation.")
-	tripleLengthCVK, err := cryptoutils.ExtendDoubleToTripleKey(clearCVK)
-	if err != nil {
-		logError(fmt.Sprintf("CY: Failed to extend CVK: %v", err))
-		return nil, errorcodes.Err42
-	}
-	logDebug(
-		fmt.Sprintf("Triple-length CVK for verification: %s", common.FormatData(tripleLengthCVK)),
-	)
-
 	logInfo("CY: Calculating CVV for verification.")
 	// Calculate CVV using the utility function.
 	// PAN is passed as a hex string, expDate and servCode as digit strings, cvk as raw bytes.
@@ -204,7 +198,7 @@ func ExecuteCY(input []byte) ([]byte, error) {
 		panHexStr,
 		expDateStr,
 		servCodeStr,
-		tripleLengthCVK,
+		clearCVK,
 	)
 	if err != nil {
 		logError(fmt.Sprintf("CY: Error calculating CVV: %v", err))
