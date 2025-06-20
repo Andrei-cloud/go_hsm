@@ -218,7 +218,7 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 	if optCount > 0 {
 		cmd.Printf("\nOptional Header Blocks\n")
 
-		for i := 0; i < optCount; i++ {
+		for i := range optCount {
 			if offset+4 > len(data) {
 				cmd.Printf("Error: insufficient data for optional block %d header\n", i+1)
 				return

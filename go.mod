@@ -10,7 +10,6 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/tetratelabs/wazero v1.9.0
-	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476
 )
 
 require (
