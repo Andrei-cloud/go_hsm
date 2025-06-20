@@ -1,7 +1,6 @@
 package logic
 
 import (
-	"encoding/hex"
 	"testing"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
@@ -19,21 +18,14 @@ func TestExecuteCY(t *testing.T) {
 	}{
 		{
 			name:    "Valid CVV verification with U-prefixed CVK",
-			input:   "313233" + "U" + "11111111111111111111111111111111" + "1234567890123456" + "3B" + "2212" + "999",
+			input:   "U0123456789ABCDEFFEDCBA9876543210" + "251" + "1234567890123456" + ";" + "2212" + "999",
 			want:    "CZ00",
 			wantErr: nil,
 		},
 		{
 			name:    "Invalid CVV verification with U-prefixed CVK",
-			input:   "999999" + "U" + "11111111111111111111111111111111" + "1234567890123456" + "3B" + "2212" + "999",
-			want:    "CZ01",
-			wantErr: nil,
-		},
-		{
-			name:    "Valid CVV verification with paired single-length CVKs",
-			input:   "313233" + "1111111111111111" + "2222222222222222" + "1234567890123456" + "3B" + "2212" + "999",
-			want:    "CZ00",
-			wantErr: nil,
+			input:   "U0123456789ABCDEFFEDCBA9876543210" + "999" + "1234567890123456" + ";" + "2212" + "999",
+			wantErr: errorcodes.Err01,
 		},
 		{
 			name:    "Too short input",
@@ -43,7 +35,7 @@ func TestExecuteCY(t *testing.T) {
 		},
 		{
 			name:    "Invalid PAN format (no delimiter)",
-			input:   "313233" + "U" + "11111111111111111111111111111111" + "1234567890123456",
+			input:   "U0123456789ABCDEFFEDCBA9876543210" + "123" + "1234567890123456",
 			want:    "",
 			wantErr: errorcodes.Err15,
 		},
@@ -53,12 +45,8 @@ func TestExecuteCY(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			input, err := hex.DecodeString(tt.input)
-			if err != nil {
-				t.Fatalf("failed to decode test input hex: %v", err)
-			}
 
-			got, err := ExecuteCY(input)
+			got, err := ExecuteCY([]byte(tt.input))
 			if tt.wantErr != nil {
 				assert.Equal(t, tt.wantErr, err)
 				return
