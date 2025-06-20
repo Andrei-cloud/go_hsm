@@ -371,15 +371,11 @@ func (pm *PluginManager) HSM() *hsm.HSM {
 // This is useful for releasing large cached slices back to Go's allocator
 // during idle periods or after processing large payloads.
 func (pm *PluginManager) CleanupPooledBuffers() {
-	oldPool := pm.bufferPool
-
 	// Create new pool first to avoid any race conditions
 	pm.bufferPool = hsmplugin.NewBufferPool()
 
 	// Pre-warm the pool with a few buffers for common sizes to avoid cold starts
 	pm.bufferPool.Prewarm(10)
 
-	log.Debug().
-		Interface("stats", oldPool.Stats()).
-		Msg("buffer pool statistics before cleanup")
+	log.Debug().Msg("buffer pool recreated and prewarmed")
 }
