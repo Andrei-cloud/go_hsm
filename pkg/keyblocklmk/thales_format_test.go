@@ -80,7 +80,7 @@ func TestThalesKeyBlockFormat(t *testing.T) {
 	}
 
 	// Test unwrapping.
-	unwrappedHeader, clearKey, err := keyblocklmk.UnwrapKeyBlock(
+	unwrappedHeader, clearKey, _, _, err := keyblocklmk.UnwrapKeyBlock(
 		keyblocklmk.DefaultTestAESLMK,
 		keyBlock,
 	)

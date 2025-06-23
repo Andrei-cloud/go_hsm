@@ -56,23 +56,20 @@ func testEncryptWithLMK(plainKey, testKey []byte) ([]byte, error) {
 }
 
 // testDecryptWithLMK decrypts data using the test LMK key.
-func testDecryptWithLMK(encryptedKey, testKey []byte) ([]byte, error) {
-	if len(encryptedKey) == 0 || len(encryptedKey)%8 != 0 {
-		return nil, errors.New("invalid encrypted key length")
-	}
-
-	block, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(testKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	result := make([]byte, len(encryptedKey))
-	for i := 0; i < len(encryptedKey); i += 8 {
-		block.Decrypt(result[i:i+8], encryptedKey[i:i+8])
-	}
-
-	return result, nil
-}
+// func testDecryptWithLMK(encryptedKey, testKey []byte) ([]byte, error) {
+// 	if len(encryptedKey) == 0 || len(encryptedKey)%8 != 0 {
+// 		return nil, errors.New("invalid encrypted key length")
+// 	}
+// 	block, err := des.NewTripleDESCipher(cryptoutils.PrepareTripleDESKey(testKey))
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to create cipher: %w", err)
+// 	}
+// 	result := make([]byte, len(encryptedKey))
+// 	for i := 0; i < len(encryptedKey); i += 8 {
+// 		block.Decrypt(result[i:i+8], encryptedKey[i:i+8])
+// 	}
+// 	return result, nil
+// }
 
 // testRandomKey generates deterministic pseudo-random keys for testing.
 func testRandomKey(length int) ([]byte, error) {
