@@ -9,6 +9,7 @@ import (
 
 // computeAESCMAC computes the AES CMAC of data using key K (16 or 32 bytes for AES-128/256).
 func computeAESCMAC(key, data []byte) ([]byte, error) {
+	// fmt.Printf("computeAESCMAC: key = %X, data = %s\n", key, data)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("aes cipher init failed: %w", err)

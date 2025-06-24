@@ -114,7 +114,7 @@ func (p KeyBlockLMKProvider) EncryptUnderLMK(
 		KeyContext:     '1',
 	}
 
-	return keyblocklmk.WrapKeyBlock(p.lmk, header, nil, key, 'S')
+	return keyblocklmk.WrapKeyBlock(p.lmk, header, nil, key)
 }
 
 // DecryptUnderLMK unwraps a key block under the LMK and returns the clear key.
@@ -128,7 +128,7 @@ func (p KeyBlockLMKProvider) DecryptUnderLMK(
 	if err != nil {
 		if recvMac != nil && calcMac != nil {
 			return nil, fmt.Errorf(
-				"mac verification failed: received MAC %X, calculated MAC %X", recvMac, calcMac,
+				"mac verification failed: received MAC %s, calculated MAC %s", recvMac, calcMac,
 			)
 		}
 

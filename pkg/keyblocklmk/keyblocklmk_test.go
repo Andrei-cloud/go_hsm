@@ -26,13 +26,12 @@ func TestWrapUnwrapRoundTrip(t *testing.T) {
 	// sample key
 	plainKey := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 
-	// wrap under default LMK, format 'R'
+	// wrap under default LMK, Thales 'S' format
 	block, err := keyblocklmk.WrapKeyBlock(
 		keyblocklmk.DefaultTestAESLMK,
 		header,
 		nil,
 		plainKey,
-		'R',
 	)
 	if err != nil {
 		t.Fatalf("WrapKeyBlock failed: %v", err)
@@ -82,7 +81,6 @@ func TestWrapUnwrapWithOptionalBlocks(t *testing.T) {
 		header,
 		[]keyblocklmk.OptionalBlock{opt},
 		plainKey,
-		'R',
 	)
 	if err != nil {
 		t.Fatalf("WrapKeyBlock with optional failed: %v", err)
@@ -123,7 +121,6 @@ func TestUnwrapTamperedBlock(t *testing.T) {
 		header,
 		nil,
 		plainKey,
-		'R',
 	)
 	if err != nil {
 		t.Fatalf("WrapKeyBlock failed: %v", err)
@@ -160,7 +157,6 @@ func TestWrapUnwrapFormatS(t *testing.T) {
 		header,
 		nil,
 		plainKey,
-		'S',
 	)
 	if err != nil {
 		t.Fatalf("WrapKeyBlock format S failed: %v", err)
@@ -233,7 +229,6 @@ func TestWrapUnwrapDifferentKeySizes(t *testing.T) {
 				header,
 				nil,
 				plainKey,
-				'R',
 			)
 			if err != nil {
 				t.Fatalf("WrapKeyBlock failed for %d-byte key: %v", tc.keyBytes, err)
@@ -327,7 +322,6 @@ func TestHeaderFieldValidation(t *testing.T) {
 				tc.header,
 				nil,
 				plainKey,
-				'R',
 			)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("WrapKeyBlock() error = %v, wantErr %v", err, tc.wantErr)
