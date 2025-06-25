@@ -33,8 +33,8 @@ func NewServeCommand() *cobra.Command {
 	cmd.Flags().Int("port", 1500, "Server port")
 
 	// Bind serve command flags to viper.
-	viper.BindPFlag("server.host", cmd.Flags().Lookup("host"))
-	viper.BindPFlag("server.port", cmd.Flags().Lookup("port"))
+	_ = viper.BindPFlag("server.host", cmd.Flags().Lookup("host"))
+	_ = viper.BindPFlag("server.port", cmd.Flags().Lookup("port"))
 
 	return cmd
 }

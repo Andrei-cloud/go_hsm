@@ -115,6 +115,12 @@ func (bp *BufferPool) Get(size int) []byte {
 	}
 
 	rawBuf := bucket.pool.Get()
+	if bufPtr, ok := rawBuf.(*[]byte); ok && bufPtr != nil {
+		buf := *bufPtr
+		return buf[:size:cap(buf)]
+	}
+
+	// Fallback: try direct slice (backward compatibility)
 	if buf, ok := rawBuf.([]byte); ok {
 		return buf[:size:cap(buf)]
 	}
@@ -141,7 +147,7 @@ func (bp *BufferPool) Prewarm(count int) {
 
 		for range count {
 			b := make([]byte, 0, size)
-			pool.pool.Put(b)
+			pool.pool.Put(&b)
 		}
 	}
 }
@@ -190,7 +196,7 @@ func (bp *BufferPool) Put(buf []byte) {
 			return
 		}
 
-		bucket.pool.Put(buf)
+		bucket.pool.Put(&buf)
 	}
 	bp.mu.RUnlock()
 }

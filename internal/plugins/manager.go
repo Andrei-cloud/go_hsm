@@ -296,7 +296,12 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
 
-	requestID, _ := ctx.Value("request_id").(string)
+	requestID := ""
+	if val := ctx.Value("request_id"); val != nil {
+		if rid, ok := val.(string); ok {
+			requestID = rid
+		}
+	}
 	log.Debug().
 		Str("event", "plugin_execution").
 		Str("command", cmd).

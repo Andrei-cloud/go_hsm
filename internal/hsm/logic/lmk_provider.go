@@ -63,7 +63,7 @@ func (p VariantLMKProvider) EncryptUnderLMK(
 	key []byte,
 	keyType string,
 	schemeTag byte,
-	lmkID string,
+	_ string,
 ) ([]byte, error) {
 	return variantlmk.EncryptKeyUnderScheme(
 		keyType,
@@ -79,7 +79,7 @@ func (p VariantLMKProvider) DecryptUnderLMK(
 	data []byte,
 	keyType string,
 	schemeTag byte,
-	lmkID string,
+	_ string,
 ) ([]byte, error) {
 	return variantlmk.DecryptKeyUnderScheme(
 		keyType,
@@ -99,8 +99,8 @@ func (p VariantLMKProvider) GetLMKType() LMKType {
 func (p KeyBlockLMKProvider) EncryptUnderLMK(
 	key []byte,
 	keyType string,
-	schemeTag byte,
-	lmkID string,
+	_ byte,
+	_ string,
 ) ([]byte, error) {
 	// TODO: build a proper key block header from keyType and schemeTag.
 	header := keyblocklmk.Header{
@@ -120,22 +120,16 @@ func (p KeyBlockLMKProvider) EncryptUnderLMK(
 // DecryptUnderLMK unwraps a key block under the LMK and returns the clear key.
 func (p KeyBlockLMKProvider) DecryptUnderLMK(
 	data []byte,
-	keyType string,
-	schemeTag byte,
-	lmkID string,
+	_ string,
+	_ byte,
+	_ string,
 ) ([]byte, error) {
-	_, clear, recvMac, calcMac, err := keyblocklmk.UnwrapKeyBlock(p.lmk, data)
+	_, clearKey, err := keyblocklmk.UnwrapKeyBlock(p.lmk, data)
 	if err != nil {
-		if recvMac != nil && calcMac != nil {
-			return nil, fmt.Errorf(
-				"mac verification failed: received MAC %s, calculated MAC %s", recvMac, calcMac,
-			)
-		}
-
 		return nil, err
 	}
 
-	return clear, nil
+	return clearKey, nil
 }
 
 // GetLMKType for KeyBlockLMKProvider.

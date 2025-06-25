@@ -18,7 +18,6 @@ func BenchmarkBufferPool_GetPut(b *testing.B) {
 // BenchmarkBufferPool_Concurrent benchmarks concurrent Get/Put operations.
 func BenchmarkBufferPool_Concurrent(b *testing.B) {
 	pool := NewBufferPool()
-	const goroutines = 10
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {

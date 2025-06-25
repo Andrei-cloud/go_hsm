@@ -299,14 +299,12 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string) {
 			cmd.Printf(
 				"Warning: hex-encoded data has odd length (%d chars), key block may be malformed\n",
 				len(hexEncodedData),
-			)
-			// Try to make it work by assuming a smaller MAC
-			if len(hexEncodedData) >= 5 {
-				macLengthHex = 4 // 4 hex chars = 2 bytes MAC (very short)
-			} else {
+			) // Try to make it work by assuming a smaller MAC
+			if len(hexEncodedData) < 5 {
 				cmd.Printf("Error: insufficient hex data length for any reasonable MAC size\n")
 				return
 			}
+			macLengthHex = 4 // 4 hex chars = 2 bytes MAC (very short)
 		} else {
 			// Even length - use standard MAC sizes
 			if len(hexEncodedData) <= 32 {
@@ -324,6 +322,7 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string) {
 			macLengthHex,
 			len(hexEncodedData),
 		)
+
 		return
 	}
 

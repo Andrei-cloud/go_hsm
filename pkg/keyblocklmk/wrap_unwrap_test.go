@@ -18,6 +18,7 @@ func getTestLMK() []byte {
 
 // TestWrapUnwrapRoundTrip tests that wrapping and unwrapping a key returns the original key.
 func TestWrapUnwrapRoundTrip(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		key    []byte
@@ -81,6 +82,7 @@ func TestWrapUnwrapRoundTrip(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Wrap the key.
 			keyBlock, err := WrapKeyBlock(lmk, tt.header, nil, tt.key)
 			if err != nil {
@@ -93,7 +95,7 @@ func TestWrapUnwrapRoundTrip(t *testing.T) {
 			}
 
 			// Unwrap the key.
-			header, clearKey, _, _, err := UnwrapKeyBlock(lmk, keyBlock)
+			header, clearKey, err := UnwrapKeyBlock(lmk, keyBlock)
 			if err != nil {
 				t.Fatalf("UnwrapKeyBlock failed: %v", err)
 			}
@@ -134,6 +136,7 @@ func TestWrapUnwrapRoundTrip(t *testing.T) {
 
 // TestKnownKeyBlock tests unwrapping of a known key block.
 func TestKnownKeyBlock(t *testing.T) {
+	t.Parallel()
 	// Known test vector.
 	keyBlockStr := "S10064B0AE00S000079EAFA5D0F6575FE50C1BD5BB847E4F699B7B5E878D52956"
 	expectedKey := "0123456789ABCDEF"
@@ -142,7 +145,7 @@ func TestKnownKeyBlock(t *testing.T) {
 	keyBlock := []byte(keyBlockStr)
 
 	// Unwrap the known key block.
-	header, clearKey, _, _, err := UnwrapKeyBlock(lmk, keyBlock)
+	header, clearKey, err := UnwrapKeyBlock(lmk, keyBlock)
 	if err != nil {
 		t.Fatalf("UnwrapKeyBlock failed: %v", err)
 	}
@@ -173,6 +176,7 @@ func TestKnownKeyBlock(t *testing.T) {
 
 // TestWrapKeyBlockFormat tests that the wrap function produces correctly formatted key blocks.
 func TestWrapKeyBlockFormat(t *testing.T) {
+	t.Parallel()
 	lmk := getTestLMK()
 	key := []byte("0123456789ABCDEF")
 	header := Header{
@@ -205,6 +209,7 @@ func TestWrapKeyBlockFormat(t *testing.T) {
 
 // TestMACValidation tests that MAC validation correctly fails for corrupted key blocks.
 func TestMACValidation(t *testing.T) {
+	t.Parallel()
 	lmk := getTestLMK()
 	key := []byte("0123456789ABCDEF")
 	header := Header{
@@ -224,7 +229,7 @@ func TestMACValidation(t *testing.T) {
 	}
 
 	// Verify it unwraps correctly.
-	_, _, _, _, err = UnwrapKeyBlock(lmk, keyBlock)
+	_, _, err = UnwrapKeyBlock(lmk, keyBlock)
 	if err != nil {
 		t.Fatalf("UnwrapKeyBlock failed for valid key block: %v", err)
 	}
@@ -235,7 +240,7 @@ func TestMACValidation(t *testing.T) {
 	corruptedKeyBlock[len(corruptedKeyBlock)-1] ^= 0x01 // Flip one bit.
 
 	// Verify MAC validation fails.
-	_, _, _, _, err = UnwrapKeyBlock(lmk, corruptedKeyBlock)
+	_, _, err = UnwrapKeyBlock(lmk, corruptedKeyBlock)
 	if err == nil {
 		t.Error("UnwrapKeyBlock should have failed for corrupted key block")
 	}
@@ -246,6 +251,7 @@ func TestMACValidation(t *testing.T) {
 
 // TestDifferentKeySizes tests wrapping and unwrapping keys of different sizes.
 func TestDifferentKeySizes(t *testing.T) {
+	t.Parallel()
 	lmk := getTestLMK()
 	header := Header{
 		Version:       '1',
@@ -261,6 +267,7 @@ func TestDifferentKeySizes(t *testing.T) {
 
 	for _, size := range keySizes {
 		t.Run(fmt.Sprintf("KeySize_%d_bytes", size), func(t *testing.T) {
+			t.Parallel()
 			// Create a key of the specified size.
 			key := make([]byte, size)
 			for i := range key {
@@ -273,7 +280,7 @@ func TestDifferentKeySizes(t *testing.T) {
 				t.Fatalf("WrapKeyBlock failed for %d-byte key: %v", size, err)
 			}
 
-			_, clearKey, _, _, err := UnwrapKeyBlock(lmk, keyBlock)
+			_, clearKey, err := UnwrapKeyBlock(lmk, keyBlock)
 			if err != nil {
 				t.Fatalf("UnwrapKeyBlock failed for %d-byte key: %v", size, err)
 			}
@@ -287,6 +294,7 @@ func TestDifferentKeySizes(t *testing.T) {
 
 // TestInvalidInputs tests error handling for invalid inputs.
 func TestInvalidInputs(t *testing.T) {
+	t.Parallel()
 	lmk := getTestLMK()
 	header := Header{
 		Version:       '1',
@@ -313,13 +321,13 @@ func TestInvalidInputs(t *testing.T) {
 	}
 
 	// Test unwrapping empty key block.
-	_, _, _, _, err = UnwrapKeyBlock(lmk, []byte{})
+	_, _, err = UnwrapKeyBlock(lmk, []byte{})
 	if err == nil {
 		t.Error("UnwrapKeyBlock should have failed for empty key block")
 	}
 
 	// Test unwrapping too short key block.
-	_, _, _, _, err = UnwrapKeyBlock(lmk, []byte("short"))
+	_, _, err = UnwrapKeyBlock(lmk, []byte("short"))
 	if err == nil {
 		t.Error("UnwrapKeyBlock should have failed for too short key block")
 	}
@@ -356,7 +364,7 @@ func BenchmarkUnwrapKeyBlock(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _, _, err := UnwrapKeyBlock(lmk, keyBlock)
+		_, _, err := UnwrapKeyBlock(lmk, keyBlock)
 		if err != nil {
 			b.Fatalf("UnwrapKeyBlock failed: %v", err)
 		}

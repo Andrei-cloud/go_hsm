@@ -38,7 +38,7 @@ func TestWrapUnwrapRoundTrip(t *testing.T) {
 	}
 
 	// unwrap
-	unwrappedHeader, plaintext, _, _, err := keyblocklmk.UnwrapKeyBlock(
+	unwrappedHeader, plaintext, err := keyblocklmk.UnwrapKeyBlock(
 		keyblocklmk.DefaultTestAESLMK,
 		block,
 	)
@@ -86,7 +86,7 @@ func TestWrapUnwrapWithOptionalBlocks(t *testing.T) {
 		t.Fatalf("WrapKeyBlock with optional failed: %v", err)
 	}
 
-	unHdr, plaintext, _, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
+	unHdr, plaintext, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
 	if err != nil {
 		t.Fatalf("UnwrapKeyBlock with optional failed: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestUnwrapTamperedBlock(t *testing.T) {
 	// tamper a byte in ciphertext
 	block[len(block)/2] ^= 0xFF
 
-	_, _, _, _, err = keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
+	_, _, err = keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
 	if err == nil {
 		t.Fatal("UnwrapKeyBlock did not fail on tampering")
 	}
@@ -176,7 +176,7 @@ func TestWrapUnwrapFormatS(t *testing.T) {
 		)
 	}
 
-	unHdr, plaintext, _, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
+	unHdr, plaintext, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, block)
 	if err != nil {
 		t.Fatalf("UnwrapKeyBlock format S failed: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestWrapUnwrapDifferentKeySizes(t *testing.T) {
 				t.Fatalf("WrapKeyBlock failed for %d-byte key: %v", tc.keyBytes, err)
 			}
 
-			unHdr, plaintext, _, _, err := keyblocklmk.UnwrapKeyBlock(
+			unHdr, plaintext, err := keyblocklmk.UnwrapKeyBlock(
 				keyblocklmk.DefaultTestAESLMK,
 				block,
 			)
@@ -360,7 +360,7 @@ func TestUnwrapErrorConditions(t *testing.T) {
 		tc := tc // capture range variable
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, _, _, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, tc.block)
+			_, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, tc.block)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("UnwrapKeyBlock() error = %v, wantErr %v", err, tc.wantErr)
 			}

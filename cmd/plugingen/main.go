@@ -79,7 +79,10 @@ func main() {
 	flag.Parse()
 
 	if *cmd == "" || *logic == "" {
-		fmt.Fprintln(os.Stderr, "cmd and logic flags must be provided") //nolint:errcheck
+		fmt.Fprintln(
+			os.Stderr,
+			"cmd and logic flags must be provided",
+		) //nolint:errcheck // Error output is intentional
 		os.Exit(1)
 	}
 
@@ -120,5 +123,6 @@ func generateWrapper(path string, data *PluginData) error {
 	}()
 
 	t := template.Must(template.New("wrapper").Parse(wrapperTemplate))
+
 	return t.Execute(f, data)
 }

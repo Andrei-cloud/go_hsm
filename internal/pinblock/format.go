@@ -43,15 +43,15 @@ func PrintSupportedFormats(writers ...any) {
 	// Use tabwriter only for files, otherwise print directly for buffers (test).
 	if _, ok := output.(*os.File); ok {
 		w := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "format\tdescription") //nolint:errcheck
+		_, _ = fmt.Fprintln(w, "format\tdescription")
 		for _, code := range codes {
-			fmt.Fprintf(w, "%s\t%s\n", code, formats[code]) //nolint:errcheck
+			_, _ = fmt.Fprintf(w, "%s\t%s\n", code, formats[code])
 		}
-		w.Flush() //nolint:errcheck
+		_ = w.Flush()
 	} else {
-		fmt.Fprintln(output, "format\tdescription") //nolint:errcheck
+		_, _ = fmt.Fprintln(output, "format\tdescription")
 		for _, code := range codes {
-			fmt.Fprintf(output, "%s\t%s\n", code, formats[code]) //nolint:errcheck
+			_, _ = fmt.Fprintf(output, "%s\t%s\n", code, formats[code])
 		}
 	}
 }

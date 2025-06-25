@@ -43,8 +43,8 @@ func runListPlugins(cmd *cobra.Command, _ []string) error {
 
 	// Create tabwriter for aligned output.
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "Command\tVersion\tDescription\tAuthor")
-	fmt.Fprintln(w, "-------\t-------\t-----------\t------")
+	_, _ = fmt.Fprintln(w, "Command\tVersion\tDescription\tAuthor")
+	_, _ = fmt.Fprintln(w, "-------\t-------\t-----------\t------")
 
 	// Create temporary HSM and plugin manager instances.
 	hsmInst, err := hsm.NewHSM(hsm.FirmwareVersion, false)
@@ -53,7 +53,9 @@ func runListPlugins(cmd *cobra.Command, _ []string) error {
 	}
 
 	pluginManager := plugins.NewPluginManager(ctx, hsmInst)
-	defer pluginManager.Close()
+	defer func() {
+		_ = pluginManager.Close()
+	}()
 
 	// Load all plugins.
 	if err := pluginManager.LoadAll(pluginDir); err != nil {
@@ -63,7 +65,7 @@ func runListPlugins(cmd *cobra.Command, _ []string) error {
 	// Get all loaded plugins and output their metadata.
 	for _, cmdName := range pluginManager.ListPlugins() {
 		version, description, author := pluginManager.GetPluginMetadata(cmdName)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			cmdName,
 			version,
 			description,

@@ -17,6 +17,11 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const requestIDKey contextKey = "request_id"
+
+// contextKey is a custom type for context keys to avoid collisions.
+type contextKey string
+
 // logAdapter implements anet.Logger using zerolog.
 type logAdapter struct{}
 
@@ -170,7 +175,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	}
 
 	// Pass requestID via context for plugin and plugin logs
-	ctx := context.WithValue(srvContextOrDefault(s), "request_id", requestID)
+	ctx := context.WithValue(srvContextOrDefault(s), requestIDKey, requestID)
 	resp, execErr = pm.ExecuteCommandWithContext(ctx, cmd, execPayload)
 	if execErr != nil {
 		log.Error().
@@ -189,7 +194,6 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 				Str("client_ip", client).
 				Str("command", cmd).
 				Msg("Command not recognized, responding with error code")
-
 		} else {
 			log.Error().
 				Str("event", "plugin_error").
@@ -197,7 +201,6 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 				Str("command", cmd).
 				Err(execErr).
 				Msg("Plugin execution failed")
-
 			resp = s.errorResponse(cmd)
 		}
 	}
