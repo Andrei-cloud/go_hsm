@@ -8,6 +8,8 @@ import (
 )
 
 func TestKeyBlockWrapIntegration(t *testing.T) {
+	t.Parallel()
+
 	// Test key block wrapping with a configured header.
 	clearKey, err := hex.DecodeString("0123456789ABCDEF")
 	if err != nil {

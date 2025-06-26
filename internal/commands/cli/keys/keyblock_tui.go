@@ -1,13 +1,13 @@
 package keys
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/andrei-cloud/go_hsm/pkg/keyblocklmk"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
@@ -37,7 +37,7 @@ type keyBlockHeaderModel struct {
 	currentField int
 	fields       []fieldConfig
 	done         bool
-	cancelled    bool
+	canceled     bool
 }
 
 // newKeyBlockHeaderModel creates a new TUI model for configuring key block headers.
@@ -48,7 +48,7 @@ func newKeyBlockHeaderModel() keyBlockHeaderModel {
 			description: "Key Block Version",
 			fieldType:   fieldTypeRadio,
 			options: []option{
-				{"0", "Protected by 3-DES key"},
+				{"0", "Protected by 3-DES key (not supported)"},
 				{"1", "Protected by AES key"},
 			},
 			selected: 1, // Default to AES.
@@ -210,13 +210,12 @@ func (m keyBlockHeaderModel) Init() tea.Cmd {
 
 // Update handles messages and updates the model state.
 func (m keyBlockHeaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		currentField := &m.fields[m.currentField]
 
-		switch msg.String() {
+		switch keyMsg.String() {
 		case "ctrl+c", "q":
-			m.cancelled = true
+			m.canceled = true
 
 			return m, tea.Quit
 		case "enter":
@@ -261,8 +260,8 @@ func (m keyBlockHeaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		default:
 			// Handle numeric input for numeric fields.
-			if currentField.fieldType == fieldTypeNumeric && len(msg.String()) == 1 {
-				if char := msg.String()[0]; char >= '0' && char <= '9' {
+			if currentField.fieldType == fieldTypeNumeric && len(keyMsg.String()) == 1 {
+				if char := keyMsg.String()[0]; char >= '0' && char <= '9' {
 					m.handleNumericInput(char)
 				}
 			}
@@ -328,7 +327,7 @@ func (m *keyBlockHeaderModel) handleBackspace() {
 		return
 	}
 
-	if len(currentField.numericValue) > 0 {
+	if currentField.numericValue != "" {
 		// Remove last character and reformat.
 		valueStr := strings.TrimLeft(currentField.numericValue, "0")
 		if len(valueStr) <= 1 {
@@ -392,8 +391,8 @@ func (m keyBlockHeaderModel) View() string {
 		return "Key block header configured successfully!\n"
 	}
 
-	if m.cancelled {
-		return "Operation cancelled.\n"
+	if m.canceled {
+		return "Operation canceled.\n"
 	}
 
 	s := "Configure Key Block Header\n"
@@ -462,8 +461,11 @@ func runKeyBlockHeaderTUI() (keyblocklmk.Header, bool, error) {
 		return keyblocklmk.Header{}, false, err
 	}
 
-	m := finalModel.(keyBlockHeaderModel)
+	m, ok := finalModel.(keyBlockHeaderModel)
+	if !ok {
+		return keyblocklmk.Header{}, false, errors.New("unexpected model type")
+	}
 	m.updateHeaderFromSelection() // Ensure final state is captured.
 
-	return m.header, !m.cancelled, nil
+	return m.header, !m.canceled, nil
 }

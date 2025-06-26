@@ -5,6 +5,8 @@ import (
 )
 
 func TestKeyBlockHeaderTUI(t *testing.T) {
+	t.Parallel()
+
 	// Test that the TUI model initializes correctly.
 	model := newKeyBlockHeaderModel()
 
@@ -61,6 +63,8 @@ func TestKeyBlockHeaderTUI(t *testing.T) {
 }
 
 func TestNumericFieldOperations(t *testing.T) {
+	t.Parallel()
+
 	model := newKeyBlockHeaderModel()
 
 	// Move to KeyVersionNum field (index 4).
@@ -118,6 +122,8 @@ func TestNumericFieldOperations(t *testing.T) {
 }
 
 func TestHeaderUpdate(t *testing.T) {
+	t.Parallel()
+
 	model := newKeyBlockHeaderModel()
 
 	// Modify some selections.

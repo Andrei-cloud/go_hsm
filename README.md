@@ -36,6 +36,7 @@ A Go-based Hardware Security Module (HSM) implementation compatible with Thales/
 - ☑️ Structured logging and error handling for robust production and development use.
 - ☑️ **Complete support for standard Thales test Variant LMK**.
 - ☑️ **Key block (TR-31 and Thales) support with parsing and validation**.
+- ☑️ **Interactive Terminal User Interface (TUI) for key block header configuration.**
 - ⏳ Additional HSM commands (pending).
 
 ---
@@ -84,6 +85,10 @@ The following HSM commands are currently implemented as WASM plugins:
 5. Generate cryptographic keys:
    ```bash
    ./bin/go_hsm keys generate --type 000 --scheme X
+   ```
+6. Import keys with interactive key block header configuration:
+   ```bash
+   ./bin/go_hsm keys import --key 0123456789ABCDEF --lmk-id 01
    ```
 
 ## Testing the HSM Server
@@ -426,6 +431,40 @@ The check command provides detailed analysis including:
 ./bin/go_hsm pinblock --pin 1234 --pan 4111111111111111 --format 01
 ```
 
+#### Key Management with Interactive TUI
+The key import command features an interactive Terminal User Interface (TUI) for configuring key block headers when using key block LMK (--lmk-id 01):
+
+```bash
+# Import key with interactive header configuration
+./bin/go_hsm keys import --key 0123456789ABCDEF --lmk-id 01
+```
+
+**Interactive TUI Features:**
+- **Field Navigation**: Tab/Shift+Tab to move between fields, ↑/↓ or j/k for selections
+- **Radio Selection**: Choose from predefined options for version, key usage, algorithm, mode of use, and exportability
+- **Numeric Input**: Direct digit entry or increment/decrement for key version numbers (00-99)
+- **Real-time Validation**: Immediate feedback on value ranges and format constraints
+- **Progress Tracking**: Visual indication of current field and completion status
+- **Smart Defaults**: Pre-configured with secure, commonly used values (AES, Key Encryption, Sensitive)
+
+**Supported Key Block Header Fields:**
+- **Version**: Key block version (0=3DES protection, 1=AES protection)
+- **Key Usage**: 50+ standard key usage codes (B0-Y0) with descriptions
+- **Algorithm**: Cryptographic algorithms (AES, DES, RSA, HMAC, etc.)
+- **Mode of Use**: Usage restrictions (Encrypt/Decrypt, MAC, Signature, etc.)
+- **Key Version**: Version number (00-99) with zero-padding
+- **Exportability**: Export restrictions (Exportable, Non-exportable, Sensitive)
+
+**Navigation Controls:**
+```
+↑/↓ or j/k    - Select option or increment/decrement value
+Tab/Shift+Tab - Next/Previous field  
+Enter         - Confirm and continue
+0-9           - Direct numeric input (for numeric fields)
+Backspace     - Delete digit (for numeric fields)
+q or Ctrl+C   - Quit
+```
+
 #### Plugin Management
 ```bash
 # Create new plugin
@@ -491,7 +530,9 @@ The `keyblocklmk` package provides comprehensive implementation of Thales and TR
 
 **Development and Testing:**
 - **Format Validation**: Verify key block structure and integrity
+- **Interactive Testing**: TUI enables rapid prototyping and validation of key block configurations
 - **Debugging Tools**: Field-by-field analysis for troubleshooting
+- **Test Coverage**: Comprehensive unit tests for TUI components with parallel test execution
 - **Test Vector Support**: Compatible with industry test vectors
 - **Cross-Platform**: Pure Go implementation for portability
 

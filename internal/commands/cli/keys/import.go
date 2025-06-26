@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/andrei-cloud/go_hsm/internal/hsm/logic"
 	"github.com/andrei-cloud/go_hsm/pkg/crypto"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/keyblocklmk"
 	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
+	"github.com/spf13/cobra"
 )
 
 func newImportKeyCommand() *cobra.Command {
@@ -175,7 +174,7 @@ func runImportVariantKey(cmd *cobra.Command, clearKey []byte, keyType, scheme st
 
 // runImportKeyBlockKey handles importing keys under key block LMK.
 func runImportKeyBlockKey(cmd *cobra.Command, clearKey []byte,
-	engine logic.LMKEngine,
+	_ logic.LMKEngine,
 ) error {
 	cmd.Println("Importing key under Key Block LMK...")
 	cmd.Println("Please configure the key block header parameters:")
@@ -187,7 +186,7 @@ func runImportKeyBlockKey(cmd *cobra.Command, clearKey []byte,
 	}
 
 	if !ok {
-		return errors.New("operation cancelled by user")
+		return errors.New("operation canceled by user")
 	}
 
 	// Use the key usage configured in the TUI (no override needed).
