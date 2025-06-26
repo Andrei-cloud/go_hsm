@@ -47,5 +47,6 @@ func LoadDefaultLMKSet() (LMKSet, error) {
 		}
 		lmkSet[i] = lmkPair
 	}
+
 	return lmkSet, nil
 }

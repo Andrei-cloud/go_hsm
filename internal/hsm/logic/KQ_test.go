@@ -67,7 +67,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 				input = append(input, validARQC...)
 
@@ -84,7 +84,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 				input = append(input, validARQC...)
 
@@ -100,7 +100,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 				input = append(input, validARQC...)
 
@@ -116,7 +116,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 				input = append(input, validARQC...)
 
@@ -230,7 +230,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, validARQC...)
 
 				return input
@@ -246,7 +246,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 
 				return input
@@ -262,7 +262,7 @@ func TestExecuteKQ(t *testing.T) {
 				input = append(input, validATC...)
 				input = append(input, validUN...)
 				input = append(input, []byte(validTxnDataLen)...)
-				input = append(input, []byte(validTxnData)...)
+				input = append(input, validTxnData...)
 				input = append(input, []byte(validDelimiter)...)
 				input = append(input, validARQC...)
 

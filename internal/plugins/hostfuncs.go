@@ -118,7 +118,12 @@ func (h *HostFunctions) logDebug(ctx context.Context, mod api.Module, ptr, size 
 
 		return
 	}
-	requestID, _ := ctx.Value("request_id").(string)
+	requestID := ""
+	if val := ctx.Value("request_id"); val != nil {
+		if rid, ok := val.(string); ok {
+			requestID = rid
+		}
+	}
 	log.Debug().
 		Str("source", "wasm").
 		Str("request_id", requestID).
@@ -132,7 +137,12 @@ func (h *HostFunctions) logInfo(ctx context.Context, mod api.Module, ptr, size u
 
 		return
 	}
-	requestID, _ := ctx.Value("request_id").(string)
+	requestID := ""
+	if val := ctx.Value("request_id"); val != nil {
+		if rid, ok := val.(string); ok {
+			requestID = rid
+		}
+	}
 	log.Info().
 		Str("source", "wasm").
 		Str("request_id", requestID).
@@ -146,7 +156,12 @@ func (h *HostFunctions) logError(ctx context.Context, mod api.Module, ptr, size 
 
 		return
 	}
-	requestID, _ := ctx.Value("request_id").(string)
+	requestID := ""
+	if val := ctx.Value("request_id"); val != nil {
+		if rid, ok := val.(string); ok {
+			requestID = rid
+		}
+	}
 	log.Error().
 		Str("source", "wasm").
 		Str("request_id", requestID).

@@ -46,7 +46,6 @@ var (
 	errPanNoDigits           = errors.New("pan contains no processable digits")
 	errInternalEncoding      = errors.New("internal error during encoding")
 	errInternalDecoding      = errors.New("internal error during decoding")
-	errRandomGeneration      = errors.New("failed to generate random data")
 	errFormatNotImplemented  = errors.New("pin block format not implemented")
 )
 

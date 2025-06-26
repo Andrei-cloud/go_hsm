@@ -335,13 +335,13 @@ func decodeISO4(_, _ string) (string, error) {
 // ECI Format 1: similar to ISO1 but uses random hex digits for padding.
 // This was an existing interpretation. Based on Thales spec, ISO1 (Format 05) itself uses random padding.
 // So ECI1 and ISO1 become effectively the same under this interpretation.
-func encodeECI1(pin, pan string) (string, error) {
+func encodeECI1(_, _ string) (string, error) {
 	// ECI1 format is not implemented.
 	return "", errFormatNotImplemented
 }
 
 // decodeECI1 decodes an ECI Format 1 PIN block, same as ISO1 decoding.
-func decodeECI1(pinBlockHex, pan string) (string, error) {
+func decodeECI1(_, _ string) (string, error) {
 	// ECI1 format is not implemented.
 	return "", errFormatNotImplemented
 }

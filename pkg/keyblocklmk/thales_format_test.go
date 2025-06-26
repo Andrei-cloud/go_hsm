@@ -29,7 +29,6 @@ func TestThalesKeyBlockFormat(t *testing.T) {
 		header,
 		nil,
 		plainKey,
-		'S', // Thales format
 	)
 	if err != nil {
 		t.Fatalf("WrapKeyBlock failed: %v", err)

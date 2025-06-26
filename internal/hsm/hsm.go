@@ -13,6 +13,8 @@ import (
 // FirmwareVersion is the constant firmware version for the HSM.
 const FirmwareVersion = "7000-E000"
 
+var errUnknownThalesPinBlockFormat = errors.New("unknown thales pin block format code")
+
 // HSM represents the hardware security module server.
 // It holds the Variant LMK set for scheme-based encryption,
 // firmware version, and PCI compliance mode.
@@ -21,8 +23,6 @@ type HSM struct {
 	PciMode         bool
 	FirmwareVersion string
 }
-
-var errUnknownThalesPinBlockFormat = errors.New("unknown thales pin block format code")
 
 // NewHSM creates a new HSM instance.
 // firmwareVersion is the HSM firmware version string.
@@ -55,7 +55,7 @@ func (h *HSM) EncryptKeyWithVariantScheme(
 	schemeTag byte,
 ) ([]byte, error) {
 	if h == nil {
-		return nil, fmt.Errorf("hsm instance is nil")
+		return nil, errors.New("hsm instance is nil")
 	}
 
 	keyTypeDetails, err := variantlmk.GetKeyTypeDetails(keyTypeStr, h.PciMode)
@@ -98,7 +98,7 @@ func (h *HSM) DecryptKeyWithVariantScheme(
 	schemeTag byte,
 ) ([]byte, error) {
 	if h == nil {
-		return nil, fmt.Errorf("hsm instance is nil")
+		return nil, errors.New("hsm instance is nil")
 	}
 
 	keyTypeDetails, err := variantlmk.GetKeyTypeDetails(keyTypeStr, h.PciMode)

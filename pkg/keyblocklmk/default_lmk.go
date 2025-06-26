@@ -1,4 +1,4 @@
-// Package keyblocklmk provides Thales/TR-31 key block wrapping under a default AES LMK.
+// Package keyblocklmk provides Thales key block wrapping under a default AES LMK.
 package keyblocklmk
 
 import (

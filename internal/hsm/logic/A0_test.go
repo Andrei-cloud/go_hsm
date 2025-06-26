@@ -88,7 +88,8 @@ func TestExecuteA0(t *testing.T) {
 
 			// Specific checks for successful cases
 			if tc.expectedError == nil {
-				if tc.name == "No ZMK" {
+				switch tc.name {
+				case "No ZMK":
 					// Response format: 4 (A100) + 1('U') + 32(hex) + 6(KCV) = 43
 					if len(resp) != 43 {
 						t.Errorf("expected length 43, got %d", len(resp))
@@ -103,7 +104,7 @@ func TestExecuteA0(t *testing.T) {
 					if _, hexErr := hex.DecodeString(string(kcv)); hexErr != nil {
 						t.Errorf("expected valid 6-hex-digit KCV, got %q", kcv)
 					}
-				} else if tc.name == "With ZMK" {
+				case "With ZMK":
 					// Response format: 4 + 1 + 32 (under LMK) + 1 + 32 (under ZMK) + 6 (KCV) = 76
 					if len(resp) != 76 {
 						t.Errorf("expected length 76, got %d", len(resp))

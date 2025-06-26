@@ -13,75 +13,63 @@ func computeAESCMAC(key, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("aes cipher init failed: %w", err)
 	}
-	blockSize := block.BlockSize()
+	bs := block.BlockSize()
 
-	// Generate subkeys k1 and k2.
-	// This follows RFC 4493, Section 2.3.
-	zero := make([]byte, blockSize)
-	l := make([]byte, blockSize)
-	// L = AES-K(0^n).
+	// Generate subkeys K1 and K2
+	zero := make([]byte, bs)
+	l := make([]byte, bs)
 	block.Encrypt(l, zero)
-
 	k1 := subkeyGenerate(l)
 	k2 := subkeyGenerate(k1)
 
-	dataToProcessInCBC := data
-	var lastBlockXORedWithKey []byte // This will be (M_n XOR K1) or (Padded_M_n XOR K2)
-
-	switch {
-	case len(data) == 0:
-		// Case 1: Message length is 0 (M_len = 0).
-		// Pad to one block (0x80 || 0...0) and XOR with K2.
-		// The "message" for CBC processing is empty.
-		// The final block to encrypt is ( (0x80 || 0...0) XOR K2 ) XOR IV (which is 0).
-		padded := make([]byte, blockSize)
-		padded[0] = 0x80 // M_last = M_n || 1 || 0...0
-		lastBlockXORedWithKey = xorBlock(padded, k2)
-		dataToProcessInCBC = []byte{} // Ensure CBC loop does not run.
-	case len(data)%blockSize == 0:
-		// Case 2: Message length is a non-zero multiple of block size (M_len > 0, M_len mod n = 0).
-		// Last block is M_n. XOR with K1.
-		// Process M_1 to M_{n-1} in CBC.
-		lastBlockData := data[len(data)-blockSize:]
-		lastBlockXORedWithKey = xorBlock(lastBlockData, k1)
-		dataToProcessInCBC = data[:len(data)-blockSize]
-	default:
-		// Case 3: Message length is not a multiple of block size (M_len > 0, M_len mod n != 0).
-		// Pad the last block (M_n || 1 || 0...0) and XOR with K2.
-		// Process M_1 to M_{n-1} in CBC.
-		lastPartialBlockLen := len(data) % blockSize
-
-		padded := make([]byte, blockSize)
-		copy(padded, data[len(data)-lastPartialBlockLen:])
-		padded[lastPartialBlockLen] = 0x80
-		// Remaining bytes of 'padded' are already zero.
-
-		lastBlockXORedWithKey = xorBlock(padded, k2)
-		dataToProcessInCBC = data[:len(data)-lastPartialBlockLen]
+	// Determine padding and last block
+	n := len(data)
+	nBlocks := 0
+	if n == 0 {
+		// one padded block
+		nBlocks = 1
+	} else {
+		nBlocks = (n + bs - 1) / bs
 	}
 
-	// CBC-MAC with IV = zero.
-	// X_0 = 0^n
-	// For i = 1 to n-1: X_i = AES-K( M_i XOR X_{i-1} )
-	x := make([]byte, blockSize) // Chaining variable (X_i), starts as IV (zeros / X_0).
-	for i := 0; i < len(dataToProcessInCBC); i += blockSize {
-		blockIn := xorBlock(x, dataToProcessInCBC[i:i+blockSize]) // M_i XOR X_{i-1}
-		block.Encrypt(x, blockIn)                                 // X_i = AES-K( M_i XOR X_{i-1} )
+	// Prepare blocks
+	blocks := make([][]byte, nBlocks)
+	for i := 0; i < nBlocks; i++ {
+		start := i * bs
+		end := start + bs
+		if end > n {
+			end = n
+		}
+		blocks[i] = make([]byte, bs)
+		copy(blocks[i], data[start:end])
 	}
 
-	// Process final block.
-	// T = AES-K( M_n^* XOR X_{n-1} )
-	// where M_n^* is lastBlockXORedWithKey.
-	finalInputToAES := xorBlock(x, lastBlockXORedWithKey)
-	block.Encrypt(x, finalInputToAES) // Final encryption, result is T (the MAC).
+	// Process last block
+	if n > 0 && n%bs == 0 {
+		// complete block, XOR with K1.
+		blocks[nBlocks-1] = xorBlock(blocks[nBlocks-1], k1)
+	} else {
+		// incomplete block or n==0, pad then XOR with K2.
+		pad := make([]byte, bs)
+		padPos := n % bs
+		pad[padPos] = 0x80
+		blocks[nBlocks-1] = xorBlock(blocks[nBlocks-1], pad)
+		blocks[nBlocks-1] = xorBlock(blocks[nBlocks-1], k2)
+	}
 
-	mac := make([]byte, blockSize)
+	// CBC-MAC calculation.
+	x := make([]byte, bs)
+	for _, blk := range blocks {
+		x = xorBlock(x, blk)
+		block.Encrypt(x, x)
+	}
+	mac := make([]byte, bs)
 	copy(mac, x)
 
 	return mac, nil
 }
 
-// subkeyGenerate shifts block left by 1 bit and XORs with Rb if MSB was set.
+// subkeyGenerate shifts the block left by 1 bit and XORs with Rb if MSB was set.
 func subkeyGenerate(b []byte) []byte {
 	const rb = 0x87
 	n := len(b)
@@ -89,8 +77,9 @@ func subkeyGenerate(b []byte) []byte {
 	carry := byte(0)
 
 	for i := n - 1; i >= 0; i-- {
+		newCarry := b[i] >> 7
 		out[i] = (b[i] << 1) | carry
-		carry = (b[i] >> 7) & 0x01
+		carry = newCarry
 	}
 
 	if (b[0] & 0x80) != 0 {
@@ -104,7 +93,7 @@ func subkeyGenerate(b []byte) []byte {
 func xorBlock(a, b []byte) []byte {
 	n := len(a)
 	out := make([]byte, n)
-	for i := range n {
+	for i := 0; i < n; i++ {
 		out[i] = a[i] ^ b[i]
 	}
 

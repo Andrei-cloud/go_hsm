@@ -60,11 +60,12 @@ func ExecuteCA(input []byte) ([]byte, error) {
 	// Parse optional destination flag
 	logInfo("CA: Processing destination key parameters.")
 	keyType := "001"
-	if data[0] == '*' {
+	switch data[0] {
+	case '*':
 		keyType = "009"
 		logDebug("CA: Destination flag is * (keyType=009)")
 		data = data[1:]
-	} else if data[0] == '~' {
+	case '~':
 		keyType = "609"
 		logDebug("CA: Destination flag is ~ (keyType=609)")
 		data = data[1:]

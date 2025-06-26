@@ -9,19 +9,22 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config holds all configuration settings
+var (
+	configData Config
+	v          *viper.Viper
+)
+
+// Config holds all configuration settings.
 type Config struct {
 	// Server configuration
 	Server struct {
 		Host string
 		Port int
 	}
-
 	// Plugin configuration
 	Plugin struct {
 		Path string
 	}
-
 	// Logging configuration
 	Log struct {
 		Level  string
@@ -29,12 +32,7 @@ type Config struct {
 	}
 }
 
-var (
-	configData Config
-	v          *viper.Viper
-)
-
-// Initialize sets up the configuration system
+// Initialize sets up the configuration system.
 func Initialize() error {
 	v = viper.New()
 
@@ -76,7 +74,7 @@ func Initialize() error {
 	return nil
 }
 
-// setDefaults sets default values for all configuration options
+// setDefaults sets default values for all configuration options.
 func setDefaults() {
 	// Server defaults
 	v.SetDefault("server.host", "localhost")
@@ -90,7 +88,7 @@ func setDefaults() {
 	v.SetDefault("log.format", "human")
 }
 
-// ensureConfig creates a default config file if none exists
+// ensureConfig creates a default config file if none exists.
 func ensureConfig() error {
 	// Check if config file exists
 	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".go_hsm")); os.IsNotExist(err) {
@@ -123,12 +121,12 @@ log:
 	return nil
 }
 
-// Get returns the current configuration
+// Get returns the current configuration.
 func Get() *Config {
 	return &configData
 }
 
-// GetViper returns the viper instance
+// GetViper returns the viper instance.
 func GetViper() *viper.Viper {
 	return v
 }

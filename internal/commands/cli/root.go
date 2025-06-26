@@ -41,9 +41,9 @@ and other cryptographic functions for payment card processing.`,
 	rootCmd.PersistentFlags().String("plugin-path", "plugins", "path to plugin directory")
 
 	// Bind flags to viper.
-	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
-	viper.BindPFlag("plugin.path", rootCmd.PersistentFlags().Lookup("plugin-path"))
+	_ = viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("log.format", rootCmd.PersistentFlags().Lookup("log-format"))
+	_ = viper.BindPFlag("plugin.path", rootCmd.PersistentFlags().Lookup("plugin-path"))
 
 	// Register all commands.
 	if err := RegisterCommands(rootCmd); err != nil {

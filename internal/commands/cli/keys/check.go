@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/andrei-cloud/go_hsm/internal/hsm/logic"
 	"github.com/andrei-cloud/go_hsm/pkg/crypto"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
 	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
@@ -17,11 +18,7 @@ import (
 
 func newCheckKeyCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Check and verify an encrypted key under LMK",
-		Long: `Check and verify an encrypted key under Local Master Key (LMK).
-The command decrypts the key, verifies its parity, calculates the Key Check Value (KCV),
-and outputs detailed information about the key type and scheme.`,
+		Use:  "check",
 		RunE: runCheckKey,
 	}
 
@@ -31,22 +28,23 @@ and outputs detailed information about the key type and scheme.`,
 	cmd.Flags().String("scheme", "", "Key scheme override (X=single, U=double, T=triple length)")
 	cmd.Flags().Bool("pci", false, "Enable PCI compliance mode")
 	cmd.Flags().String("keyblock", "", "Key block string to parse.")
-	cmd.Flags().Int("lmk-index", -1, "LMK index for key block validation (optional).")
+	cmd.Flags().String("lmk-id", "00", "LMK ID for key validation (00=variant, 01=key block)")
 
 	return cmd
 }
 
 func runCheckKey(cmd *cobra.Command, _ []string) error {
-	// New flags for key block parsing.
-	keyBlock, _ := cmd.Flags().GetString("keyblock")
-	lmkIndex, _ := cmd.Flags().GetInt("lmk-index")
-	if keyBlock != "" {
-		runCheckKeyBlock(cmd, keyBlock, lmkIndex)
+	// Read LMK ID flag
+	lmkID, _ := cmd.Flags().GetString("lmk-id")
 
+	// Key block mode
+	keyBlock, _ := cmd.Flags().GetString("keyblock")
+	if keyBlock != "" {
+		runCheckKeyBlock(cmd, keyBlock)
 		return nil
 	}
 
-	// Ensure required flags when not using keyblock.
+	// Variant key mode: decrypt via registry
 	encryptedKeyHex, _ := cmd.Flags().GetString("key")
 	keyType, _ := cmd.Flags().GetString("type")
 	schemeStr, _ := cmd.Flags().GetString("scheme")
@@ -90,28 +88,22 @@ func runCheckKey(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("invalid encrypted key format: %w", err)
 	}
 
-	// Load LMK set.
-	lmkSet, err := variantlmk.LoadDefaultLMKSet()
-	if err != nil {
-		return fmt.Errorf("failed to load LMK set: %w", err)
-	}
-
 	// Validate key type.
 	kt, err := variantlmk.GetKeyTypeDetails(keyType, pciMode)
 	if err != nil {
 		return fmt.Errorf("invalid key type: %w", err)
 	}
 
-	// Decrypt key under variant LMK.
-	clearKey, err := variantlmk.DecryptKeyUnderScheme(
-		keyType,
-		keyScheme,
-		encryptedKey,
-		lmkSet,
-		pciMode,
-	)
+	// Lookup LMK engine for variant.
+	engine, ok := logic.LMKRegistry[lmkID]
+	if !ok || engine.GetLMKType() != logic.LMKTypeVariant {
+		return fmt.Errorf("invalid or unsupported LMK ID '%s' for variant key", lmkID)
+	}
+
+	// Decrypt using registry engine.
+	clearKey, err := engine.DecryptUnderLMK(encryptedKey, keyType, keyScheme, lmkID)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt key: %w", err)
+		return fmt.Errorf("failed to decrypt key under LMK %s: %w", lmkID, err)
 	}
 
 	// Verify key parity.
@@ -134,8 +126,8 @@ func runCheckKey(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// runCheckKeyBlock parses and optionally validates a Thales or TR-31 key block.
-func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
+// runCheckKeyBlock parses and validates a key block using registry LMK.
+func runCheckKeyBlock(cmd *cobra.Command, keyBlock string) {
 	if len(keyBlock) < 1 {
 		cmd.Println("Error: key block is empty.")
 		return
@@ -160,10 +152,24 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 
 	// Parse ASCII header fields.
 	asciiLen := string(header[1:5])
-	blockLen, err := strconv.Atoi(asciiLen)
+	var blockLen int
+	var err error
+
+	// Try parsing as decimal first, then as hex if that fails.
+	blockLen, err = strconv.Atoi(asciiLen)
 	if err != nil {
-		cmd.Printf("Error: invalid block length '%s'\n", asciiLen)
-		return
+		// If decimal parsing fails, try hex parsing.
+		blockLenInt64, hexErr := strconv.ParseInt(asciiLen, 16, 32)
+		if hexErr != nil {
+			cmd.Printf("Error: invalid block length '%s' (not decimal or hex)\n", asciiLen)
+			return
+		}
+		blockLen = int(blockLenInt64)
+		cmd.Printf(
+			"Info: interpreted length field '%s' as hexadecimal (%d decimal)\n",
+			asciiLen,
+			blockLen,
+		)
 	}
 
 	usageCode := string(header[5:7])
@@ -218,7 +224,7 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 	if optCount > 0 {
 		cmd.Printf("\nOptional Header Blocks\n")
 
-		for i := 0; i < optCount; i++ {
+		for i := range optCount {
 			if offset+4 > len(data) {
 				cmd.Printf("Error: insufficient data for optional block %d header\n", i+1)
 				return
@@ -280,82 +286,109 @@ func runCheckKeyBlock(cmd *cobra.Command, keyBlock string, lmkIndex int) {
 		}
 
 		cmd.Printf("\nTotal Optional Header Length: %d bytes\n", totalOptionalLength)
-	}
+	} // For Thales 'S' format, the remaining data after header and optional blocks is hex-encoded.
+	macStartIdx := offset
+	hexEncodedData := data[macStartIdx:]
 
-	// Calculate MAC length based on algorithm and format.
-	var macLength int
+	// Determine MAC length by format for hex-encoded data.
+	macLengthHex := 16 // Default for TR-31 'R' format (16 hex chars = 8 bytes)
 	if scheme == 'S' || scheme == 'K' {
-		// Thales format: 8 bytes for TDES, 8 bytes for AES (truncated CMAC).
-		macLength = 8
-	} else {
-		// TR-31 format: 8 bytes for TDES, 16 bytes for AES.
-		if algorithm == 'T' || algorithm == 'D' {
-			macLength = 8
+		// For Thales format, try to determine MAC length based on remaining data
+		// We need an even number of hex characters total
+		if len(hexEncodedData)%2 != 0 {
+			cmd.Printf(
+				"Warning: hex-encoded data has odd length (%d chars), key block may be malformed\n",
+				len(hexEncodedData),
+			) // Try to make it work by assuming a smaller MAC
+			if len(hexEncodedData) < 5 {
+				cmd.Printf("Error: insufficient hex data length for any reasonable MAC size\n")
+				return
+			}
+			macLengthHex = 4 // 4 hex chars = 2 bytes MAC (very short)
 		} else {
-			macLength = 16
+			// Even length - use standard MAC sizes
+			if len(hexEncodedData) <= 32 {
+				macLengthHex = 8 // 8 hex chars = 4 bytes MAC
+			} else {
+				macLengthHex = 16 // 16 hex chars = 8 bytes MAC (standard)
+			}
 		}
 	}
 
-	// Calculate encrypted key data length.
-	if offset+macLength > len(data) {
-		cmd.Printf("Error: insufficient data for MAC (need %d bytes)\n", macLength)
+	// Calculate encrypted key data length in hex chars.
+	if len(hexEncodedData) < macLengthHex {
+		cmd.Printf(
+			"Error: insufficient hex data for MAC (need %d hex chars, have %d)\n",
+			macLengthHex,
+			len(hexEncodedData),
+		)
+
 		return
 	}
 
-	encryptedKeyLength := len(data) - offset - macLength
-	if encryptedKeyLength <= 0 {
+	encryptedKeyLengthHex := len(hexEncodedData) - macLengthHex
+	if encryptedKeyLengthHex <= 0 {
 		cmd.Println("Error: no encrypted key data present")
 		return
 	}
 
-	// Extract encrypted key data and MAC.
-	encryptedKey := data[offset : offset+encryptedKeyLength]
-	mac := data[offset+encryptedKeyLength:]
+	// Extract encrypted key data and MAC from hex-encoded data.
+	encryptedKeyHex := string(hexEncodedData[:encryptedKeyLengthHex])
+	macHex := string(hexEncodedData[encryptedKeyLengthHex:])
 
 	// Display encrypted key data.
-	cmd.Printf("\nEncrypted Key Data (%d bytes)\n", encryptedKeyLength)
-
-	var encryptedKeyHex string
-	if scheme == 'S' || scheme == 'K' {
-		// For Thales format, encrypted key data is already hex-encoded ASCII.
-		encryptedKeyHex = strings.ToUpper(string(encryptedKey))
-	} else {
-		// For TR-31 format, convert binary data to hex.
-		encryptedKeyHex = strings.ToUpper(hex.EncodeToString(encryptedKey))
-	}
+	encryptedKeyBytes := encryptedKeyLengthHex / 2 // Convert hex chars to bytes
+	cmd.Printf("\nEncrypted Key Data (%d bytes)\n", encryptedKeyBytes)
 
 	// Display in rows of 32 hex characters (16 bytes per row).
 	const bytesPerRow = 16
-	for i := 0; i < len(encryptedKeyHex); i += bytesPerRow * 2 {
+	encryptedKeyDisplay := strings.ToUpper(encryptedKeyHex)
+	for i := 0; i < len(encryptedKeyDisplay); i += bytesPerRow * 2 {
 		end := i + bytesPerRow*2
-		if end > len(encryptedKeyHex) {
-			end = len(encryptedKeyHex)
+		if end > len(encryptedKeyDisplay) {
+			end = len(encryptedKeyDisplay)
 		}
-		cmd.Println(encryptedKeyHex[i:end])
+		cmd.Println(encryptedKeyDisplay[i:end])
 	}
 
 	// Display MAC.
 	cmd.Printf("\nKey Block Authenticator (MAC)\n")
-	if scheme == 'S' || scheme == 'K' {
-		// For Thales format, MAC is already hex-encoded ASCII.
-		cmd.Println(strings.ToUpper(string(mac)))
-	} else {
-		// For TR-31 format, convert binary MAC to hex.
-		cmd.Println(strings.ToUpper(hex.EncodeToString(mac)))
-	}
+	cmd.Println(strings.ToUpper(macHex))
 
 	// Summary.
+	macBytes := macLengthHex / 2 // Convert hex chars to bytes
 	cmd.Printf("\nKey Block Summary:\n")
 	cmd.Printf("- Format: %c (%s)\n", scheme, getKeyBlockFormatMeaning(scheme))
 	cmd.Printf("- Total Length: %d bytes\n", len(data))
 	cmd.Printf("- Header: 16 bytes\n")
 	cmd.Printf("- Optional Headers: %d bytes (%d blocks)\n", totalOptionalLength, optCount)
-	cmd.Printf("- Encrypted Key Data: %d bytes\n", encryptedKeyLength)
-	cmd.Printf("- MAC: %d bytes\n", macLength)
+	cmd.Printf("- Encrypted Key Data: %d bytes\n", encryptedKeyBytes)
+	cmd.Printf("- MAC: %d bytes\n", macBytes)
 
-	if lmkIndex >= 0 {
-		cmd.Println("\nKey block validation is not yet implemented.")
-	} else {
-		cmd.Println("\nKey block parsed successfully. Provide --lmk-index to validate.")
+	// Determine key-block LMK ID
+	lmkID, _ := cmd.Flags().GetString("lmk-id")
+	if lmkID == "00" {
+		lmkID = "01"
 	}
+
+	engine, ok := logic.LMKRegistry[lmkID]
+	if !ok || engine.GetLMKType() != logic.LMKTypeKeyBlock {
+		cmd.Printf("Error: invalid LMK ID '%s' for key block\n", lmkID)
+		return
+	}
+
+	// Decrypt key block
+	clearKey, err := engine.DecryptUnderLMK([]byte(keyBlock), "", scheme, lmkID)
+	if err != nil {
+		if strings.Contains(err.Error(), "mac verification failed") {
+			cmd.Printf("Key block validation failed: %v\n", err)
+			return
+		}
+		cmd.Printf("Key block validation failed: %v\n", err)
+
+		return
+	}
+
+	cmd.Println("Key block validated.")
+	cmd.Printf("Clear Key: %X\n", clearKey)
 }
