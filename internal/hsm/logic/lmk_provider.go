@@ -132,6 +132,11 @@ func (p KeyBlockLMKProvider) DecryptUnderLMK(
 	return clearKey, nil
 }
 
+// WrapWithHeader encrypts clear key into a key block using the provided header.
+func (p KeyBlockLMKProvider) WrapWithHeader(header keyblocklmk.Header, key []byte) ([]byte, error) {
+	return keyblocklmk.WrapKeyBlock(p.lmk, header, nil, key)
+}
+
 // GetLMKType for KeyBlockLMKProvider.
 func (p KeyBlockLMKProvider) GetLMKType() LMKType {
 	return LMKTypeKeyBlock

@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/cobra"
+
+	"github.com/andrei-cloud/go_hsm/internal/hsm/logic"
 	"github.com/andrei-cloud/go_hsm/pkg/crypto"
 	"github.com/andrei-cloud/go_hsm/pkg/cryptoutils"
+	"github.com/andrei-cloud/go_hsm/pkg/keyblocklmk"
 	"github.com/andrei-cloud/go_hsm/pkg/variantlmk"
-	"github.com/spf13/cobra"
 )
 
 func newImportKeyCommand() *cobra.Command {
@@ -27,17 +30,16 @@ which will fix the parity before importing.`,
 
 	// Add flags.
 	cmd.Flags().String("key", "", "Clear key in hex format")
-	cmd.Flags().String("type", "", "Key type code (e.g. 000, 001, 002)")
+	cmd.Flags().String("type", "", "Key type code (e.g. 000, 001, 002) - required for variant LMK")
 	cmd.Flags().String("scheme", "", "Key scheme (X=single, U=double, T=triple length)")
+	cmd.Flags().String("lmk-id", "00", "LMK ID for key encryption (00=variant, 01=key block)")
 	cmd.Flags().Bool("force-parity", false, "Fix key parity if invalid")
 	cmd.Flags().Bool("pci", false, "Enable PCI compliance mode")
 
 	if err := cmd.MarkFlagRequired("key"); err != nil {
 		panic(err)
 	}
-	if err := cmd.MarkFlagRequired("type"); err != nil {
-		panic(err)
-	}
+	// Note: type flag will be validated conditionally in runImportKey
 
 	return cmd
 }
@@ -47,9 +49,43 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 	keyHex, _ := cmd.Flags().GetString("key")
 	keyType, _ := cmd.Flags().GetString("type")
 	scheme, _ := cmd.Flags().GetString("scheme")
+	lmkID, _ := cmd.Flags().GetString("lmk-id")
 	forceParity, _ := cmd.Flags().GetBool("force-parity")
 	pciMode, _ := cmd.Flags().GetBool("pci")
 
+	// Decode key from hex.
+	clearKey, err := hex.DecodeString(keyHex)
+	if err != nil {
+		return fmt.Errorf("invalid key hex: %w", err)
+	}
+
+	// Lookup LMK engine.
+	engine, ok := logic.LMKRegistry[lmkID]
+	if !ok {
+		return fmt.Errorf("invalid LMK ID '%s'", lmkID)
+	}
+
+	// Handle based on LMK type.
+	switch engine.GetLMKType() {
+	case logic.LMKTypeVariant:
+		// For variant LMK, type is required.
+		if keyType == "" {
+			return errors.New("--type flag is required for variant LMK (--lmk-id 00)")
+		}
+
+		return runImportVariantKey(cmd, clearKey, keyType, scheme, forceParity, pciMode)
+	case logic.LMKTypeKeyBlock:
+		// For key block LMK, type is configured in the TUI.
+		return runImportKeyBlockKey(cmd, clearKey, engine)
+	default:
+		return fmt.Errorf("unsupported LMK type for ID '%s'", lmkID)
+	}
+}
+
+// runImportVariantKey handles importing keys under variant LMK.
+func runImportVariantKey(cmd *cobra.Command, clearKey []byte, keyType, scheme string,
+	forceParity, pciMode bool,
+) error {
 	// Load LMK set.
 	lmkSet, err := variantlmk.LoadDefaultLMKSet()
 	if err != nil {
@@ -60,12 +96,6 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 	kt, err := variantlmk.GetKeyTypeDetails(keyType, pciMode)
 	if err != nil {
 		return fmt.Errorf("invalid key type: %w", err)
-	}
-
-	// Decode key from hex.
-	clearKey, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return fmt.Errorf("invalid key hex: %w", err)
 	}
 
 	// Validate key length and determine scheme if not provided.
@@ -138,6 +168,42 @@ func runImportKey(cmd *cobra.Command, _ []string) error {
 	cmd.Printf("Key Scheme: %c\n", schemeChar)
 	cmd.Printf("Parity Check: %v\n", parityOK)
 	cmd.Printf("Encrypted Key: %s%s\n", scheme, strings.ToUpper(hex.EncodeToString(encrypted)))
+	cmd.Printf("KCV: %s\n", strings.ToUpper(hex.EncodeToString(kcv)))
+
+	return nil
+}
+
+// runImportKeyBlockKey handles importing keys under key block LMK.
+func runImportKeyBlockKey(cmd *cobra.Command, clearKey []byte,
+	engine logic.LMKEngine,
+) error {
+	cmd.Println("Importing key under Key Block LMK...")
+	cmd.Println("Please configure the key block header parameters:")
+
+	// Run interactive TUI for header configuration.
+	header, ok, err := runKeyBlockHeaderTUI()
+	if err != nil {
+		return fmt.Errorf("failed to configure header: %w", err)
+	}
+
+	if !ok {
+		return errors.New("operation cancelled by user")
+	}
+
+	// Use the key usage configured in the TUI (no override needed).
+
+	// Get the default AES LMK and encrypt key under key block using the configured header.
+	keyBlock, err := keyblocklmk.WrapKeyBlock(keyblocklmk.DefaultTestAESLMK, header, nil, clearKey)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt key under key block: %w", err)
+	}
+
+	// Calculate KCV.
+	kcv := crypto.CalculateKCV(clearKey)
+
+	// Output results.
+	cmd.Printf("Key Type: %s\n", header.KeyUsage)
+	cmd.Printf("Key Block: %s\n", string(keyBlock)) // Convert to ASCII string.
 	cmd.Printf("KCV: %s\n", strings.ToUpper(hex.EncodeToString(kcv)))
 
 	return nil
