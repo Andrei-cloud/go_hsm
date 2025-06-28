@@ -1,0 +1,54 @@
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable-all: true
+  disable:
+    - exhaustivestruct
+    - golint
+    - interfacer
+    - maligned
+    - scopelint
+    - structcheck
+    - varcheck
+    - deadcode
+    - ifshort
+    - nosnakecase
+    - nonamedreturns
+    - rowserrcheck
+    - sqlclosecheck
+    - wastedassign
+    - stylecheck
+    - typecheck
+    - unparam
+    - tparallel
+    
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - funlen
+        - goconst
+        - goerr113
+        - noctx
+        - wrapcheck
+        - exhaustivestruct
+        - gocyclo
+        - dupl
+        - bodyclose
+        - paralleltest
+        - testpackage
+        - forcetypeassert
+        - tparallel
+        
+    - linters:
+        - gomnd
+      text: "magic number"
+    - linters:
+        - goconst
+      text: "string literal"
+    - linters:
+        - lll
+      text: "line is too long"

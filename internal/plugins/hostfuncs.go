@@ -226,14 +226,15 @@ func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, si
 	return uint64(resultPtr)<<32 | uint64(len(jsonData))
 }
 
-func (h *HostFunctions) encryptUnderLMK(
+func (h *HostFunctions) hsmCryptoOperation(
 	ctx context.Context,
 	mod api.Module,
 	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
+	isEncrypt bool,
 ) uint64 {
-	plaintext, err := readMemory(mod, dataPtr, dataLen)
+	data, err := readMemory(mod, dataPtr, dataLen)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to read plaintext for encryption")
+		log.Error().Err(err).Msg("failed to read data for crypto operation")
 		return 0
 	}
 
@@ -245,26 +246,40 @@ func (h *HostFunctions) encryptUnderLMK(
 
 	schemeTag := byte(schemeTagRaw)
 
-	encrypted, err := h.hsm.EncryptKeyWithVariantScheme(plaintext, string(keyType), schemeTag)
+	var result []byte
+	if isEncrypt {
+		result, err = h.hsm.EncryptKeyWithVariantScheme(data, string(keyType), schemeTag)
+	} else {
+		result, err = h.hsm.DecryptKeyWithVariantScheme(data, string(keyType), schemeTag)
+	}
+
 	if err != nil {
-		log.Error().Err(err).Msg("failed to encrypt under LMK")
+		log.Error().Err(err).Msg("failed to perform crypto operation")
 		return 0
 	}
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(ctx, uint64(len(encrypted)))
+	results, err := allocFn.Call(ctx, uint64(len(result)))
 	if err != nil || len(results) == 0 {
-		log.Error().Err(err).Msg("failed to allocate memory for encrypted data")
+		log.Error().Err(err).Msg("failed to allocate memory for crypto result")
 		return 0
 	}
 
 	resultPtr := uint32(results[0])
-	if err := writeMemory(mod, resultPtr, encrypted); err != nil {
-		log.Error().Err(err).Msg("failed to write encrypted data to memory")
+	if err := writeMemory(mod, resultPtr, result); err != nil {
+		log.Error().Err(err).Msg("failed to write crypto result to memory")
 		return 0
 	}
 
-	return uint64(resultPtr)<<32 | uint64(len(encrypted))
+	return uint64(resultPtr)<<32 | uint64(len(result))
+}
+
+func (h *HostFunctions) encryptUnderLMK(
+	ctx context.Context,
+	mod api.Module,
+	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
+) uint64 {
+	return h.hsmCryptoOperation(ctx, mod, dataPtr, dataLen, typePtr, typeLen, schemeTagRaw, true)
 }
 
 func (h *HostFunctions) decryptUnderLMK(
@@ -272,40 +287,7 @@ func (h *HostFunctions) decryptUnderLMK(
 	mod api.Module,
 	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
 ) uint64 {
-	encrypted, err := readMemory(mod, dataPtr, dataLen)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to read encrypted data")
-		return 0
-	}
-
-	keyType, err := readMemory(mod, typePtr, typeLen)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to read key type")
-		return 0
-	}
-
-	schemeTag := byte(schemeTagRaw)
-
-	decrypted, err := h.hsm.DecryptKeyWithVariantScheme(encrypted, string(keyType), schemeTag)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to decrypt under LMK")
-		return 0
-	}
-
-	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(ctx, uint64(len(decrypted)))
-	if err != nil || len(results) == 0 {
-		log.Error().Err(err).Msg("failed to allocate memory for decrypted data")
-		return 0
-	}
-
-	resultPtr := uint32(results[0])
-	if err := writeMemory(mod, resultPtr, decrypted); err != nil {
-		log.Error().Err(err).Msg("failed to write decrypted data to memory")
-		return 0
-	}
-
-	return uint64(resultPtr)<<32 | uint64(len(decrypted))
+	return h.hsmCryptoOperation(ctx, mod, dataPtr, dataLen, typePtr, typeLen, schemeTagRaw, false)
 }
 
 func (h *HostFunctions) generateRandomKey(_ context.Context, mod api.Module, length uint32) uint64 {

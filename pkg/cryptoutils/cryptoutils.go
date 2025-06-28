@@ -16,6 +16,27 @@ import (
 	"unicode"
 )
 
+const (
+	ISO9797_METHOD2_PADDING_BYTE = 0x80
+	KEY_LENGTH_SINGLE            = 8
+	KEY_LENGTH_DOUBLE            = 16
+	KEY_LENGTH_TRIPLE            = 24
+	RANDOM_SEED_LENGTH           = 32
+	PVV_PAN_LENGTH               = 11
+	PVV_LENGTH                   = 4
+	EXP_DATE_LENGTH              = 4
+	CVK_LENGTH                   = 16
+	SERVICE_CODE_LENGTH          = 3
+	CVV_DATA_LENGTH              = 32
+	CVV_LENGTH                   = 3
+	PAN_MIN_LENGTH               = 13
+	PAN_MAX_LENGTH               = 19
+	CVV_PADDING_BYTE             = "0"
+	HEX_TO_DECIMAL_OFFSET        = 10
+	XOR_BIT_FLIP                 = 1
+	DOUBLE_LENGTH_FACTOR         = 2
+)
+
 // ecb wraps a cipher.Block to provide ECB mode.
 type ecb struct{ b cipher.Block }
 
@@ -27,7 +48,7 @@ type ecbDecrypter ecb
 // Adds 0x80 followed by the smallest number of 0x00 bytes to make data multiple of block size.
 // If data is already a multiple of block size and non-empty, no padding is added.
 func padISO9797Method2(msg []byte, bs int) []byte {
-	return padISO9797Method1(slices.Concat(msg, []byte{0x80}), bs)
+	return padISO9797Method1(slices.Concat(msg, []byte{ISO9797_METHOD2_PADDING_BYTE}), bs)
 }
 
 // padISO9797Method1 implements ISO/IEC 9797-1 padding method 1 (VISA padding).
@@ -62,15 +83,15 @@ func Raw2B(raw []byte) []byte {
 func PrepareTripleDESKey(key []byte) []byte {
 	var key24 []byte
 	switch len(key) {
-	case 8:
-		key24 = make([]byte, 24)
+	case KEY_LENGTH_SINGLE:
+		key24 = make([]byte, KEY_LENGTH_TRIPLE)
 		copy(key24, key)
-		copy(key24[8:], key)
-		copy(key24[16:], key)
-	case 16:
-		key24 = make([]byte, 24)
+		copy(key24[KEY_LENGTH_SINGLE:], key)
+		copy(key24[KEY_LENGTH_DOUBLE:], key)
+	case KEY_LENGTH_DOUBLE:
+		key24 = make([]byte, KEY_LENGTH_TRIPLE)
 		copy(key24, key)
-		copy(key24[16:], key[:8])
+		copy(key24[KEY_LENGTH_DOUBLE:], key[:KEY_LENGTH_SINGLE])
 	default:
 		key24 = key
 	}
@@ -166,16 +187,16 @@ func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	// Convert to triple length if needed
 	var fullKey []byte
 	switch len(rawKey) {
-	case 8: // Single length
-		fullKey = make([]byte, 24)
+	case KEY_LENGTH_SINGLE: // Single length
+		fullKey = make([]byte, KEY_LENGTH_TRIPLE)
 		copy(fullKey, rawKey)
-		copy(fullKey[8:], rawKey)
-		copy(fullKey[16:], rawKey)
-	case 16: // Double length
-		fullKey = make([]byte, 24)
+		copy(fullKey[KEY_LENGTH_SINGLE:], rawKey)
+		copy(fullKey[KEY_LENGTH_DOUBLE:], rawKey)
+	case KEY_LENGTH_DOUBLE: // Double length
+		fullKey = make([]byte, KEY_LENGTH_TRIPLE)
 		copy(fullKey, rawKey)
-		copy(fullKey[16:], rawKey[:8])
-	case 24: // Triple length
+		copy(fullKey[KEY_LENGTH_DOUBLE:], rawKey[:KEY_LENGTH_SINGLE])
+	case KEY_LENGTH_TRIPLE: // Triple length
 		fullKey = rawKey
 	default:
 		return nil, fmt.Errorf("keycv: invalid key length %d", len(rawKey))
@@ -223,9 +244,9 @@ func GetDigitsFromString(ct string, length int) string {
 			if err != nil {
 				continue
 			}
-			if val-10 >= 0 {
+			if val-HEX_TO_DECIMAL_OFFSET >= 0 {
 				// WriteString cannot fail for valid strings, so error is ignored.
-				digits.WriteString(strconv.Itoa(int(val - 10)))
+				digits.WriteString(strconv.Itoa(int(val - HEX_TO_DECIMAL_OFFSET)))
 			}
 		}
 	}
@@ -235,13 +256,13 @@ func GetDigitsFromString(ct string, length int) string {
 
 // GetVisaPVV generates a 4-digit PIN Verification Value (PVV) using 3DES ECB.
 func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, error) {
-	pan11 := accountNumber[len(accountNumber)-11:] // last 11 digits before check digit
+	pan11 := accountNumber[len(accountNumber)-PVV_PAN_LENGTH:] // last 11 digits before check digit
 	// Build TSP: 11 PAN digits + PVKeyIndex + PIN (only first 4 digits)
-	tspHex := pan11 + keyIndex + pin[:4]
+	tspHex := pan11 + keyIndex + pin[:PVV_LENGTH]
 
-	if len(pvkHex) == 16 {
+	if len(pvkHex) == KEY_LENGTH_DOUBLE {
 		// Extend to tripple length
-		pvkHex = append(pvkHex, pvkHex[:8]...)
+		pvkHex = append(pvkHex, pvkHex[:KEY_LENGTH_SINGLE]...)
 	}
 
 	block, err := des.NewTripleDESCipher(pvkHex)
@@ -256,7 +277,7 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 	// 3DES-ECB encrypt TSP
 	dst := make([]byte, len(rawTsp))
 	NewECBEncrypter(block).CryptBlocks(dst, rawTsp)
-	digits := GetDigitsFromString(Raw2Str(dst), 4)
+	digits := GetDigitsFromString(Raw2Str(dst), PVV_LENGTH)
 
 	return []byte(digits), nil
 }
@@ -268,36 +289,37 @@ func GetVisaPVV(accountNumber, keyIndex, pin string, pvkHex []byte) ([]byte, err
 // cvkRaw: The raw Card Verification Key bytes (must be 16 bytes for double-length key).
 func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error) {
 	// Step 1: Validate double-length (16-byte) key
-	if len(cvkRaw) != 16 {
+	if len(cvkRaw) != CVK_LENGTH {
 		return nil, fmt.Errorf(
-			"invalid CVK length: expected 16 bytes (double-length), got %d",
+			"invalid CVK length: expected %d bytes (double-length), got %d",
+			CVK_LENGTH,
 			len(cvkRaw),
 		)
 	}
-	key1 := cvkRaw[:8]   // First half of the key
-	key2 := cvkRaw[8:16] // Second half of the key
+	key1 := cvkRaw[:KEY_LENGTH_SINGLE]   // First half of the key
+	key2 := cvkRaw[KEY_LENGTH_SINGLE:CVK_LENGTH] // Second half of the key
 
 	// Step 2: Validate PAN length (13-19 digits)
-	if len(panHex) < 13 || len(panHex) > 19 {
+	if len(panHex) < PAN_MIN_LENGTH || len(panHex) > PAN_MAX_LENGTH {
 		return nil, errors.New("invalid PAN length: must be between 13 and 19 digits")
 	}
 
 	// Steps 3-4: Validate expDate and servCode
-	if len(expDate) != 4 {
+	if len(expDate) != EXP_DATE_LENGTH {
 		return nil, errors.New("invalid expiration date length: must be 4 characters")
 	}
-	if len(servCode) != 3 {
+	if len(servCode) != SERVICE_CODE_LENGTH {
 		return nil, errors.New("invalid service code length: must be 3 characters")
 	}
 
 	// Step 5-6: Concatenate data and pad with zeros to 32 characters
 	data := panHex + expDate + servCode
-	if len(data) < 32 {
-		data += strings.Repeat("0", 32-len(data))
+	if len(data) < CVV_DATA_LENGTH {
+		data += strings.Repeat(CVV_PADDING_BYTE, CVV_DATA_LENGTH-len(data))
 	}
 
 	// Convert the first half of data to bytes for DES operations
-	data1Raw, err := hex.DecodeString(data[:16])
+	data1Raw, err := hex.DecodeString(data[:KEY_LENGTH_DOUBLE])
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode first half of data: %w", err)
 	}
@@ -307,21 +329,21 @@ func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create first DES cipher: %w", err)
 	}
-	encrypted1 := make([]byte, 8)
+	encrypted1 := make([]byte, KEY_LENGTH_SINGLE)
 	block1.Encrypt(encrypted1, data1Raw)
 
 	// Step 8: XOR result with second half of data
-	data2Raw, err := hex.DecodeString(data[16:])
+	data2Raw, err := hex.DecodeString(data[KEY_LENGTH_DOUBLE:])
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode second half of data: %w", err)
 	}
-	xored := make([]byte, 8)
-	for i := 0; i < 8; i++ {
+	xored := make([]byte, KEY_LENGTH_SINGLE)
+	for i := 0; i < KEY_LENGTH_SINGLE; i++ {
 		xored[i] = encrypted1[i] ^ data2Raw[i]
 	}
 
 	// Step 9: Encrypt result with first half of key
-	encrypted2 := make([]byte, 8)
+	encrypted2 := make([]byte, KEY_LENGTH_SINGLE)
 	block1.Encrypt(encrypted2, xored)
 
 	// Step 10: Decrypt with second half of key
@@ -329,17 +351,17 @@ func GetVisaCVV(panHex, expDate, servCode string, cvkRaw []byte) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create second DES cipher: %w", err)
 	}
-	decrypted := make([]byte, 8)
+	decrypted := make([]byte, KEY_LENGTH_SINGLE)
 	block2.Decrypt(decrypted, encrypted2)
 
 	// Step 11: Encrypt with first half of key again
-	finalEncrypted := make([]byte, 8)
+	finalEncrypted := make([]byte, KEY_LENGTH_SINGLE)
 	block1.Encrypt(finalEncrypted, decrypted)
 
 	// Step 12: Get first 3 digits from result
 	hexResult := Raw2Str(finalEncrypted)
 
-	return []byte(GetDigitsFromString(hexResult, 3)), nil
+	return []byte(GetDigitsFromString(hexResult, CVV_LENGTH)), nil
 }
 
 // ParityOf returns 0 for even number of set bits, -1 for odd.
@@ -375,7 +397,7 @@ func FixKeyParity(key []byte) []byte {
 		// parity == 1 -> already odd, leave as-is
 		// parity == 0 -> even, flip the lowest bit
 		if parity == 0 {
-			res[i] = b ^ 1
+			res[i] = b ^ XOR_BIT_FLIP
 		} else {
 			res[i] = b
 		}
@@ -388,8 +410,9 @@ func FixKeyParity(key []byte) []byte {
 // While crypto/rand doesn't need seeding as it uses system entropy,
 // we add extra entropy mixing to ensure uniqueness across WASM calls.
 func seedRandom() error {
-	seed := make([]byte, 32)
-	if _, err := rand.Read(seed); err != nil {
+	seed := make([]byte, RANDOM_SEED_LENGTH)
+	var err error
+	if _, err = rand.Read(seed); err != nil {
 		return fmt.Errorf("failed to read random seed: %w", err)
 	}
 
@@ -402,8 +425,8 @@ func seedRandom() error {
 	}
 
 	// Read more random bytes to mix the entropy pool
-	extraEntropy := make([]byte, 32)
-	if _, err := rand.Read(extraEntropy); err != nil {
+	extraEntropy := make([]byte, RANDOM_SEED_LENGTH)
+	if _, err = rand.Read(extraEntropy); err != nil {
 		return fmt.Errorf("failed to read extra entropy: %w", err)
 	}
 
@@ -414,11 +437,12 @@ func seedRandom() error {
 // Length must be 8 (single), 16 (double), or 24 (triple) bytes.
 func GenerateRandomKey(length int) ([]byte, error) {
 	// Seed the random generator on every call.
-	if err := seedRandom(); err != nil {
+	var err error
+	if err = seedRandom(); err != nil {
 		return nil, fmt.Errorf("failed to seed random generator: %w", err)
 	}
 
-	if length != 8 && length != 16 && length != 24 {
+	if length != KEY_LENGTH_SINGLE && length != KEY_LENGTH_DOUBLE && length != KEY_LENGTH_TRIPLE {
 		return nil, errors.New("invalid key length: must be 8, 16, or 24 bytes")
 	}
 
@@ -426,10 +450,10 @@ func GenerateRandomKey(length int) ([]byte, error) {
 	key1 := make([]byte, length)
 	key2 := make([]byte, length)
 
-	if _, err := rand.Read(key1); err != nil {
+	if _, err = rand.Read(key1); err != nil {
 		return nil, fmt.Errorf("failed to generate first random key: %w", err)
 	}
-	if _, err := rand.Read(key2); err != nil {
+	if _, err = rand.Read(key2); err != nil {
 		return nil, fmt.Errorf("failed to generate second random key: %w", err)
 	}
 
@@ -452,15 +476,16 @@ func GenerateRandomKey(length int) ([]byte, error) {
 // ExtendDoubleToTripleKey extends a 16-byte double-length key to a 24-byte triple-length key (K1K2K1).
 // This is a common way to form a TDEA keying option 1 key (K1, K2, K3) where K3=K1 from a double-length key (K1, K2).
 func ExtendDoubleToTripleKey(doubleKey []byte) ([]byte, error) {
-	if len(doubleKey) != 16 {
+	if len(doubleKey) != KEY_LENGTH_DOUBLE {
 		return nil, fmt.Errorf(
-			"input key must be 16 bytes for double-to-triple extension, got %d",
+			"input key must be %d bytes for double-to-triple extension, got %d",
+			KEY_LENGTH_DOUBLE,
 			len(doubleKey),
 		)
 	}
-	tripleKey := make([]byte, 24)
+	tripleKey := make([]byte, KEY_LENGTH_TRIPLE)
 	copy(tripleKey, doubleKey)          // Copy K1K2 to the first 16 bytes.
-	copy(tripleKey[16:], doubleKey[:8]) // Copy K1 (first 8 bytes of doubleKey) to the last 8 bytes.
+	copy(tripleKey[KEY_LENGTH_DOUBLE:], doubleKey[:KEY_LENGTH_SINGLE]) // Copy K1 (first 8 bytes of doubleKey) to the last 8 bytes.
 
 	return tripleKey, nil
 }

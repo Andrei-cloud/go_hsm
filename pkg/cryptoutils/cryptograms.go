@@ -5,6 +5,16 @@ import (
 	"slices"
 )
 
+const (
+	ARQC_ARPC_LENGTH          = 8
+	TRIPLE_DES_MODE           = 3
+	ICC_KEY_DERIVATION_OPTION_A = "A"
+	ICC_KEY_DERIVATION_OPTION_B = "B"
+	ATC_PADDING_LENGTH        = 6
+	ARPC_LENGTH_CVN18         = 4
+	ISSUER_MASTER_KEY_LENGTH  = 16
+)
+
 // GenerateARQC10 computes the 8-byte ARQC per Visa CVN10 algorithm.
 // issMKAC: Issuer Master Key for AC (16-byte DES key).
 // data: concatenated tag data in the proper order.
@@ -12,7 +22,7 @@ import (
 // Uses ISO7816-4 padding and DES3-CBC with zero IV.
 func GenerateARQC10(issMKAC, data []byte, pan, psn string) ([]byte, error) {
 	// 1. Derive ICC Master Key AC using Option A (3DES).
-	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "A")
+	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, ICC_KEY_DERIVATION_OPTION_A)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +31,7 @@ func GenerateARQC10(issMKAC, data []byte, pan, psn string) ([]byte, error) {
 	padded := padISO9797Method1(data, des.BlockSize)
 
 	// 3. Use 3DES-CBC with zero IV.
-	out, err := CalculateMAC(padded, iccMKAC, 8, 3)
+	out, err := CalculateMAC(padded, iccMKAC, ARQC_ARPC_LENGTH, TRIPLE_DES_MODE)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +41,7 @@ func GenerateARQC10(issMKAC, data []byte, pan, psn string) ([]byte, error) {
 
 // GenerateARPC10 computes the 8-byte ARPC per Visa CVN10 (Method 1).
 func GenerateARPC10(issMKAC, arqc, arpcRc []byte, pan, psn string) ([]byte, error) {
-	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "A")
+	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, ICC_KEY_DERIVATION_OPTION_A)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +54,7 @@ func GenerateARPC10(issMKAC, arqc, arpcRc []byte, pan, psn string) ([]byte, erro
 	}
 
 	// ISO9797-1 Algorithm 3: CBC-DES3 then single-DES decrypt/encrypt
-	return CalculateMAC(msg, iccMKAC, des.BlockSize, 3)
+	return CalculateMAC(msg, iccMKAC, ARQC_ARPC_LENGTH, TRIPLE_DES_MODE)
 }
 
 // GenerateARQC18 implements Visa CVN-18 ARQC calculation.
@@ -59,12 +69,12 @@ func GenerateARQC18(
 	pan, psn string,
 ) ([]byte, error) {
 	// 1. derive ICC Master Key AC (Option B)
-	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "B")
+	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, ICC_KEY_DERIVATION_OPTION_B)
 	if err != nil {
 		return nil, err
 	}
 	// 2. derive session key: common method (ATC||00..00)
-	divers := slices.Concat(atc, make([]byte, 6)) // 8-byte block
+	divers := slices.Concat(atc, make([]byte, ATC_PADDING_LENGTH)) // 8-byte block
 	skAC, err := DeriveSessionKey(iccMKAC, divers)
 	if err != nil {
 		return nil, err
@@ -73,12 +83,12 @@ func GenerateARQC18(
 	padded := padISO9797Method2(data, des.BlockSize)
 
 	// 4. 3DES-CBC with zero IV
-	out, err := CalculateMAC(padded, skAC, des.BlockSize, 3)
+	out, err := CalculateMAC(padded, skAC, des.BlockSize, TRIPLE_DES_MODE)
 	if err != nil {
 		return nil, err
 	}
 	// 5. ARQC = final 8 bytes
-	return out[len(out)-des.BlockSize:], nil
+	return out[len(out)-ARQC_ARPC_LENGTH:], nil
 }
 
 // GenerateARPC18 implements Visa CVN-18 ARPC (method 2).
@@ -95,12 +105,12 @@ func GenerateARPC18(
 	arqc, csu, propAuthData []byte,
 ) ([]byte, error) {
 	// derive ICC MK AC
-	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, "B")
+	iccMKAC, err := DeriveICCKey(issMKAC, pan, psn, ICC_KEY_DERIVATION_OPTION_B)
 	if err != nil {
 		return nil, err
 	}
 	// derive session key
-	divers := slices.Concat(atc, make([]byte, 6))
+	divers := slices.Concat(atc, make([]byte, ATC_PADDING_LENGTH))
 	skAC, err := DeriveSessionKey(iccMKAC, divers)
 	if err != nil {
 		return nil, err
@@ -110,12 +120,12 @@ func GenerateARPC18(
 	// pad
 	padded := padISO9797Method2(msg, des.BlockSize)
 	// MAC Alg 3 (DES3-CBC then DES decrypt/encrypt)
-	fullMac, err := CalculateMAC(padded, skAC, des.BlockSize, 3)
+	fullMac, err := CalculateMAC(padded, skAC, des.BlockSize, TRIPLE_DES_MODE)
 	if err != nil {
 		return nil, err
 	}
 	// ARPC = first 4 bytes
-	return fullMac[:4], nil
+	return fullMac[:ARPC_LENGTH_CVN18], nil
 }
 
 // GenerateARQC22 implements Visa CVN-22 ARQC calculation.
