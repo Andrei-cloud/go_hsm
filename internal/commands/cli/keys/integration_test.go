@@ -17,7 +17,7 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 	}{
 		{
 			name:     "AES128Standard",
-			clearKey: mustDecodeHex("0123456789ABCDEF"),
+			clearKey: mustDecodeHex(t, "0123456789ABCDEF"),
 			header: keyblocklmk.Header{
 				Version:        '1',
 				KeyUsage:       "G0",
@@ -31,7 +31,7 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 		},
 		{
 			name: "AES256DifferentHeader",
-			clearKey: mustDecodeHex(
+			clearKey: mustDecodeHex(t,
 				"0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
 			),
 			header: keyblocklmk.Header{
@@ -70,6 +70,18 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 			// Verify it starts with 'S' (format identifier).
 			if keyBlock[0] != 'S' {
 				t.Errorf("expected key block to start with 'S', got '%c'", keyBlock[0])
+			}
+
+			// Additional structural checks.
+			if len(keyBlock) < 1+16+16 { // 'S' + 16 header + at least 16 hex for MAC
+				t.Errorf("key block too short: got %d bytes", len(keyBlock))
+			}
+
+			// Ensure the key block contains only valid characters (ASCII for header, hex for data).
+			for i, b := range keyBlock[1:] { // Skip 'S'
+				if b < 32 || b > 126 {
+					t.Errorf("invalid character at position %d: %d", i+1, b)
+				}
 			}
 
 			// Test unwrapping to verify round-trip.
@@ -152,36 +164,51 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 					hex.EncodeToString(tc.clearKey), hex.EncodeToString(unwrappedKey))
 			}
 
-			t.Logf("Key block created successfully: %s", string(keyBlock))
-			t.Logf("Header - Version: %c, KeyUsage: %s, KeyVersionNum: %s",
-				unwrappedHeader.Version, unwrappedHeader.KeyUsage, unwrappedHeader.KeyVersionNum)
-		})
-	}
+			// Validate key sizes.
+			if len(unwrappedKey) != len(tc.clearKey) {
+				t.Errorf(
+					"unwrapped key length mismatch: expected %d, got %d",
+					len(tc.clearKey),
+					len(unwrappedKey),
+				)
+			}
 
-	// Test error cases using the first test case's keyBlock.
-	clearKey := mustDecodeHex("0123456789ABCDEF")
-	header := keyblocklmk.Header{
-		Version:        '1',
-		KeyUsage:       "G0",
-		Algorithm:      'A',
-		ModeOfUse:      'N',
-		KeyVersionNum:  "05",
-		Exportability:  'S',
-		OptionalBlocks: 0,
-		KeyContext:     0,
-	}
-	keyBlock, err := keyblocklmk.WrapKeyBlock(keyblocklmk.DefaultTestAESLMK, header, nil, clearKey)
-	if err != nil {
-		t.Fatalf("failed to create key block for error tests: %v", err)
+			// Log expected key block length for debugging.
+			t.Logf(
+				"Expected key size: %d bytes, Key block length: %d bytes",
+				len(tc.clearKey),
+				len(keyBlock),
+			)
+		})
 	}
 
 	t.Run("InvalidLMK", func(t *testing.T) {
 		t.Parallel()
+		clearKey := mustDecodeHex(t, "0123456789ABCDEF")
+		header := keyblocklmk.Header{
+			Version:        '1',
+			KeyUsage:       "G0",
+			Algorithm:      'A',
+			ModeOfUse:      'N',
+			KeyVersionNum:  "05",
+			Exportability:  'S',
+			OptionalBlocks: 0,
+			KeyContext:     0,
+		}
+		keyBlock, err := keyblocklmk.WrapKeyBlock(
+			keyblocklmk.DefaultTestAESLMK,
+			header,
+			nil,
+			clearKey,
+		)
+		if err != nil {
+			t.Fatalf("failed to create key block for error test: %v", err)
+		}
 		invalidLMK := make([]byte, 32)
 		for i := range invalidLMK {
 			invalidLMK[i] = 0xFF
 		}
-		_, _, err := keyblocklmk.UnwrapKeyBlock(invalidLMK, keyBlock)
+		_, _, err = keyblocklmk.UnwrapKeyBlock(invalidLMK, keyBlock)
 		if err == nil {
 			t.Error("expected error when unwrapping with invalid LMK")
 		}
@@ -189,13 +216,36 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 
 	t.Run("TamperedKeyBlock", func(t *testing.T) {
 		t.Parallel()
+		clearKey := mustDecodeHex(t, "0123456789ABCDEF")
+		header := keyblocklmk.Header{
+			Version:        '1',
+			KeyUsage:       "G0",
+			Algorithm:      'A',
+			ModeOfUse:      'N',
+			KeyVersionNum:  "05",
+			Exportability:  'S',
+			OptionalBlocks: 0,
+			KeyContext:     0,
+		}
+		keyBlock, err := keyblocklmk.WrapKeyBlock(
+			keyblocklmk.DefaultTestAESLMK,
+			header,
+			nil,
+			clearKey,
+		)
+		if err != nil {
+			t.Fatalf("failed to create key block for error test: %v", err)
+		}
 		tamperedKeyBlock := make([]byte, len(keyBlock))
 		copy(tamperedKeyBlock, keyBlock)
-		// Tamper with the MAC (last 16 hex chars, but since it's hex, modify last byte).
-		if len(tamperedKeyBlock) > 0 {
-			tamperedKeyBlock[len(tamperedKeyBlock)-1] ^= 0x01
+		// Tamper with the MAC by modifying multiple bytes in the hex-encoded MAC at the end.
+		macStart := len(tamperedKeyBlock) - 16 // Assuming 16 hex chars for 8-byte MAC
+		if macStart > 0 {
+			for i := 0; i < 4 && macStart+i < len(tamperedKeyBlock); i++ {
+				tamperedKeyBlock[macStart+i] ^= 0x01
+			}
 		}
-		_, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, tamperedKeyBlock)
+		_, _, err = keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, tamperedKeyBlock)
 		if err == nil {
 			t.Error("expected error when unwrapping tampered key block")
 		}
@@ -203,8 +253,17 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 
 	t.Run("InvalidHeader", func(t *testing.T) {
 		t.Parallel()
-		invalidHeader := header
-		invalidHeader.KeyUsage = "TOOLONG" // More than 2 chars
+		clearKey := mustDecodeHex(t, "0123456789ABCDEF")
+		invalidHeader := keyblocklmk.Header{
+			Version:        '1',
+			KeyUsage:       "TOOLONG", // More than 2 chars
+			Algorithm:      'A',
+			ModeOfUse:      'N',
+			KeyVersionNum:  "05",
+			Exportability:  'S',
+			OptionalBlocks: 0,
+			KeyContext:     0,
+		}
 		_, err := keyblocklmk.WrapKeyBlock(
 			keyblocklmk.DefaultTestAESLMK,
 			invalidHeader,
@@ -217,10 +276,10 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 	})
 }
 
-func mustDecodeHex(s string) []byte {
+func mustDecodeHex(t *testing.T, s string) []byte {
 	b, err := hex.DecodeString(s)
 	if err != nil {
-		panic(err)
+		t.Fatalf("failed to decode hex: %v", err)
 	}
 
 	return b
