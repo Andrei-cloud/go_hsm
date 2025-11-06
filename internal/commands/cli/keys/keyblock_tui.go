@@ -238,20 +238,22 @@ func (m keyBlockHeaderModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentField--
 			}
 		case "up", "k":
-			if currentField.fieldType == fieldTypeRadio {
+			switch currentField.fieldType {
+			case fieldTypeRadio:
 				if currentField.selected > 0 {
 					currentField.selected--
 				}
-			} else if currentField.fieldType == fieldTypeNumeric {
+			case fieldTypeNumeric:
 				m.incrementNumericValue(1)
 			}
 		case "down", "j":
-			if currentField.fieldType == fieldTypeRadio {
+			switch currentField.fieldType {
+			case fieldTypeRadio:
 				maxIdx := len(currentField.options) - 1
 				if currentField.selected < maxIdx {
 					currentField.selected++
 				}
-			} else if currentField.fieldType == fieldTypeNumeric {
+			case fieldTypeNumeric:
 				m.decrementNumericValue(1)
 			}
 		case "backspace":
@@ -405,7 +407,8 @@ func (m keyBlockHeaderModel) View() string {
 	currentField := m.fields[m.currentField]
 	s += fmt.Sprintf("▶ %s: %s\n\n", currentField.name, currentField.description)
 
-	if currentField.fieldType == fieldTypeRadio {
+	switch currentField.fieldType {
+	case fieldTypeRadio:
 		// Show radio options for current field only.
 		for j, option := range currentField.options {
 			selector := "  ○ "
@@ -414,7 +417,7 @@ func (m keyBlockHeaderModel) View() string {
 			}
 			s += fmt.Sprintf("%s%s - %s\n", selector, option.value, option.description)
 		}
-	} else if currentField.fieldType == fieldTypeNumeric {
+	case fieldTypeNumeric:
 		// Show numeric input.
 		s += fmt.Sprintf("  [ %s ] (Range: %02d-%02d)\n",
 			currentField.numericValue, currentField.minValue, currentField.maxValue)
@@ -428,10 +431,11 @@ func (m keyBlockHeaderModel) View() string {
 		s += "Completed fields:\n"
 		for i := 0; i < m.currentField; i++ {
 			field := m.fields[i]
-			if field.fieldType == fieldTypeRadio {
+			switch field.fieldType {
+			case fieldTypeRadio:
 				selectedOption := field.options[field.selected]
 				s += fmt.Sprintf("  %s: %s\n", field.name, selectedOption.value)
-			} else if field.fieldType == fieldTypeNumeric {
+			case fieldTypeNumeric:
 				s += fmt.Sprintf("  %s: %s\n", field.name, field.numericValue)
 			}
 		}

@@ -10,12 +10,156 @@ import (
 func TestKeyBlockWrapIntegration(t *testing.T) {
 	t.Parallel()
 
-	// Test key block wrapping with a configured header.
-	clearKey, err := hex.DecodeString("0123456789ABCDEF")
-	if err != nil {
-		t.Fatalf("failed to decode test key: %v", err)
+	testCases := []struct {
+		name     string
+		clearKey []byte
+		header   keyblocklmk.Header
+	}{
+		{
+			name:     "AES128Standard",
+			clearKey: mustDecodeHex("0123456789ABCDEF"),
+			header: keyblocklmk.Header{
+				Version:        '1',
+				KeyUsage:       "G0",
+				Algorithm:      'A',
+				ModeOfUse:      'N',
+				KeyVersionNum:  "05",
+				Exportability:  'S',
+				OptionalBlocks: 0,
+				KeyContext:     0,
+			},
+		},
+		{
+			name: "AES256DifferentHeader",
+			clearKey: mustDecodeHex(
+				"0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+			),
+			header: keyblocklmk.Header{
+				Version:        '1',
+				KeyUsage:       "C0",
+				Algorithm:      'A',
+				ModeOfUse:      'E',
+				KeyVersionNum:  "10",
+				Exportability:  'N',
+				OptionalBlocks: 0,
+				KeyContext:     1,
+			},
+		},
 	}
 
+	for _, tc := range testCases {
+		tc := tc // capture loop variable
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Wrap key block.
+			keyBlock, err := keyblocklmk.WrapKeyBlock(
+				keyblocklmk.DefaultTestAESLMK,
+				tc.header,
+				nil,
+				tc.clearKey,
+			)
+			if err != nil {
+				t.Fatalf("failed to wrap key block: %v", err)
+			}
+
+			// Verify key block was created.
+			if len(keyBlock) == 0 {
+				t.Error("expected non-empty key block")
+			}
+
+			// Verify it starts with 'S' (format identifier).
+			if keyBlock[0] != 'S' {
+				t.Errorf("expected key block to start with 'S', got '%c'", keyBlock[0])
+			}
+
+			// Test unwrapping to verify round-trip.
+			unwrappedHeader, unwrappedKey, err := keyblocklmk.UnwrapKeyBlock(
+				keyblocklmk.DefaultTestAESLMK,
+				keyBlock,
+			)
+			if err != nil {
+				t.Fatalf("failed to unwrap key block: %v", err)
+			}
+
+			// Verify header fields.
+			if unwrappedHeader.Version != tc.header.Version {
+				t.Errorf(
+					"version mismatch: expected '%c', got '%c'",
+					tc.header.Version,
+					unwrappedHeader.Version,
+				)
+			}
+
+			if unwrappedHeader.KeyUsage != tc.header.KeyUsage {
+				t.Errorf(
+					"key usage mismatch: expected '%s', got '%s'",
+					tc.header.KeyUsage,
+					unwrappedHeader.KeyUsage,
+				)
+			}
+
+			if unwrappedHeader.KeyVersionNum != tc.header.KeyVersionNum {
+				t.Errorf(
+					"key version mismatch: expected '%s', got '%s'",
+					tc.header.KeyVersionNum,
+					unwrappedHeader.KeyVersionNum,
+				)
+			}
+
+			if unwrappedHeader.Algorithm != tc.header.Algorithm {
+				t.Errorf(
+					"algorithm mismatch: expected '%c', got '%c'",
+					tc.header.Algorithm,
+					unwrappedHeader.Algorithm,
+				)
+			}
+
+			if unwrappedHeader.ModeOfUse != tc.header.ModeOfUse {
+				t.Errorf(
+					"mode of use mismatch: expected '%c', got '%c'",
+					tc.header.ModeOfUse,
+					unwrappedHeader.ModeOfUse,
+				)
+			}
+
+			if unwrappedHeader.Exportability != tc.header.Exportability {
+				t.Errorf(
+					"exportability mismatch: expected '%c', got '%c'",
+					tc.header.Exportability,
+					unwrappedHeader.Exportability,
+				)
+			}
+
+			if unwrappedHeader.OptionalBlocks != tc.header.OptionalBlocks {
+				t.Errorf(
+					"optional blocks mismatch: expected %d, got %d",
+					tc.header.OptionalBlocks,
+					unwrappedHeader.OptionalBlocks,
+				)
+			}
+
+			if unwrappedHeader.KeyContext != tc.header.KeyContext {
+				t.Errorf(
+					"key context mismatch: expected %d, got %d",
+					tc.header.KeyContext,
+					unwrappedHeader.KeyContext,
+				)
+			}
+
+			// Verify key data.
+			if hex.EncodeToString(unwrappedKey) != hex.EncodeToString(tc.clearKey) {
+				t.Errorf("key data mismatch: expected '%s', got '%s'",
+					hex.EncodeToString(tc.clearKey), hex.EncodeToString(unwrappedKey))
+			}
+
+			t.Logf("Key block created successfully: %s", string(keyBlock))
+			t.Logf("Header - Version: %c, KeyUsage: %s, KeyVersionNum: %s",
+				unwrappedHeader.Version, unwrappedHeader.KeyUsage, unwrappedHeader.KeyVersionNum)
+		})
+	}
+
+	// Test error cases using the first test case's keyBlock.
+	clearKey := mustDecodeHex("0123456789ABCDEF")
 	header := keyblocklmk.Header{
 		Version:        '1',
 		KeyUsage:       "G0",
@@ -26,64 +170,58 @@ func TestKeyBlockWrapIntegration(t *testing.T) {
 		OptionalBlocks: 0,
 		KeyContext:     0,
 	}
-
-	// Wrap key block.
 	keyBlock, err := keyblocklmk.WrapKeyBlock(keyblocklmk.DefaultTestAESLMK, header, nil, clearKey)
 	if err != nil {
-		t.Fatalf("failed to wrap key block: %v", err)
+		t.Fatalf("failed to create key block for error tests: %v", err)
 	}
 
-	// Verify key block was created.
-	if len(keyBlock) == 0 {
-		t.Error("expected non-empty key block")
-	}
+	t.Run("InvalidLMK", func(t *testing.T) {
+		t.Parallel()
+		invalidLMK := make([]byte, 32)
+		for i := range invalidLMK {
+			invalidLMK[i] = 0xFF
+		}
+		_, _, err := keyblocklmk.UnwrapKeyBlock(invalidLMK, keyBlock)
+		if err == nil {
+			t.Error("expected error when unwrapping with invalid LMK")
+		}
+	})
 
-	// Verify it starts with 'S' (format identifier).
-	if keyBlock[0] != 'S' {
-		t.Errorf("expected key block to start with 'S', got '%c'", keyBlock[0])
-	}
+	t.Run("TamperedKeyBlock", func(t *testing.T) {
+		t.Parallel()
+		tamperedKeyBlock := make([]byte, len(keyBlock))
+		copy(tamperedKeyBlock, keyBlock)
+		// Tamper with the MAC (last 16 hex chars, but since it's hex, modify last byte).
+		if len(tamperedKeyBlock) > 0 {
+			tamperedKeyBlock[len(tamperedKeyBlock)-1] ^= 0x01
+		}
+		_, _, err := keyblocklmk.UnwrapKeyBlock(keyblocklmk.DefaultTestAESLMK, tamperedKeyBlock)
+		if err == nil {
+			t.Error("expected error when unwrapping tampered key block")
+		}
+	})
 
-	// Test unwrapping to verify round-trip.
-	unwrappedHeader, unwrappedKey, err := keyblocklmk.UnwrapKeyBlock(
-		keyblocklmk.DefaultTestAESLMK,
-		keyBlock,
-	)
+	t.Run("InvalidHeader", func(t *testing.T) {
+		t.Parallel()
+		invalidHeader := header
+		invalidHeader.KeyUsage = "TOOLONG" // More than 2 chars
+		_, err := keyblocklmk.WrapKeyBlock(
+			keyblocklmk.DefaultTestAESLMK,
+			invalidHeader,
+			nil,
+			clearKey,
+		)
+		if err == nil {
+			t.Error("expected error when wrapping with invalid header")
+		}
+	})
+}
+
+func mustDecodeHex(s string) []byte {
+	b, err := hex.DecodeString(s)
 	if err != nil {
-		t.Fatalf("failed to unwrap key block: %v", err)
+		panic(err)
 	}
 
-	// Verify header fields.
-	if unwrappedHeader.Version != header.Version {
-		t.Errorf(
-			"version mismatch: expected '%c', got '%c'",
-			header.Version,
-			unwrappedHeader.Version,
-		)
-	}
-
-	if unwrappedHeader.KeyUsage != header.KeyUsage {
-		t.Errorf(
-			"key usage mismatch: expected '%s', got '%s'",
-			header.KeyUsage,
-			unwrappedHeader.KeyUsage,
-		)
-	}
-
-	if unwrappedHeader.KeyVersionNum != header.KeyVersionNum {
-		t.Errorf(
-			"key version mismatch: expected '%s', got '%s'",
-			header.KeyVersionNum,
-			unwrappedHeader.KeyVersionNum,
-		)
-	}
-
-	// Verify key data.
-	if hex.EncodeToString(unwrappedKey) != hex.EncodeToString(clearKey) {
-		t.Errorf("key data mismatch: expected '%s', got '%s'",
-			hex.EncodeToString(clearKey), hex.EncodeToString(unwrappedKey))
-	}
-
-	t.Logf("Key block created successfully: S%s", hex.EncodeToString(keyBlock[1:]))
-	t.Logf("Header - Version: %c, KeyUsage: %s, KeyVersionNum: %s",
-		unwrappedHeader.Version, unwrappedHeader.KeyUsage, unwrappedHeader.KeyVersionNum)
+	return b
 }

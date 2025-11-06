@@ -22,9 +22,9 @@ import (
 type PluginManager struct {
 	ctx        context.Context //nolint:containedctx // Context is used for plugin lifecycle.
 	runtime    wazero.Runtime
-	plugins    map[string]*PluginInstancePool
-	hsm        *hsm.HSM
-	hostFuncs  *HostFunctions
+	plugins    map[string]PluginInstancePoolInterface
+	hsm        hsm.HSMInterface
+	hostFuncs  HostFunctionsInterface
 	bufferPool *hsmplugin.BufferPool
 	mu         sync.RWMutex
 }
@@ -32,11 +32,11 @@ type PluginManager struct {
 // NewPluginManager returns a PluginManager ready to load plugins.
 func NewPluginManager(
 	ctx context.Context,
-	hsmInstance *hsm.HSM,
+	hsmInstance hsm.HSMInterface,
 ) *PluginManager {
 	pm := &PluginManager{
 		ctx:        ctx,
-		plugins:    make(map[string]*PluginInstancePool),
+		plugins:    make(map[string]PluginInstancePoolInterface),
 		hsm:        hsmInstance,
 		bufferPool: hsmplugin.NewBufferPool(),
 	}
@@ -68,7 +68,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 		return fmt.Errorf("failed to register host functions: %w", err)
 	}
 
-	newPlugins := make(map[string]*PluginInstancePool)
+	newPlugins := make(map[string]PluginInstancePoolInterface)
 
 	for _, f := range files {
 		if f.IsDir() || filepath.Ext(f.Name()) != ".wasm" {
@@ -368,7 +368,7 @@ func (pm *PluginManager) ListPlugins() []string {
 }
 
 // HSM returns the HSM instance.
-func (pm *PluginManager) HSM() *hsm.HSM {
+func (pm *PluginManager) HSM() hsm.HSMInterface {
 	return pm.hsm
 }
 

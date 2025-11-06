@@ -3,6 +3,7 @@ package keyblocklmk
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -244,7 +245,7 @@ func TestMACValidation(t *testing.T) {
 	if err == nil {
 		t.Error("UnwrapKeyBlock should have failed for corrupted key block")
 	}
-	if err != nil && err.Error() != "mac verification failed" {
+	if !errors.Is(err, ErrMACVerificationFailed) {
 		t.Errorf("Expected MAC verification error, got: %v", err)
 	}
 }

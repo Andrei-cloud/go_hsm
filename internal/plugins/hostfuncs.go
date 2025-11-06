@@ -12,15 +12,21 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// HostFunctionsInterface defines the interface for WASM host functions.
+type HostFunctionsInterface interface {
+	// Register adds all host functions to the WASM runtime.
+	Register(ctx context.Context) error
+}
+
 // HostFunctions provides WASM host functions for plugins to use.
 type HostFunctions struct {
 	runtime wazero.Runtime
 	builder wazero.HostModuleBuilder
-	hsm     *hsm.HSM
+	hsm     hsm.HSMInterface
 }
 
 // NewHostFunctions creates a new host functions provider.
-func NewHostFunctions(runtime wazero.Runtime, hsmInstance *hsm.HSM) *HostFunctions {
+func NewHostFunctions(runtime wazero.Runtime, hsmInstance hsm.HSMInterface) *HostFunctions {
 	return &HostFunctions{
 		runtime: runtime,
 		builder: runtime.NewHostModuleBuilder("env"),

@@ -91,6 +91,7 @@ func decodeVISA1(pinBlockHex, pan string) (string, error) {
 	pinLenHex := string(clearPinFieldHex[0])
 	pinLen, err := strconv.ParseInt(pinLenHex, 16, 64)
 	if err != nil || pinLen < 4 || pinLen > 12 { // VISA1 PIN length 4-12.
+
 		return "", fmt.Errorf(
 			"%w: decoded visa1 pin block has invalid pin length",
 			errPinBlockDecoding,
@@ -101,6 +102,7 @@ func decodeVISA1(pinBlockHex, pan string) (string, error) {
 	pinStartIndex := 1 // PIN starts after the length character.
 	pinEndIndex := pinStartIndex + int(pinLen)
 	if pinEndIndex > 16 { // 16 is length of clearPinFieldHex.
+
 		return "", fmt.Errorf("%w: pin length exceeds block boundary in visa1", errPinBlockDecoding)
 	}
 	pin := clearPinFieldHex[pinStartIndex:pinEndIndex]
@@ -156,6 +158,7 @@ func decodeVISA4(_, _ string) (string, error) {
 // `pin` is new PIN, `pan` (repurposed) is UDK_HEX.
 func encodeVISANEWPINONLY(newPin, udkHex string) (string, error) {
 	if len(udkHex) < 8 { // Needs 8 rightmost hex digits.
+
 		return "", fmt.Errorf(
 			"%w: udkHex too short for visa41 (min 8 hex chars)",
 			errInvalidPanLength,
@@ -313,7 +316,7 @@ func decodeVISANEWOLDIN(pinBlockHex, oldPinAndUdkHex string) (string, error) {
 	}
 
 	// XOR pinBlockHex with keyBlockStr and oldPinDataBlockStr to get the New PIN Data Block.
-	// P_final = B1 ^ B2 ^ B3  => B2 = P_final ^ B1 ^ B3
+	// P_final = B1 ^ B2 ^ B3  => B2 = P_final ^ B1 ^ B3.
 	intermediateXor, err := xorHexStrings(pinBlockHex, keyBlockStr)
 	if err != nil {
 		return "", fmt.Errorf("%w: visa42 decode xor step 1 failed: %v", errInternalDecoding, err)

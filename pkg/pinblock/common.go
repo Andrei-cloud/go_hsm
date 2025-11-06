@@ -1,4 +1,3 @@
-
 package pinblock
 
 import (
@@ -6,9 +5,14 @@ import (
 	"strconv"
 )
 
-// decodePanBasedFormat provides a generic decoding mechanism for PIN block formats
+// decodePanBasedFormat provides a generic decoding mechanism for PIN block formats.
 // that are based on XORing a PIN field with a PAN-derived field.
-func decodePanBasedFormat(pinBlockHex, pan string, panFromLeft bool, formatPrefix byte, formatName string) (string, error) {
+func decodePanBasedFormat(
+	pinBlockHex, pan string,
+	panFromLeft bool,
+	formatPrefix byte,
+	formatName string,
+) (string, error) {
 	// Step 1: Construct the PAN-derived field.
 	relevantPan, err := get12PanDigits(pan, panFromLeft)
 	if err != nil {
@@ -19,7 +23,12 @@ func decodePanBasedFormat(pinBlockHex, pan string, panFromLeft bool, formatPrefi
 	// Step 2: XOR the encrypted PIN block with the PAN field to get the clear PIN field.
 	clearPinFieldHex, err := xorHexStrings(pinBlockHex, panFieldStr)
 	if err != nil {
-		return "", fmt.Errorf("%w: xor failed during %s decoding: %v", errInternalDecoding, formatName, err)
+		return "", fmt.Errorf(
+			"%w: xor failed during %s decoding: %v",
+			errInternalDecoding,
+			formatName,
+			err,
+		)
 	}
 
 	// Step 3: Validate the format of the clear PIN field.
@@ -46,7 +55,11 @@ func decodePanBasedFormat(pinBlockHex, pan string, panFromLeft bool, formatPrefi
 	pinStartIndex := 2
 	pinEndIndex := pinStartIndex + int(pinLen)
 	if pinEndIndex > 16 {
-		return "", fmt.Errorf("%w: pin length exceeds block boundary in %s", errPinBlockDecoding, formatName)
+		return "", fmt.Errorf(
+			"%w: pin length exceeds block boundary in %s",
+			errPinBlockDecoding,
+			formatName,
+		)
 	}
 	decodedPin := clearPinFieldHex[pinStartIndex:pinEndIndex]
 

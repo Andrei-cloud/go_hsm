@@ -29,11 +29,12 @@ func extractBytes(input []byte, index *int, length int) ([]byte, error) {
 	}
 	data := input[*index : *index+length]
 	*index += length
+
 	return data, nil
 }
 
 // parseModeAndScheme parses the mode and scheme from the input byte slice.
-func parseModeAndScheme(input []byte) (mode byte, scheme byte, err error) {
+func parseModeAndScheme(input []byte) (mode, scheme byte, err error) {
 	if len(input) < 2 {
 		return 0, 0, errorcodes.Err15
 	}
@@ -47,6 +48,7 @@ func parseModeAndScheme(input []byte) (mode byte, scheme byte, err error) {
 	if scheme != 0 {
 		return 0, 0, errorcodes.Err68
 	}
+
 	return mode, scheme, nil
 }
 
@@ -75,6 +77,7 @@ func readMKACHex(input []byte, index *int) (string, bool, error) {
 		}
 		mkacHex = string(mkacBytes)
 	}
+
 	return mkacHex, isVariantLMK, nil
 }
 
@@ -95,6 +98,7 @@ func decryptAndValidateMKAC(mkacHex string, isVariantLMK bool) ([]byte, error) {
 		if hsmErr, ok := err.(errorcodes.HSMError); ok {
 			return nil, hsmErr
 		}
+
 		return nil, errorcodes.Err10
 	}
 
@@ -144,6 +148,7 @@ func parseARQC(input []byte, index *int) ([]byte, error) {
 	if err != nil || delimiter[0] != ';' {
 		return nil, errorcodes.Err15
 	}
+
 	return extractBytes(input, index, 8) // 8 bytes for ARQC
 }
 
@@ -157,6 +162,7 @@ func parseARC(input []byte, index *int, mode byte) ([]byte, error) {
 		}
 		arc = arcBytes
 	}
+
 	return arc, nil
 }
 

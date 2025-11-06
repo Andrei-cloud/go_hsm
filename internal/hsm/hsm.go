@@ -15,13 +15,32 @@ const FirmwareVersion = "7000-E000"
 
 var errUnknownThalesPinBlockFormat = errors.New("unknown thales pin block format code")
 
+// HSMInterface defines the interface for HSM operations.
+type HSMInterface interface {
+	// GenerateRandomKey generates a cryptographically secure random key of the specified length.
+	GenerateRandomKey(length int) ([]byte, error)
+
+	// EncryptKeyWithVariantScheme encrypts key data under a variant LMK using a specific key type and scheme tag.
+	EncryptKeyWithVariantScheme(keyData []byte, keyTypeStr string, schemeTag byte) ([]byte, error)
+
+	// DecryptKeyWithVariantScheme decrypts key data that was encrypted under a variant LMK.
+	DecryptKeyWithVariantScheme(
+		encryptedKeyData []byte,
+		keyTypeStr string,
+		schemeTag byte,
+	) ([]byte, error)
+
+	// FirmwareVersion returns the HSM firmware version.
+	FirmwareVersion() string
+}
+
 // HSM represents the hardware security module server.
 // It holds the Variant LMK set for scheme-based encryption,
 // firmware version, and PCI compliance mode.
 type HSM struct {
 	VariantLmkSet   variantlmk.LMKSet
 	PciMode         bool
-	FirmwareVersion string
+	firmwareVersion string
 }
 
 // NewHSM creates a new HSM instance.
@@ -36,7 +55,7 @@ func NewHSM(firmwareVersion string, pciMode bool) (*HSM, error) {
 	return &HSM{
 		VariantLmkSet:   variantLmkSet,
 		PciMode:         pciMode,
-		FirmwareVersion: firmwareVersion,
+		firmwareVersion: firmwareVersion,
 	}, nil
 }
 
@@ -132,6 +151,11 @@ func (h *HSM) DecryptKeyWithVariantScheme(
 	}
 
 	return decryptedKey, nil
+}
+
+// FirmwareVersion returns the HSM firmware version.
+func (h *HSM) FirmwareVersion() string {
+	return h.firmwareVersion
 }
 
 // GetPinBlockFormatFromThalesCode maps a Thales PIN block format code string

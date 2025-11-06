@@ -31,7 +31,7 @@ type Server struct {
 	srv                 *anetserver.Server
 	pluginManager       *plugins.PluginManager
 	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
-	hsmSvc              *hsm.HSM
+	hsmSvc              hsm.HSMInterface
 	activeConns         int32
 }
 
@@ -171,7 +171,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	execPayload := origPayload
 	if cmd == "NC" {
-		execPayload = []byte(s.hsmSvc.FirmwareVersion)
+		execPayload = []byte(s.hsmSvc.FirmwareVersion())
 	}
 
 	// Pass requestID via context for plugin and plugin logs

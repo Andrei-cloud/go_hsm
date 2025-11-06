@@ -1,4 +1,3 @@
-
 package pinblock
 
 import (
@@ -24,7 +23,7 @@ func testPinBlockFormat(t *testing.T, format PinBlockFormat, tc pinBlockTestCase
 		t.Fatalf("getFormatFuncs() error = %v", err)
 	}
 
-	// Determine the second argument for the functions
+	// Determine the second argument for the functions.
 	var secondArg string
 	switch format {
 	case VISANEWPINONLY:
@@ -38,6 +37,7 @@ func testPinBlockFormat(t *testing.T, format PinBlockFormat, tc pinBlockTestCase
 		if err == nil || !strings.Contains(err.Error(), tc.wantErrEncode.Error()) {
 			t.Errorf("encode() error = %v, wantErr %v", err, tc.wantErrEncode)
 		}
+
 		return
 	}
 	if err != nil {
@@ -52,6 +52,7 @@ func testPinBlockFormat(t *testing.T, format PinBlockFormat, tc pinBlockTestCase
 		if err == nil || !strings.Contains(err.Error(), tc.wantErrDecode.Error()) {
 			t.Errorf("decode() error = %v, wantErr %v", err, tc.wantErrDecode)
 		}
+
 		return
 	}
 	if err != nil {
@@ -62,7 +63,9 @@ func testPinBlockFormat(t *testing.T, format PinBlockFormat, tc pinBlockTestCase
 	}
 }
 
-func getFormatFuncs(format PinBlockFormat) (func(string, string) (string, error), func(string, string) (string, error), error) {
+func getFormatFuncs(
+	format PinBlockFormat,
+) (func(string, string) (string, error), func(string, string) (string, error), error) {
 	switch format {
 	case ISO0:
 		return encodeISO0, decodeISO0, nil

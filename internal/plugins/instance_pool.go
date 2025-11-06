@@ -1,6 +1,15 @@
 // Package plugins provides the PluginInstancePool type for managing WASM plugin instance pools.
 package plugins
 
+// PluginInstancePoolInterface defines the interface for managing plugin instance pools.
+type PluginInstancePoolInterface interface {
+	// Get returns an instance from the pool, creating a new one if needed.
+	Get() (*PluginInstance, error)
+
+	// Put returns an instance to the pool.
+	Put(inst *PluginInstance)
+}
+
 // PluginInstancePool manages a pool of WASM module instances for a plugin.
 type PluginInstancePool struct {
 	pool    chan *PluginInstance
