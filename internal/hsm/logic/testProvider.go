@@ -23,7 +23,7 @@ func SetupTestLMKProvider() error {
 		return errors.New("test key must be 16 bytes (double-length DES key)")
 	}
 
-	LMKProviderInstance = LMKProvider{
+	SetLMKProvider(LMKProvider{
 		EncryptUnderLMK: func(plainKey []byte, _ string, _ byte) ([]byte, error) {
 			return testEncryptWithLMK(plainKey, testKey)
 		},
@@ -31,7 +31,7 @@ func SetupTestLMKProvider() error {
 			return encryptedKey, nil
 		},
 		RandomKey: testRandomKey,
-	}
+	})
 
 	return nil
 }

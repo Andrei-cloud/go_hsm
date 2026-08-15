@@ -10,3 +10,8 @@ bin/go_hsm
 go_hsm
 .prompts/*
 GEMINI.md
+server.test
+
+
+cpu.pprof
+mem.pprof

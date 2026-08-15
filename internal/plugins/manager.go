@@ -298,8 +298,12 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 		return nil, fmt.Errorf("unknown command: %s", cmd)
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, pm.executionTimeout)
-	defer cancel()
+	execCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline && pm.executionTimeout > 0 {
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(ctx, pm.executionTimeout)
+		defer cancel()
+	}
 
 	inst, err := pool.GetWithContext(execCtx)
 	if err != nil {
@@ -312,19 +316,21 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
 
-	requestID := ""
-	if val := ctx.Value("request_id"); val != nil {
-		if rid, ok := val.(string); ok {
-			requestID = rid
+	if log.Debug().Enabled() {
+		requestID := ""
+		if val := ctx.Value("request_id"); val != nil {
+			if rid, ok := val.(string); ok {
+				requestID = rid
+			}
 		}
+		log.Debug().
+			Str("event", "plugin_execution").
+			Str("command", cmd).
+			Str("request_id", requestID).
+			Int("input_size", len(input)).
+			Hex("input", input).
+			Msg("executing plugin")
 	}
-	log.Debug().
-		Str("event", "plugin_execution").
-		Str("command", cmd).
-		Str("request_id", requestID).
-		Int("input_size", len(input)).
-		Hex("input", input).
-		Msg("executing plugin")
 
 	res, err := CallExecute(execCtx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {
@@ -336,13 +342,21 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	log.Debug().
-		Str("event", "plugin_response").
-		Str("command", cmd).
-		Str("request_id", requestID).
-		Int("output_size", len(result)).
-		Hex("output", result).
-		Msg("plugin execution complete")
+	if log.Debug().Enabled() {
+		requestID := ""
+		if val := ctx.Value("request_id"); val != nil {
+			if rid, ok := val.(string); ok {
+				requestID = rid
+			}
+		}
+		log.Debug().
+			Str("event", "plugin_response").
+			Str("command", cmd).
+			Str("request_id", requestID).
+			Int("output_size", len(result)).
+			Hex("output", result).
+			Msg("plugin execution complete")
+	}
 
 	return result, nil
 }

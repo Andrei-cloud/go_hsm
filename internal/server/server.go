@@ -14,7 +14,6 @@ import (
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/pkg/common"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -76,7 +75,13 @@ type Server struct {
 	pluginManager       *plugins.PluginManager
 	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
 	hsmSvc              hsm.HSMInterface
+	requestSeq          uint64
 	activeConns         int32
+}
+
+func (s *Server) nextRequestID() string {
+	seq := atomic.AddUint64(&s.requestSeq, 1)
+	return fmt.Sprintf("%016x-%08x", time.Now().UnixNano(), seq)
 }
 
 // NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
@@ -194,23 +199,25 @@ func (s *Server) errorResponse(cmd string) []byte {
 
 // Enhanced error handling and logging for unknown commands and errors.
 func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error) {
-	client := conn.Conn.RemoteAddr().String()
 	atomic.AddInt32(&s.activeConns, 1)
 	defer atomic.AddInt32(&s.activeConns, -1)
 
-	requestID := uuid.NewString()
-
-	start := time.Now()
-	log.Debug().
-		Str("event", "handle_start").
-		Str("client_ip", client).
-		Str("request_id", requestID).
-		Msg("starting request handling")
-
 	if len(data) < 2 {
-		log.Error().Str("client_ip", client).Str("request_id", requestID).Msg("malformed request")
-
 		return nil, errors.New("malformed request")
+	}
+
+	requestID := s.nextRequestID()
+
+	if log.Debug().Enabled() {
+		client := ""
+		if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+			client = conn.Conn.RemoteAddr().String()
+		}
+		log.Debug().
+			Str("event", "handle_start").
+			Str("client_ip", client).
+			Str("request_id", requestID).
+			Msg("starting request handling")
 	}
 
 	cmd := string(data[:2])
@@ -239,49 +246,57 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	resp, execErr = pm.ExecuteCommandWithContext(ctx, cmd, execPayload)
 
 	if execErr != nil {
-		if execErr.Error() == "unknown command" {
-			resp = s.errorResponse(cmd)
-			log.Warn().
-				Str("event", "unknown_command").
-				Str("client_ip", client).
-				Str("command", cmd).
-				Msg("Command not recognized, responding with error code")
-		} else {
-			log.Error().
-				Str("event", "plugin_error").
-				Str("client_ip", client).
-				Str("command", cmd).
-				Err(execErr).
-				Msg("Plugin execution failed")
-			resp = s.errorResponse(cmd)
+		resp = s.errorResponse(cmd)
+		if log.Warn().Enabled() {
+			client := ""
+			if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+				client = conn.Conn.RemoteAddr().String()
+			}
+			if execErr.Error() == "unknown command" {
+				log.Warn().
+					Str("event", "unknown_command").
+					Str("client_ip", client).
+					Str("command", cmd).
+					Msg("Command not recognized, responding with error code")
+			} else {
+				log.Error().
+					Str("event", "plugin_error").
+					Str("client_ip", client).
+					Str("command", cmd).
+					Err(execErr).
+					Msg("Plugin execution failed")
+			}
 		}
 	}
 
-	// unified processed log with duration and error status
-	duration := time.Since(start)
-	reqStr := common.FormatData(data)
-	respStr := common.FormatData(resp)
-	if execErr != nil {
-		log.Error().
-			Str("event", "request_processed").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Str("request_id", requestID).
-			Str("request", reqStr).
-			Str("response", respStr).
-			Str("duration", duration.String()).
-			Err(execErr).
-			Msg("command execution failed")
-	} else {
-		log.Info().
-			Str("event", "request_processed").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Str("request_id", requestID).
-			Str("request", reqStr).
-			Str("response", respStr).
-			Str("duration", duration.String()).
-			Msg("command processed")
+	// logging with duration and error status
+	if log.Info().Enabled() || execErr != nil {
+		client := ""
+		if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+			client = conn.Conn.RemoteAddr().String()
+		}
+		reqStr := common.FormatData(data)
+		respStr := common.FormatData(resp)
+		if execErr != nil {
+			log.Error().
+				Str("event", "request_processed").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Str("request_id", requestID).
+				Str("request", reqStr).
+				Str("response", respStr).
+				Err(execErr).
+				Msg("command execution failed")
+		} else if log.Info().Enabled() {
+			log.Info().
+				Str("event", "request_processed").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Str("request_id", requestID).
+				Str("request", reqStr).
+				Str("response", respStr).
+				Msg("command processed")
+		}
 	}
 
 	return resp, nil

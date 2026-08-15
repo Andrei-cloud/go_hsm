@@ -34,41 +34,57 @@ func NewHostFunctions(runtime wazero.Runtime, hsmInstance hsm.HSMInterface) *Hos
 	}
 }
 
-// Register adds all host functions to the WASM runtime.
+// Register adds all host functions to the WASM runtime with zero-reflection direct calls.
 func (h *HostFunctions) Register(ctx context.Context) error {
 	// Logging functions
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logDebug).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logDebug(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_debug")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logInfo).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logInfo(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_info")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logError).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logError(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_error")
 
 	// JSON handling
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.jsonParse).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.jsonParse(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("json_parse")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.jsonStringify).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.jsonStringify(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("json_stringify")
 
 	// HSM cryptographic operations
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.encryptUnderLMK).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.encryptUnderLMK(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]), api.DecodeU32(stack[2]), api.DecodeU32(stack[3]), api.DecodeU32(stack[4]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("EncryptUnderLMK")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.decryptUnderLMK).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.decryptUnderLMK(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]), api.DecodeU32(stack[2]), api.DecodeU32(stack[3]), api.DecodeU32(stack[4]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("DecryptUnderLMK")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.generateRandomKey).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.generateRandomKey(ctx, mod, api.DecodeU32(stack[0]))
+		}), []api.ValueType{api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("RandomKey")
 
 	// Instantiate the module
