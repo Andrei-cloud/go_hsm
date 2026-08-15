@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -18,12 +19,21 @@ var (
 type Config struct {
 	// Server configuration
 	Server struct {
-		Host string
-		Port int
+		Host                  string
+		Port                  int
+		MaxConns              int
+		MaxConcurrentHandlers int
+		ReadTimeout           time.Duration
+		WriteTimeout          time.Duration
+		IdleTimeout           time.Duration
+		KeepAliveInterval     time.Duration
+		ShutdownTimeout       time.Duration
 	}
 	// Plugin configuration
 	Plugin struct {
-		Path string
+		Path             string
+		ExecutionTimeout time.Duration
+		PoolSize         int
 	}
 	// Logging configuration
 	Log struct {
@@ -79,9 +89,18 @@ func setDefaults() {
 	// Server defaults
 	v.SetDefault("server.host", "localhost")
 	v.SetDefault("server.port", 1500)
+	v.SetDefault("server.maxconns", 1000)
+	v.SetDefault("server.maxconcurrenthandlers", 10000)
+	v.SetDefault("server.readtimeout", 30*time.Second)
+	v.SetDefault("server.writetimeout", 30*time.Second)
+	v.SetDefault("server.idletimeout", 0*time.Second)
+	v.SetDefault("server.keepaliveinterval", 30*time.Second)
+	v.SetDefault("server.shutdowntimeout", 5*time.Second)
 
 	// Plugin defaults
 	v.SetDefault("plugin.path", "plugins")
+	v.SetDefault("plugin.executiontimeout", 2*time.Second)
+	v.SetDefault("plugin.poolsize", 10)
 
 	// Logging defaults
 	v.SetDefault("log.level", "info")
@@ -105,9 +124,18 @@ func ensureConfig() error {
 server:
   host: localhost
   port: 1500
+  maxconns: 1000
+  maxconcurrenthandlers: 10000
+  readtimeout: 30s
+  writetimeout: 30s
+  idletimeout: 0s
+  keepaliveinterval: 30s
+  shutdowntimeout: 5s
 
 plugin:
   path: plugins
+  executiontimeout: 2s
+  poolsize: 10
 
 log:
   level: info

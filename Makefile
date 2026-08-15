@@ -18,6 +18,7 @@ gen: ## Generate new plugin code
 
 plugins: ## Build WASM plugins
 	@echo "Building WASM plugins with TinyGo..."
+	@mkdir -p $(WASM_OUT_DIR)
 	@if [ -n "$(CMD)" ]; then \
 		name=$(CMD); \
 		rm -f $(WASM_OUT_DIR)/$$name.wasm; \

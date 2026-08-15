@@ -3,7 +3,7 @@ module github.com/andrei-cloud/go_hsm
 go 1.24.4
 
 require (
-	github.com/andrei-cloud/anet v0.2.0
+	github.com/andrei-cloud/anet v0.3.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.34.0

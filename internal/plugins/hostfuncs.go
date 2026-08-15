@@ -197,7 +197,7 @@ func (h *HostFunctions) jsonParse(
 	return 1
 }
 
-func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, size uint32) uint64 {
+func (h *HostFunctions) jsonStringify(ctx context.Context, mod api.Module, ptr, size uint32) uint64 {
 	data, err := readMemory(mod, ptr, size)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to read data for JSON stringify")
@@ -217,7 +217,7 @@ func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, si
 	}
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(context.Background(), uint64(len(jsonData)))
+	results, err := allocFn.Call(ctx, uint64(len(jsonData)))
 	if err != nil || len(results) == 0 {
 		log.Error().Err(err).Msg("failed to allocate memory for JSON string")
 		return 0
@@ -296,15 +296,20 @@ func (h *HostFunctions) decryptUnderLMK(
 	return h.hsmCryptoOperation(ctx, mod, dataPtr, dataLen, typePtr, typeLen, schemeTagRaw, false)
 }
 
-func (h *HostFunctions) generateRandomKey(_ context.Context, mod api.Module, length uint32) uint64 {
+func (h *HostFunctions) generateRandomKey(ctx context.Context, mod api.Module, length uint32) uint64 {
 	key, err := h.hsm.GenerateRandomKey(int(length))
 	if err != nil {
 		log.Error().Err(err).Msg("failed to generate random key")
 		return 0
 	}
+	defer func() {
+		for i := range key {
+			key[i] = 0
+		}
+	}()
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(context.Background(), uint64(len(key)))
+	results, err := allocFn.Call(ctx, uint64(len(key)))
 	if err != nil || len(results) == 0 {
 		log.Error().Err(err).Msg("failed to allocate memory for random key")
 		return 0

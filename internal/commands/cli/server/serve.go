@@ -66,10 +66,16 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to create plugin directory: %v", err)
 	}
 
-	// Initialize the PluginManager with HSM instance.
+	// Create root lifecycle context
+	ctx, cancel := context.WithCancel(cmd.Context())
+	defer cancel()
+
+	// Initialize the PluginManager with HSM instance and configuration.
 	pluginManager := plugins.NewPluginManager(
-		cmd.Context(),
+		ctx,
 		hsmInstance,
+		plugins.WithExecutionTimeout(cfg.Plugin.ExecutionTimeout),
+		plugins.WithPoolSize(cfg.Plugin.PoolSize),
 	)
 
 	// Load plugins from the configured directory.
@@ -90,24 +96,32 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	// Initialize the server with configured host and port.
 	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	srv, err := server.NewServer(serverAddr, pluginManager)
+	srv, err := server.NewServer(
+		serverAddr,
+		pluginManager,
+		server.WithConfig(cfg),
+		server.WithServerContext(ctx),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize server: %v", err)
 	}
 
-	// Create a context that will be canceled when the server is stopping.
-	ctx, cancel := context.WithCancel(cmd.Context())
-	defer cancel()
-
 	// Reload plugins on SIGHUP.
 	reloadChan := make(chan os.Signal, 1)
 	signal.Notify(reloadChan, syscall.SIGHUP)
+	defer signal.Stop(reloadChan)
+
 	go func() {
 		for range reloadChan {
 			log.Info().Msg("reloading plugins...")
 
 			// Create new plugin manager.
-			newPM := plugins.NewPluginManager(ctx, hsmInstance)
+			newPM := plugins.NewPluginManager(
+				ctx,
+				hsmInstance,
+				plugins.WithExecutionTimeout(cfg.Plugin.ExecutionTimeout),
+				plugins.WithPoolSize(cfg.Plugin.PoolSize),
+			)
 			if err := newPM.LoadAll(cfg.Plugin.Path); err != nil {
 				log.Error().Err(err).Msg("failed to reload plugins")
 				continue
@@ -131,21 +145,34 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	defer signal.Stop(reloadChan)
-
-	if err := srv.Start(); err != nil {
-		return fmt.Errorf("failed to start server: %v", err)
-	}
-
+	// Register stop signals BEFORE starting server to avoid race conditions.
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(stopChan)
 
-	<-stopChan
-	log.Info().Msg("shutting down server...")
+	// Start server in background
+	srvErrChan := make(chan error, 1)
+	go func() {
+		srvErrChan <- srv.Start()
+	}()
+
+	select {
+	case sig := <-stopChan:
+		log.Info().Str("signal", sig.String()).Msg("shutting down server...")
+	case <-ctx.Done():
+		log.Info().Msg("context canceled, shutting down server...")
+	case err := <-srvErrChan:
+		if err != nil {
+			return fmt.Errorf("server error: %w", err)
+		}
+		return nil
+	}
 
 	if err := srv.Stop(); err != nil {
 		log.Error().Err(err).Msg("error during server shutdown")
 	}
+
+	_ = pluginManager.Close()
 
 	return nil
 }

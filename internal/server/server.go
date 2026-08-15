@@ -9,6 +9,7 @@ import (
 	"time"
 
 	anetserver "github.com/andrei-cloud/anet/server"
+	"github.com/andrei-cloud/go_hsm/internal/config"
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
@@ -24,16 +25,6 @@ type contextKey string
 
 // logAdapter implements anet.Logger using zerolog.
 type logAdapter struct{}
-
-// Server handles HSM requests over TCP by delegating to WASM plugins.
-type Server struct {
-	address             string
-	srv                 *anetserver.Server
-	pluginManager       *plugins.PluginManager
-	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
-	hsmSvc              hsm.HSMInterface
-	activeConns         int32
-}
 
 func (l logAdapter) Print(v ...any) {
 	log.Info().Msg(fmt.Sprint(v...))
@@ -55,25 +46,92 @@ func (l logAdapter) Errorf(format string, v ...any) {
 	log.Error().Msgf(format, v...)
 }
 
-// NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
-func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
-	cfg := &anetserver.ServerConfig{
-		MaxConns:        100,
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     0 * time.Second, // disable idle connection closure.
-		ShutdownTimeout: 5 * time.Second,
-		Logger:          logAdapter{},
-	}
+// ServerOption defines functional options for Server.
+type ServerOption func(*Server)
 
+// WithServerContext sets the parent context for the server lifecycle.
+func WithServerContext(ctx context.Context) ServerOption {
+	return func(s *Server) {
+		if ctx != nil {
+			s.ctx = ctx
+		}
+	}
+}
+
+// WithConfig sets server network configuration from config.Config.
+func WithConfig(cfg *config.Config) ServerOption {
+	return func(s *Server) {
+		if cfg != nil {
+			s.cfg = cfg
+		}
+	}
+}
+
+// Server handles HSM requests over TCP by delegating to WASM plugins.
+type Server struct {
+	ctx                 context.Context
+	address             string
+	cfg                 *config.Config
+	srv                 *anetserver.Server
+	pluginManager       *plugins.PluginManager
+	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
+	hsmSvc              hsm.HSMInterface
+	activeConns         int32
+}
+
+// NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
+func NewServer(address string, pm *plugins.PluginManager, opts ...ServerOption) (*Server, error) {
 	s := &Server{
+		ctx:           context.Background(),
 		address:       address,
 		pluginManager: pm,
-		hsmSvc:        pm.HSM(), // Get HSM from plugin manager
+		hsmSvc:        pm.HSM(),
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
 	s.pluginManagerHolder.Store(pm)
+
+	// Build anet ServerConfig
+	serverCfg := &anetserver.ServerConfig{
+		MaxConns:              1000,
+		MaxConcurrentHandlers: 10000,
+		ReadTimeout:           30 * time.Second,
+		WriteTimeout:          30 * time.Second,
+		IdleTimeout:           0 * time.Second,
+		KeepAliveInterval:     30 * time.Second,
+		ShutdownTimeout:       5 * time.Second,
+		Logger:                logAdapter{},
+	}
+
+	if s.cfg != nil {
+		if s.cfg.Server.MaxConns > 0 {
+			serverCfg.MaxConns = s.cfg.Server.MaxConns
+		}
+		if s.cfg.Server.MaxConcurrentHandlers > 0 {
+			serverCfg.MaxConcurrentHandlers = s.cfg.Server.MaxConcurrentHandlers
+		}
+		if s.cfg.Server.ReadTimeout > 0 {
+			serverCfg.ReadTimeout = s.cfg.Server.ReadTimeout
+		}
+		if s.cfg.Server.WriteTimeout > 0 {
+			serverCfg.WriteTimeout = s.cfg.Server.WriteTimeout
+		}
+		if s.cfg.Server.IdleTimeout > 0 {
+			serverCfg.IdleTimeout = s.cfg.Server.IdleTimeout
+		}
+		if s.cfg.Server.KeepAliveInterval > 0 {
+			serverCfg.KeepAliveInterval = s.cfg.Server.KeepAliveInterval
+		}
+		if s.cfg.Server.ShutdownTimeout > 0 {
+			serverCfg.ShutdownTimeout = s.cfg.Server.ShutdownTimeout
+		}
+	}
+
 	handler := anetserver.HandlerFunc(s.handle)
-	srv, err := anetserver.NewServer(address, handler, cfg)
+	srv, err := anetserver.NewServer(address, handler, serverCfg)
 	if err != nil {
 		return nil, fmt.Errorf("server setup failed: %w", err)
 	}
@@ -94,12 +152,16 @@ func (s *Server) Stop() error {
 	return s.srv.Stop()
 }
 
+// ActiveConns returns the current number of active connections being processed.
+func (s *Server) ActiveConns() int32 {
+	return atomic.LoadInt32(&s.activeConns)
+}
+
 // SetPluginManager atomically replaces the PluginManager and closes the old one.
 func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 	old, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
 	if !ok {
 		log.Error().Msg("failed to load old plugin manager")
-
 		return
 	}
 
@@ -153,9 +215,7 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	cmd := string(data[:2])
 	origPayload := data[2:]
-	// skip separate request log in non-debug mode, will log processed result later.
 
-	// handle built-in A0 encryption under LMK.
 	var resp []byte
 	var execErr error
 
@@ -177,14 +237,6 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	// Pass requestID via context for plugin and plugin logs
 	ctx := context.WithValue(srvContextOrDefault(s), requestIDKey, requestID)
 	resp, execErr = pm.ExecuteCommandWithContext(ctx, cmd, execPayload)
-	if execErr != nil {
-		log.Error().
-			Str("event", "plugin_execution_error").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Err(execErr).
-			Msg("Error during plugin execution")
-	}
 
 	if execErr != nil {
 		if execErr.Error() == "unknown command" {
@@ -235,6 +287,9 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 	return resp, nil
 }
 
-func srvContextOrDefault(_ *Server) context.Context {
+func srvContextOrDefault(s *Server) context.Context {
+	if s != nil && s.ctx != nil {
+		return s.ctx
+	}
 	return context.Background()
 }
