@@ -5,7 +5,6 @@ go 1.24.4
 require (
 	github.com/andrei-cloud/anet v0.3.0
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/google/uuid v1.6.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
