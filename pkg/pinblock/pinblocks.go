@@ -10,7 +10,7 @@ import (
 
 // Supported PIN block formats.
 // This list is based on common industry standards.
-// Not all formats listed here are implemented in this example; for full implementation,
+// Not all formats listed here are implemented in this example; for full implementation.
 // detailed specifications for each format are required.
 const (
 	ISO0    PinBlockFormat = iota // ISO 9564-1 Format 0.

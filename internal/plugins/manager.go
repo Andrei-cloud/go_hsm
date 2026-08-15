@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
@@ -18,27 +19,68 @@ import (
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
+// PluginMetadata holds cached metadata for a loaded plugin.
+type PluginMetadata struct {
+	Version     string
+	Description string
+	Author      string
+}
+
 // PluginManager manages WASM plugin instances and supports hot reload.
 type PluginManager struct {
-	ctx        context.Context //nolint:containedctx // Context is used for plugin lifecycle.
-	runtime    wazero.Runtime
-	plugins    map[string]*PluginInstancePool
-	hsm        *hsm.HSM
-	hostFuncs  *HostFunctions
-	bufferPool *hsmplugin.BufferPool
-	mu         sync.RWMutex
+	ctx              context.Context //nolint:containedctx // Context is used for plugin lifecycle.
+	runtime          wazero.Runtime
+	plugins          map[string]PluginInstancePoolInterface
+	metadata         map[string]PluginMetadata
+	hsm              hsm.HSMInterface
+	hostFuncs        HostFunctionsInterface
+	bufferPool       *hsmplugin.BufferPool
+	executionTimeout time.Duration
+	poolSize         int
+	inFlight         sync.WaitGroup
+	closed           atomic.Bool
+	mu               sync.RWMutex
+}
+
+// PluginManagerOption defines functional options for PluginManager.
+type PluginManagerOption func(*PluginManager)
+
+// WithExecutionTimeout configures the maximum duration for a single plugin execution.
+func WithExecutionTimeout(timeout time.Duration) PluginManagerOption {
+	return func(pm *PluginManager) {
+		if timeout > 0 {
+			pm.executionTimeout = timeout
+		}
+	}
+}
+
+// WithPoolSize configures the pool size per plugin.
+func WithPoolSize(size int) PluginManagerOption {
+	return func(pm *PluginManager) {
+		if size > 0 {
+			pm.poolSize = size
+		}
+	}
 }
 
 // NewPluginManager returns a PluginManager ready to load plugins.
 func NewPluginManager(
 	ctx context.Context,
-	hsmInstance *hsm.HSM,
+	hsmInstance hsm.HSMInterface,
+	opts ...PluginManagerOption,
 ) *PluginManager {
 	pm := &PluginManager{
-		ctx:        ctx,
-		plugins:    make(map[string]*PluginInstancePool),
-		hsm:        hsmInstance,
-		bufferPool: hsmplugin.NewBufferPool(),
+		ctx:              ctx,
+		plugins:          make(map[string]PluginInstancePoolInterface),
+		metadata:         make(map[string]PluginMetadata),
+		hsm:              hsmInstance,
+		bufferPool:       hsmplugin.NewBufferPool(),
+		executionTimeout: 2 * time.Second,
+		poolSize:         10,
+	}
+
+	for _, opt := range opts {
+		opt(pm)
 	}
 
 	return pm
@@ -46,8 +88,7 @@ func NewPluginManager(
 
 // LoadAll loads all WASM plugins from the specified directory.
 // It uses wazero's AOT compilation with a shared compilation cache
-// for optimal performance and memory use. This approach ensures
-// high-throughput plugin execution while controlling memory growth.
+// for optimal performance and memory use.
 func (pm *PluginManager) LoadAll(dir string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -65,10 +106,12 @@ func (pm *PluginManager) LoadAll(dir string) error {
 	// Create and register host functions
 	pm.hostFuncs = NewHostFunctions(newRt, pm.hsm)
 	if err := pm.hostFuncs.Register(pm.ctx); err != nil {
+		_ = newRt.Close(pm.ctx)
 		return fmt.Errorf("failed to register host functions: %w", err)
 	}
 
-	newPlugins := make(map[string]*PluginInstancePool)
+	newPlugins := make(map[string]PluginInstancePoolInterface)
+	newMetadata := make(map[string]PluginMetadata)
 
 	for _, f := range files {
 		if f.IsDir() || filepath.Ext(f.Name()) != ".wasm" {
@@ -98,6 +141,7 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			authorFn := instance.ExportedFunction("author")
 			if allocFn == nil || executeFn == nil || versionFn == nil || descriptionFn == nil ||
 				authorFn == nil {
+				_ = instance.Close(pm.ctx)
 				return nil, errors.New("plugin missing required exports")
 			}
 
@@ -110,20 +154,27 @@ func (pm *PluginManager) LoadAll(dir string) error {
 				AuthorFn:      authorFn,
 			}, nil
 		}
-		pool := &PluginInstancePool{
-			pool:    make(chan *PluginInstance, 10),
-			maxSize: 10,
-			factory: factory,
-		}
-		// Pre-fill pool with one instance
+
+		pool := NewPluginInstancePool(pm.poolSize, factory)
+
+		// Pre-fill pool with one instance and extract metadata
 		inst, err := factory()
 		if err != nil {
 			log.Debug().Err(err).Str("file", f.Name()).Msg("failed to instantiate plugin module")
+			_ = pool.Close()
 			continue
 		}
-		pool.pool <- inst
-		// Validate plugin metadata
+
+		// Read and cache plugin metadata
 		version, description, author := pm.getPluginMetadataFromInstance(inst)
+		newMetadata[cmdCode] = PluginMetadata{
+			Version:     version,
+			Description: description,
+			Author:      author,
+		}
+
+		pool.Put(inst)
+
 		if version == "N/A" || description == "N/A" || author == "N/A" {
 			log.Warn().
 				Str("file", f.Name()).
@@ -137,36 +188,38 @@ func (pm *PluginManager) LoadAll(dir string) error {
 
 	// Update runtime and plugins atomically
 	pm.mu.Lock()
-	if pm.runtime != nil {
-		if err := pm.runtime.Close(pm.ctx); err != nil {
-			log.Error().
-				Err(err).
-				Msg("failed to close previous runtime")
-		}
-	}
+	oldRt := pm.runtime
+	oldPlugins := pm.plugins
 	pm.runtime = newRt
 	pm.plugins = newPlugins
+	pm.metadata = newMetadata
 	pm.mu.Unlock()
+
+	// Clean up old plugins and runtime asynchronously after grace period if replacing
+	if oldRt != nil {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			for _, p := range oldPlugins {
+				_ = p.Close()
+			}
+			if err := oldRt.Close(pm.ctx); err != nil {
+				log.Error().Err(err).Msg("failed to close previous runtime")
+			}
+		}()
+	}
 
 	return nil
 }
 
-// GetPluginMetadata returns the metadata for a given plugin command.
+// GetPluginMetadata returns the cached metadata for a given plugin command.
 func (pm *PluginManager) GetPluginMetadata(cmd string) (string, string, string) {
 	pm.mu.RLock()
-	pool, ok := pm.plugins[cmd]
+	meta, ok := pm.metadata[cmd]
 	pm.mu.RUnlock()
 	if !ok {
 		return "N/A", "N/A", "N/A"
 	}
-	inst, err := pool.Get()
-	if err != nil {
-		return "N/A", "N/A", "N/A"
-	}
-	defer pool.Put(inst)
-	version, description, author := pm.getPluginMetadataFromInstance(inst)
-
-	return version, description, author
+	return meta.Version, meta.Description, meta.Author
 }
 
 // getPluginMetadataFromInstance is a helper for metadata validation at load time.
@@ -218,66 +271,25 @@ func (pm *PluginManager) getPluginMetadataFromInstance(
 	return version, description, author
 }
 
-// ExecuteCommand executes a command via its WASM plugin.
+// ExecuteCommand executes a command via its WASM plugin using context.Background.
 func (pm *PluginManager) ExecuteCommand(cmd string, input []byte) ([]byte, error) {
-	pm.mu.RLock()
-	pool, ok := pm.plugins[cmd]
-	pm.mu.RUnlock()
-
-	if !ok {
-		return nil, fmt.Errorf("unknown command: %s", cmd)
-	}
-	inst, err := pool.Get()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get plugin instance: %w", err)
-	}
-	defer pool.Put(inst)
-
-	// Allocate guest memory for input
-	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, input)
-	if err != nil {
-		return nil, fmt.Errorf("failed to allocate memory: %w", err)
-	}
-
-	log.Debug().
-		Str("event", "plugin_execution").
-		Str("command", cmd).
-		Int("input_size", len(input)).
-		Hex("input", input).
-		Msg("executing plugin")
-
-	// Add context timeout to avoid hung plugins
-	ctx, cancel := context.WithTimeout(pm.ctx, 2*time.Second) // TODO: make timeout configurable
-	defer cancel()
-
-	// TODO: Update CallExecute and plugin ABI to use WASM multi-value returns for pointer/length
-	res, err := CallExecute(ctx, inst.ExecuteFn, ptr, uint32(len(input)))
-	if err != nil {
-		return nil, fmt.Errorf("plugin execution failed: %w", err)
-	}
-
-	// Read result from plugin memory
-	result, err := ReadBuffer(inst.Module, hsmplugin.Buffer(res))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	log.Debug().
-		Str("event", "plugin_response").
-		Str("command", cmd).
-		Int("output_size", len(result)).
-		Hex("output", result).
-		Msg("plugin execution complete")
-
-	return result, nil
+	return pm.ExecuteCommandWithContext(context.Background(), cmd, input)
 }
 
-// ExecuteCommandWithContext executes a command via its WASM plugin, passing a context for logging.
+// ExecuteCommandWithContext executes a command via its WASM plugin, passing a context for logging
+// and adhering to the configured execution timeout and in-flight request tracking.
 func (pm *PluginManager) ExecuteCommandWithContext(
 	ctx context.Context,
 	cmd string,
 	input []byte,
 ) ([]byte, error) {
+	if pm.closed.Load() {
+		return nil, errors.New("plugin manager is closed")
+	}
+
+	pm.inFlight.Add(1)
+	defer pm.inFlight.Done()
+
 	pm.mu.RLock()
 	pool, ok := pm.plugins[cmd]
 	pm.mu.RUnlock()
@@ -285,33 +297,40 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 	if !ok {
 		return nil, fmt.Errorf("unknown command: %s", cmd)
 	}
-	inst, err := pool.Get()
+
+	execCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline && pm.executionTimeout > 0 {
+		var cancel context.CancelFunc
+		execCtx, cancel = context.WithTimeout(ctx, pm.executionTimeout)
+		defer cancel()
+	}
+
+	inst, err := pool.GetWithContext(execCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plugin instance: %w", err)
 	}
 	defer pool.Put(inst)
 
-	ptr, err := AllocBuffer(pm.ctx, inst.Module, inst.AllocFn, input)
+	ptr, err := AllocBuffer(execCtx, inst.Module, inst.AllocFn, input)
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate memory: %w", err)
 	}
 
-	requestID := ""
-	if val := ctx.Value("request_id"); val != nil {
-		if rid, ok := val.(string); ok {
-			requestID = rid
+	if log.Debug().Enabled() {
+		requestID := ""
+		if val := ctx.Value("request_id"); val != nil {
+			if rid, ok := val.(string); ok {
+				requestID = rid
+			}
 		}
+		log.Debug().
+			Str("event", "plugin_execution").
+			Str("command", cmd).
+			Str("request_id", requestID).
+			Int("input_size", len(input)).
+			Hex("input", input).
+			Msg("executing plugin")
 	}
-	log.Debug().
-		Str("event", "plugin_execution").
-		Str("command", cmd).
-		Str("request_id", requestID).
-		Int("input_size", len(input)).
-		Hex("input", input).
-		Msg("executing plugin")
-
-	execCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
 
 	res, err := CallExecute(execCtx, inst.ExecuteFn, ptr, uint32(len(input)))
 	if err != nil {
@@ -323,32 +342,64 @@ func (pm *PluginManager) ExecuteCommandWithContext(
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	log.Debug().
-		Str("event", "plugin_response").
-		Str("command", cmd).
-		Str("request_id", requestID).
-		Int("output_size", len(result)).
-		Hex("output", result).
-		Msg("plugin execution complete")
+	if log.Debug().Enabled() {
+		requestID := ""
+		if val := ctx.Value("request_id"); val != nil {
+			if rid, ok := val.(string); ok {
+				requestID = rid
+			}
+		}
+		log.Debug().
+			Str("event", "plugin_response").
+			Str("command", cmd).
+			Str("request_id", requestID).
+			Int("output_size", len(result)).
+			Hex("output", result).
+			Msg("plugin execution complete")
+	}
 
 	return result, nil
 }
 
-// Close releases all resources.
+// Close gracefully stops accepting new requests, waits for in-flight executions, and releases all resources.
 func (pm *PluginManager) Close() error {
+	if !pm.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	// Wait for in-flight requests to complete (with a short timeout)
+	done := make(chan struct{})
+	go func() {
+		pm.inFlight.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		log.Warn().Msg("timed out waiting for in-flight plugin executions on close")
+	}
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
+	for _, pool := range pm.plugins {
+		if pool != nil {
+			_ = pool.Close()
+		}
+	}
+	pm.plugins = nil
+	pm.metadata = nil
+
 	if pm.runtime != nil {
 		log.Debug().Msg("closing wazero runtime and freeing WASM memory")
-		// This properly frees WASM linear memory
 		if err := pm.runtime.Close(pm.ctx); err != nil {
 			return fmt.Errorf("error closing runtime: %w", err)
 		}
 		pm.runtime = nil
 	}
 
-	// Clean up buffer pool to release any large cached slices
+	// Clean up buffer pool
 	pm.CleanupPooledBuffers()
 
 	return nil
@@ -368,19 +419,13 @@ func (pm *PluginManager) ListPlugins() []string {
 }
 
 // HSM returns the HSM instance.
-func (pm *PluginManager) HSM() *hsm.HSM {
+func (pm *PluginManager) HSM() hsm.HSMInterface {
 	return pm.hsm
 }
 
 // CleanupPooledBuffers releases the current buffer pool and creates a new one.
-// This is useful for releasing large cached slices back to Go's allocator
-// during idle periods or after processing large payloads.
 func (pm *PluginManager) CleanupPooledBuffers() {
-	// Create new pool first to avoid any race conditions
 	pm.bufferPool = hsmplugin.NewBufferPool()
-
-	// Pre-warm the pool with a few buffers for common sizes to avoid cold starts
 	pm.bufferPool.Prewarm(10)
-
 	log.Debug().Msg("buffer pool recreated and prewarmed")
 }

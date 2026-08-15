@@ -12,15 +12,21 @@ import (
 	"github.com/tetratelabs/wazero/api"
 )
 
+// HostFunctionsInterface defines the interface for WASM host functions.
+type HostFunctionsInterface interface {
+	// Register adds all host functions to the WASM runtime.
+	Register(ctx context.Context) error
+}
+
 // HostFunctions provides WASM host functions for plugins to use.
 type HostFunctions struct {
 	runtime wazero.Runtime
 	builder wazero.HostModuleBuilder
-	hsm     *hsm.HSM
+	hsm     hsm.HSMInterface
 }
 
 // NewHostFunctions creates a new host functions provider.
-func NewHostFunctions(runtime wazero.Runtime, hsmInstance *hsm.HSM) *HostFunctions {
+func NewHostFunctions(runtime wazero.Runtime, hsmInstance hsm.HSMInterface) *HostFunctions {
 	return &HostFunctions{
 		runtime: runtime,
 		builder: runtime.NewHostModuleBuilder("env"),
@@ -28,41 +34,57 @@ func NewHostFunctions(runtime wazero.Runtime, hsmInstance *hsm.HSM) *HostFunctio
 	}
 }
 
-// Register adds all host functions to the WASM runtime.
+// Register adds all host functions to the WASM runtime with zero-reflection direct calls.
 func (h *HostFunctions) Register(ctx context.Context) error {
 	// Logging functions
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logDebug).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logDebug(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_debug")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logInfo).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logInfo(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_info")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.logError).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			h.logError(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{}).
 		Export("log_error")
 
 	// JSON handling
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.jsonParse).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.jsonParse(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("json_parse")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.jsonStringify).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.jsonStringify(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("json_stringify")
 
 	// HSM cryptographic operations
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.encryptUnderLMK).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.encryptUnderLMK(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]), api.DecodeU32(stack[2]), api.DecodeU32(stack[3]), api.DecodeU32(stack[4]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("EncryptUnderLMK")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.decryptUnderLMK).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.decryptUnderLMK(ctx, mod, api.DecodeU32(stack[0]), api.DecodeU32(stack[1]), api.DecodeU32(stack[2]), api.DecodeU32(stack[3]), api.DecodeU32(stack[4]))
+		}), []api.ValueType{api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32, api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("DecryptUnderLMK")
 
 	h.builder.NewFunctionBuilder().
-		WithFunc(h.generateRandomKey).
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.generateRandomKey(ctx, mod, api.DecodeU32(stack[0]))
+		}), []api.ValueType{api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("RandomKey")
 
 	// Instantiate the module
@@ -191,7 +213,7 @@ func (h *HostFunctions) jsonParse(
 	return 1
 }
 
-func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, size uint32) uint64 {
+func (h *HostFunctions) jsonStringify(ctx context.Context, mod api.Module, ptr, size uint32) uint64 {
 	data, err := readMemory(mod, ptr, size)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to read data for JSON stringify")
@@ -211,7 +233,7 @@ func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, si
 	}
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(context.Background(), uint64(len(jsonData)))
+	results, err := allocFn.Call(ctx, uint64(len(jsonData)))
 	if err != nil || len(results) == 0 {
 		log.Error().Err(err).Msg("failed to allocate memory for JSON string")
 		return 0
@@ -226,14 +248,15 @@ func (h *HostFunctions) jsonStringify(_ context.Context, mod api.Module, ptr, si
 	return uint64(resultPtr)<<32 | uint64(len(jsonData))
 }
 
-func (h *HostFunctions) encryptUnderLMK(
+func (h *HostFunctions) hsmCryptoOperation(
 	ctx context.Context,
 	mod api.Module,
 	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
+	isEncrypt bool,
 ) uint64 {
-	plaintext, err := readMemory(mod, dataPtr, dataLen)
+	data, err := readMemory(mod, dataPtr, dataLen)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to read plaintext for encryption")
+		log.Error().Err(err).Msg("failed to read data for crypto operation")
 		return 0
 	}
 
@@ -245,26 +268,40 @@ func (h *HostFunctions) encryptUnderLMK(
 
 	schemeTag := byte(schemeTagRaw)
 
-	encrypted, err := h.hsm.EncryptKeyWithVariantScheme(plaintext, string(keyType), schemeTag)
+	var result []byte
+	if isEncrypt {
+		result, err = h.hsm.EncryptKeyWithVariantScheme(data, string(keyType), schemeTag)
+	} else {
+		result, err = h.hsm.DecryptKeyWithVariantScheme(data, string(keyType), schemeTag)
+	}
+
 	if err != nil {
-		log.Error().Err(err).Msg("failed to encrypt under LMK")
+		log.Error().Err(err).Msg("failed to perform crypto operation")
 		return 0
 	}
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(ctx, uint64(len(encrypted)))
+	results, err := allocFn.Call(ctx, uint64(len(result)))
 	if err != nil || len(results) == 0 {
-		log.Error().Err(err).Msg("failed to allocate memory for encrypted data")
+		log.Error().Err(err).Msg("failed to allocate memory for crypto result")
 		return 0
 	}
 
 	resultPtr := uint32(results[0])
-	if err := writeMemory(mod, resultPtr, encrypted); err != nil {
-		log.Error().Err(err).Msg("failed to write encrypted data to memory")
+	if err := writeMemory(mod, resultPtr, result); err != nil {
+		log.Error().Err(err).Msg("failed to write crypto result to memory")
 		return 0
 	}
 
-	return uint64(resultPtr)<<32 | uint64(len(encrypted))
+	return uint64(resultPtr)<<32 | uint64(len(result))
+}
+
+func (h *HostFunctions) encryptUnderLMK(
+	ctx context.Context,
+	mod api.Module,
+	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
+) uint64 {
+	return h.hsmCryptoOperation(ctx, mod, dataPtr, dataLen, typePtr, typeLen, schemeTagRaw, true)
 }
 
 func (h *HostFunctions) decryptUnderLMK(
@@ -272,51 +309,23 @@ func (h *HostFunctions) decryptUnderLMK(
 	mod api.Module,
 	dataPtr, dataLen, typePtr, typeLen, schemeTagRaw uint32,
 ) uint64 {
-	encrypted, err := readMemory(mod, dataPtr, dataLen)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to read encrypted data")
-		return 0
-	}
-
-	keyType, err := readMemory(mod, typePtr, typeLen)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to read key type")
-		return 0
-	}
-
-	schemeTag := byte(schemeTagRaw)
-
-	decrypted, err := h.hsm.DecryptKeyWithVariantScheme(encrypted, string(keyType), schemeTag)
-	if err != nil {
-		log.Error().Err(err).Msg("failed to decrypt under LMK")
-		return 0
-	}
-
-	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(ctx, uint64(len(decrypted)))
-	if err != nil || len(results) == 0 {
-		log.Error().Err(err).Msg("failed to allocate memory for decrypted data")
-		return 0
-	}
-
-	resultPtr := uint32(results[0])
-	if err := writeMemory(mod, resultPtr, decrypted); err != nil {
-		log.Error().Err(err).Msg("failed to write decrypted data to memory")
-		return 0
-	}
-
-	return uint64(resultPtr)<<32 | uint64(len(decrypted))
+	return h.hsmCryptoOperation(ctx, mod, dataPtr, dataLen, typePtr, typeLen, schemeTagRaw, false)
 }
 
-func (h *HostFunctions) generateRandomKey(_ context.Context, mod api.Module, length uint32) uint64 {
+func (h *HostFunctions) generateRandomKey(ctx context.Context, mod api.Module, length uint32) uint64 {
 	key, err := h.hsm.GenerateRandomKey(int(length))
 	if err != nil {
 		log.Error().Err(err).Msg("failed to generate random key")
 		return 0
 	}
+	defer func() {
+		for i := range key {
+			key[i] = 0
+		}
+	}()
 
 	allocFn := mod.ExportedFunction("Alloc")
-	results, err := allocFn.Call(context.Background(), uint64(len(key)))
+	results, err := allocFn.Call(ctx, uint64(len(key)))
 	if err != nil || len(results) == 0 {
 		log.Error().Err(err).Msg("failed to allocate memory for random key")
 		return 0

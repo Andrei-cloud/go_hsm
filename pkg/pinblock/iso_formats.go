@@ -38,54 +38,7 @@ func encodeISO0(pin, pan string) (string, error) {
 }
 
 func decodeISO0(pinBlockHex, pan string) (string, error) {
-	// Block 2 (PAN field): '0000' + 12 right-most digits of account number, excluding check digit.
-	relevantPan, err := get12PanDigits(pan, false) // false for fromRight.
-	if err != nil {
-		return "", err
-	}
-	panBlock2Str := "0000" + relevantPan
-
-	// XOR PIN block with PAN field to get clear PIN field (Block 1).
-	clearPinFieldHex, err := xorHexStrings(pinBlockHex, panBlock2Str)
-	if err != nil {
-		return "", fmt.Errorf("%w: xor failed during iso0 decoding: %v", errInternalDecoding, err)
-	}
-
-	// Validate format "0LPPPP...".
-	if clearPinFieldHex[0] != '0' {
-		return "", fmt.Errorf(
-			"%w: decoded iso0 pin block has invalid format prefix",
-			errPinBlockDecoding,
-		)
-	}
-	pinLenHex := string(clearPinFieldHex[1])
-	pinLen, err := strconv.ParseInt(pinLenHex, 16, 64)
-	if err != nil || pinLen < 4 || pinLen > 12 {
-		return "", fmt.Errorf(
-			"%w: decoded iso0 pin block has invalid pin length",
-			errPinBlockDecoding,
-		)
-	}
-
-	pinStartIndex := 2
-	pinEndIndex := pinStartIndex + int(pinLen)
-	if pinEndIndex > 16 {
-		return "", fmt.Errorf("%w: pin length exceeds block boundary in iso0", errPinBlockDecoding)
-	}
-	decodedPin := clearPinFieldHex[pinStartIndex:pinEndIndex]
-
-	// Validate padding is 'F'.
-	padding := clearPinFieldHex[pinEndIndex:]
-	for _, charRune := range padding {
-		if charRune != 'F' {
-			return "", fmt.Errorf(
-				"%w: decoded iso0 pin block has invalid padding, expected 'F'",
-				errPinBlockDecoding,
-			)
-		}
-	}
-
-	return decodedPin, nil
+	return decodePanBasedFormat(pinBlockHex, pan, false, '0', "iso0")
 }
 
 // ISO Format 1 (ISO 9564-1:2017 Format 1).
@@ -159,8 +112,8 @@ func decodeISO1(pinBlockHex, _ string) (string, error) { // PAN is not used for 
 // Thales Format 34.
 func encodeISO2(pin, _ string) (string, error) { // PAN is not used for ISO2 encoding
 	// Block: '2' + PIN Length (1 hex char) + PIN + 'F' padding.
-	// Thales Spec: C N P P P P P/F P/F P/F P/F P/F P/F P/F P/F F F
-	// C = X'2', N = len, P = PIN, F = X'F'
+	// Thales Spec: C N P P P P P/F P/F P/F P/F P/F P/F P/F P/F F F.
+	// C = X'2', N = len, P = PIN, F = X'F'.
 	pinBlockStr := fmt.Sprintf("2%X%s", len(pin), pin)
 	for len(pinBlockStr) < 14 {
 		pinBlockStr += "F"
@@ -228,8 +181,8 @@ func decodeISO2(pinBlockHex, _ string) (string, error) { // PAN is not used for 
 // Thales Format 47.
 func encodeISO3(pin, pan string) (string, error) {
 	// Plain text PIN field: '3' + PIN Length (1 hex char) + PIN + Random Fill (A-F).
-	// Thales Spec: C N P P P P P/F P/F P/F P/F P/F P/F P/F P/F F F
-	// C = X'3', N = len, P = PIN, F = Random A-F
+	// Thales Spec: C N P P P P P/F P/F P/F P/F P/F P/F P/F P/F F F.
+	// C = X'3', N = len, P = PIN, F = Random A-F.
 	pinFieldStr := fmt.Sprintf("3%X%s", len(pin), pin)
 	for len(pinFieldStr) < 16 {
 		pinFieldStr += GetRandomHexDigitAF() // Specification: Fill digit (A-F)

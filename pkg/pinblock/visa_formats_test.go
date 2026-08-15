@@ -1,4 +1,4 @@
-// nolint:all // test package
+// nolint:all // test package.
 package pinblock
 
 import (

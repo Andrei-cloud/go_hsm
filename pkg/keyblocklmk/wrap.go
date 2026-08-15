@@ -13,6 +13,26 @@ import (
 )
 
 // WrapKeyBlock encrypts a clear key under the LMK in Thales 'S' key block format.
+//
+// Example:
+//
+//	lmk := []byte{0x00, 0x01, 0x02, ...} // 32 bytes LMK
+//	header := Header{
+//		Version: 'S',
+//		KeyUsage: "00",
+//		Algorithm: 'A',
+//		ModeOfUse: 'B',
+//		KeyVersionNum: "00",
+//		Exportability: 'N',
+//		OptionalBlocks: 0,
+//		KeyContext: '1',
+//	}
+//	clearKey := []byte{0x12, 0x34, 0x56, ...}
+//	keyBlock, err := WrapKeyBlock(lmk, header, nil, clearKey)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	// keyBlock is the encrypted key block in ASCII format
 func WrapKeyBlock(
 	lmk []byte,
 	header Header,
@@ -95,12 +115,16 @@ func WrapKeyBlock(
 	result.WriteString("S")
 
 	// Add header as ASCII characters (not hex-encoded).
-	result.Write(headerBytes)
+	if _, err := result.Write(headerBytes); err != nil {
+		return nil, fmt.Errorf("failed to write header bytes: %v", err)
+	}
 
 	// Add optional blocks as ASCII characters (not hex-encoded).
 	for _, opt := range optBlocks {
 		optBytes := opt.Marshal()
-		result.Write(optBytes)
+		if _, err := result.Write(optBytes); err != nil {
+			return nil, fmt.Errorf("failed to write optional block: %v", err)
+		}
 	}
 
 	// Add encrypted key data and MAC as ASCII hex encoded.

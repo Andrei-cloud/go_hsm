@@ -9,11 +9,11 @@ import (
 	"time"
 
 	anetserver "github.com/andrei-cloud/anet/server"
+	"github.com/andrei-cloud/go_hsm/internal/config"
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 	"github.com/andrei-cloud/go_hsm/internal/hsm"
 	"github.com/andrei-cloud/go_hsm/internal/plugins"
 	"github.com/andrei-cloud/go_hsm/pkg/common"
-	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -24,16 +24,6 @@ type contextKey string
 
 // logAdapter implements anet.Logger using zerolog.
 type logAdapter struct{}
-
-// Server handles HSM requests over TCP by delegating to WASM plugins.
-type Server struct {
-	address             string
-	srv                 *anetserver.Server
-	pluginManager       *plugins.PluginManager
-	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
-	hsmSvc              *hsm.HSM
-	activeConns         int32
-}
 
 func (l logAdapter) Print(v ...any) {
 	log.Info().Msg(fmt.Sprint(v...))
@@ -55,25 +45,98 @@ func (l logAdapter) Errorf(format string, v ...any) {
 	log.Error().Msgf(format, v...)
 }
 
-// NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
-func NewServer(address string, pm *plugins.PluginManager) (*Server, error) {
-	cfg := &anetserver.ServerConfig{
-		MaxConns:        100,
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
-		IdleTimeout:     0 * time.Second, // disable idle connection closure.
-		ShutdownTimeout: 5 * time.Second,
-		Logger:          logAdapter{},
-	}
+// ServerOption defines functional options for Server.
+type ServerOption func(*Server)
 
+// WithServerContext sets the parent context for the server lifecycle.
+func WithServerContext(ctx context.Context) ServerOption {
+	return func(s *Server) {
+		if ctx != nil {
+			s.ctx = ctx
+		}
+	}
+}
+
+// WithConfig sets server network configuration from config.Config.
+func WithConfig(cfg *config.Config) ServerOption {
+	return func(s *Server) {
+		if cfg != nil {
+			s.cfg = cfg
+		}
+	}
+}
+
+// Server handles HSM requests over TCP by delegating to WASM plugins.
+type Server struct {
+	ctx                 context.Context
+	address             string
+	cfg                 *config.Config
+	srv                 *anetserver.Server
+	pluginManager       *plugins.PluginManager
+	pluginManagerHolder atomic.Value // stores *plugins.PluginManager
+	hsmSvc              hsm.HSMInterface
+	requestSeq          uint64
+	activeConns         int32
+}
+
+func (s *Server) nextRequestID() string {
+	seq := atomic.AddUint64(&s.requestSeq, 1)
+	return fmt.Sprintf("%016x-%08x", time.Now().UnixNano(), seq)
+}
+
+// NewServer configures and returns a new Server listening on the given address using the provided PluginManager.
+func NewServer(address string, pm *plugins.PluginManager, opts ...ServerOption) (*Server, error) {
 	s := &Server{
+		ctx:           context.Background(),
 		address:       address,
 		pluginManager: pm,
-		hsmSvc:        pm.HSM(), // Get HSM from plugin manager
+		hsmSvc:        pm.HSM(),
 	}
+
+	for _, opt := range opts {
+		opt(s)
+	}
+
 	s.pluginManagerHolder.Store(pm)
+
+	// Build anet ServerConfig
+	serverCfg := &anetserver.ServerConfig{
+		MaxConns:              1000,
+		MaxConcurrentHandlers: 10000,
+		ReadTimeout:           30 * time.Second,
+		WriteTimeout:          30 * time.Second,
+		IdleTimeout:           0 * time.Second,
+		KeepAliveInterval:     30 * time.Second,
+		ShutdownTimeout:       5 * time.Second,
+		Logger:                logAdapter{},
+	}
+
+	if s.cfg != nil {
+		if s.cfg.Server.MaxConns > 0 {
+			serverCfg.MaxConns = s.cfg.Server.MaxConns
+		}
+		if s.cfg.Server.MaxConcurrentHandlers > 0 {
+			serverCfg.MaxConcurrentHandlers = s.cfg.Server.MaxConcurrentHandlers
+		}
+		if s.cfg.Server.ReadTimeout > 0 {
+			serverCfg.ReadTimeout = s.cfg.Server.ReadTimeout
+		}
+		if s.cfg.Server.WriteTimeout > 0 {
+			serverCfg.WriteTimeout = s.cfg.Server.WriteTimeout
+		}
+		if s.cfg.Server.IdleTimeout > 0 {
+			serverCfg.IdleTimeout = s.cfg.Server.IdleTimeout
+		}
+		if s.cfg.Server.KeepAliveInterval > 0 {
+			serverCfg.KeepAliveInterval = s.cfg.Server.KeepAliveInterval
+		}
+		if s.cfg.Server.ShutdownTimeout > 0 {
+			serverCfg.ShutdownTimeout = s.cfg.Server.ShutdownTimeout
+		}
+	}
+
 	handler := anetserver.HandlerFunc(s.handle)
-	srv, err := anetserver.NewServer(address, handler, cfg)
+	srv, err := anetserver.NewServer(address, handler, serverCfg)
 	if err != nil {
 		return nil, fmt.Errorf("server setup failed: %w", err)
 	}
@@ -94,12 +157,16 @@ func (s *Server) Stop() error {
 	return s.srv.Stop()
 }
 
+// ActiveConns returns the current number of active connections being processed.
+func (s *Server) ActiveConns() int32 {
+	return atomic.LoadInt32(&s.activeConns)
+}
+
 // SetPluginManager atomically replaces the PluginManager and closes the old one.
 func (s *Server) SetPluginManager(newPM *plugins.PluginManager) {
 	old, ok := s.pluginManagerHolder.Load().(*plugins.PluginManager)
 	if !ok {
 		log.Error().Msg("failed to load old plugin manager")
-
 		return
 	}
 
@@ -132,30 +199,30 @@ func (s *Server) errorResponse(cmd string) []byte {
 
 // Enhanced error handling and logging for unknown commands and errors.
 func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error) {
-	client := conn.Conn.RemoteAddr().String()
 	atomic.AddInt32(&s.activeConns, 1)
 	defer atomic.AddInt32(&s.activeConns, -1)
 
-	requestID := uuid.NewString()
-
-	start := time.Now()
-	log.Debug().
-		Str("event", "handle_start").
-		Str("client_ip", client).
-		Str("request_id", requestID).
-		Msg("starting request handling")
-
 	if len(data) < 2 {
-		log.Error().Str("client_ip", client).Str("request_id", requestID).Msg("malformed request")
-
 		return nil, errors.New("malformed request")
+	}
+
+	requestID := s.nextRequestID()
+
+	if log.Debug().Enabled() {
+		client := ""
+		if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+			client = conn.Conn.RemoteAddr().String()
+		}
+		log.Debug().
+			Str("event", "handle_start").
+			Str("client_ip", client).
+			Str("request_id", requestID).
+			Msg("starting request handling")
 	}
 
 	cmd := string(data[:2])
 	origPayload := data[2:]
-	// skip separate request log in non-debug mode, will log processed result later.
 
-	// handle built-in A0 encryption under LMK.
 	var resp []byte
 	var execErr error
 
@@ -171,70 +238,73 @@ func (s *Server) handle(conn *anetserver.ServerConn, data []byte) ([]byte, error
 
 	execPayload := origPayload
 	if cmd == "NC" {
-		execPayload = []byte(s.hsmSvc.FirmwareVersion)
+		execPayload = []byte(s.hsmSvc.FirmwareVersion())
 	}
 
 	// Pass requestID via context for plugin and plugin logs
 	ctx := context.WithValue(srvContextOrDefault(s), requestIDKey, requestID)
 	resp, execErr = pm.ExecuteCommandWithContext(ctx, cmd, execPayload)
-	if execErr != nil {
-		log.Error().
-			Str("event", "plugin_execution_error").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Err(execErr).
-			Msg("Error during plugin execution")
-	}
 
 	if execErr != nil {
-		if execErr.Error() == "unknown command" {
-			resp = s.errorResponse(cmd)
-			log.Warn().
-				Str("event", "unknown_command").
-				Str("client_ip", client).
-				Str("command", cmd).
-				Msg("Command not recognized, responding with error code")
-		} else {
-			log.Error().
-				Str("event", "plugin_error").
-				Str("client_ip", client).
-				Str("command", cmd).
-				Err(execErr).
-				Msg("Plugin execution failed")
-			resp = s.errorResponse(cmd)
+		resp = s.errorResponse(cmd)
+		if log.Warn().Enabled() {
+			client := ""
+			if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+				client = conn.Conn.RemoteAddr().String()
+			}
+			if execErr.Error() == "unknown command" {
+				log.Warn().
+					Str("event", "unknown_command").
+					Str("client_ip", client).
+					Str("command", cmd).
+					Msg("Command not recognized, responding with error code")
+			} else {
+				log.Error().
+					Str("event", "plugin_error").
+					Str("client_ip", client).
+					Str("command", cmd).
+					Err(execErr).
+					Msg("Plugin execution failed")
+			}
 		}
 	}
 
-	// unified processed log with duration and error status
-	duration := time.Since(start)
-	reqStr := common.FormatData(data)
-	respStr := common.FormatData(resp)
-	if execErr != nil {
-		log.Error().
-			Str("event", "request_processed").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Str("request_id", requestID).
-			Str("request", reqStr).
-			Str("response", respStr).
-			Str("duration", duration.String()).
-			Err(execErr).
-			Msg("command execution failed")
-	} else {
-		log.Info().
-			Str("event", "request_processed").
-			Str("client_ip", client).
-			Str("command", cmd).
-			Str("request_id", requestID).
-			Str("request", reqStr).
-			Str("response", respStr).
-			Str("duration", duration.String()).
-			Msg("command processed")
+	// logging with duration and error status
+	if log.Info().Enabled() || execErr != nil {
+		client := ""
+		if conn != nil && conn.Conn != nil && conn.Conn.RemoteAddr() != nil {
+			client = conn.Conn.RemoteAddr().String()
+		}
+		reqStr := common.FormatData(data)
+		respStr := common.FormatData(resp)
+		if execErr != nil {
+			log.Error().
+				Str("event", "request_processed").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Str("request_id", requestID).
+				Str("request", reqStr).
+				Str("response", respStr).
+				Err(execErr).
+				Msg("command execution failed")
+		} else if log.Info().Enabled() {
+			log.Info().
+				Str("event", "request_processed").
+				Str("client_ip", client).
+				Str("command", cmd).
+				Str("request_id", requestID).
+				Str("request", reqStr).
+				Str("response", respStr).
+				Msg("command processed")
+		}
 	}
 
 	return resp, nil
 }
 
-func srvContextOrDefault(_ *Server) context.Context {
+func srvContextOrDefault(s *Server) context.Context {
+	if s != nil && s.ctx != nil {
+		return s.ctx
+	}
 	return context.Background()
 }

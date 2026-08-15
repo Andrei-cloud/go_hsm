@@ -9,6 +9,9 @@ import (
 	"fmt"
 )
 
+// ErrMACVerificationFailed is returned when MAC verification fails during key block unwrapping.
+var ErrMACVerificationFailed = errors.New("mac verification failed")
+
 // UnwrapDiagnostics contains diagnostic information from key block unwrapping.
 type UnwrapDiagnostics struct {
 	ReceivedMAC   []byte
@@ -16,6 +19,17 @@ type UnwrapDiagnostics struct {
 }
 
 // UnwrapKeyBlock decrypts a key block using the LMK and returns the Header and clear key.
+// The key block must be in Thales 'S' format.
+//
+// Example:
+//
+//	lmk := []byte{0x00, 0x01, 0x02, ...} // 32 bytes LMK
+//	keyBlock := []byte("S...") // Encrypted key block
+//	header, clearKey, err := UnwrapKeyBlock(lmk, keyBlock)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	// header contains metadata, clearKey is the decrypted key
 func UnwrapKeyBlock(lmk, keyBlock []byte) (*Header, []byte, error) {
 	header, clearKey, err := unwrapKeyBlockInternal(lmk, keyBlock)
 
@@ -102,7 +116,7 @@ func unwrapKeyBlockInternal(lmk, keyBlock []byte) (*Header, []byte, error) {
 	}
 	// Verify MAC.
 	if !bytes.Equal(binRecvMac, macCalc) {
-		return nil, nil, errors.New("mac verification failed")
+		return nil, nil, ErrMACVerificationFailed
 	}
 
 	// Decrypt ciphertext using AES-CBC with IV = header bytes.

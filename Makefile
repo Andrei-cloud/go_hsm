@@ -18,6 +18,7 @@ gen: ## Generate new plugin code
 
 plugins: ## Build WASM plugins
 	@echo "Building WASM plugins with TinyGo..."
+	@mkdir -p $(WASM_OUT_DIR)
 	@if [ -n "$(CMD)" ]; then \
 		name=$(CMD); \
 		rm -f $(WASM_OUT_DIR)/$$name.wasm; \
@@ -63,6 +64,12 @@ build: ## Build HSM binary.
 
 test: ## Run tests.
 	go test -failfast -v ./...
+
+bench: ## Run performance benchmarks.
+	go test -bench=. -benchmem ./...
+
+bench-load: ## Run end-to-end throughput and latency load tests.
+	go test -v -run=TestThroughputAndLatencyLoadTest ./internal/server/...
 
 clean: ## Clean built binaries and plugins.
 	rm -rf bin $(WASM_OUT_DIR)
