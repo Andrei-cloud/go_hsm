@@ -14,8 +14,9 @@ var cfgFile string
 // NewRootCommand creates and returns the root command with all subcommands.
 func NewRootCommand() (*cobra.Command, error) {
 	rootCmd := &cobra.Command{
-		Use:   "go_hsm",
-		Short: "Hardware Security Module server and utilities",
+		Use:     "go_hsm",
+		Version: "0.3.0",
+		Short:   "Hardware Security Module server and utilities",
 		Long: `A flexible HSM server and utility tool for PIN block operations 
 and other cryptographic functions for payment card processing.`,
 		SilenceErrors: true,
