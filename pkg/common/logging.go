@@ -1,3 +1,5 @@
+// Package common provides shared zerolog initialization and request/response
+// logging helpers used across the go_hsm server and CLI.
 package common
 
 import (

@@ -1,0 +1,31 @@
+# go_hsm
+
+> A Hardware Security Module (HSM) emulator in Go, compatible with Thales/Racal protocols. HSM commands run as isolated TinyGo-compiled WASM plugins with bounded instance pooling and zero-downtime hot-reload over a framed TCP server.
+
+Go module: `github.com/andrei-cloud/go_hsm` · Go 1.27+ · TinyGo 0.42+ (plugins) · MIT
+
+## Core docs
+
+- [README.md](README.md): overview, getting started, configuration layering, wire protocol, CLI reference, plugin system, benchmarks, project structure
+- [CONTRIBUTING.md](CONTRIBUTING.md): contributor setup, project layout, verification commands, conventions (incl. scheduler-less WASM constraints)
+- [CHANGELOG.md](CHANGELOG.md): notable changes, Keep a Changelog format
+- [LICENSE](LICENSE): MIT
+
+## Implemented HSM commands (plugins)
+
+A0 generate key · B2 echo · BU key check value · CA translate PIN TPK→ZPK · CW generate CVV · CY verify CVV · DC verify terminal PIN (ABA PVV) · EC verify interchange PIN (ABA PVV) · FA translate ZMK→ZPK · HC generate TMK/TPK/PVK · NC diagnostics · KQ ARQC verify / ARPC generate
+
+## Key packages
+
+- `pkg/keyblocklmk`: Thales `S` and TR-31 `R` key blocks (AES-256 LMK, AES-CMAC derivation, wrap/unwrap)
+- `pkg/pinblock`: PIN block encode/decode across ISO 0/1/2/3/4, ANSI X9.8, Visa 1-4, ECI-1, Diebold, IBM 3624, Docutel, NCR, Plus, Mastercard PayNowPayLater formats
+- `pkg/variantlmk`: Thales variant-LMK protection (LMK pairs, variants, schemes X/U/T)
+- `pkg/cryptoutils`, `pkg/crypto`: 3DES/DES primitives, KCV, split-key components, parity
+- `pkg/hsmplugin`: WASM guest SDK (buffers, host function imports)
+- `internal/plugins`: host-side plugin manager (wazero runtime, instance pooling, SIGHUP hot-reload)
+- `internal/server` + `github.com/andrei-cloud/anet`: framed TCP server (2-byte length, 4-byte task ID)
+
+## Constraints for AI agents modifying this codebase
+
+- WASM plugins build with `-scheduler=none`: guest-linked packages must not import `testing` from non-test files, write to `os.Stdout`/`os.Stderr`, call `fmt.Sscanf`, or use `crypto/rand` directly (host CSPRNG injection via `pinblock.Rand`).
+- Verify with: `make test`, `go build ./cmd/...`, `golangci-lint run ./...` (golangci-lint v2), `make plugins` (11/12 plugins; CA build blocked by a TinyGo 0.42 liveness issue).

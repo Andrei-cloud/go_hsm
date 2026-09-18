@@ -1,3 +1,6 @@
+// Package crypto provides HSM key primitives over DES/3DES: key generation
+// with parity control, key check values (KCV), and split-key component
+// creation and combination for ceremonial key ceremonies.
 package crypto
 
 import (

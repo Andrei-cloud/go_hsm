@@ -20,13 +20,23 @@ var VariantMap = map[int]byte{
 	9: 0xFA,
 }
 
+// LMKPair is a Thales-style Local Master Key stored as two 8-byte halves,
+// used by the variant-LMK key protection scheme (see ApplyVariant and
+// EncryptUnderVariantLMK).
 type LMKPair struct {
 	Left  []byte
 	Right []byte
 }
 
+// LMKSet is a fixed-size registry of LMK pairs indexed by LMK ID.
 type LMKSet [20]LMKPair
 
+// ApplyVariant returns a copy of the LMK pair whose first left-half byte is
+// XORed with the variant byte registered for variantID in VariantMap. This
+// derives the per-key-type LMK used to wrap or unwrap keys of that type.
+// variantID 0 is the identity variant and returns an unmodified copy.
+//
+// Returns an error if variantID is not present in VariantMap.
 func (lmk LMKPair) ApplyVariant(variantID int) (LMKPair, error) {
 	if variantID == 0 {
 		// Variant 0 means no modification to the LMK's first byte.
@@ -96,6 +106,9 @@ func EncryptUnderVariantLMK(inputKey []byte, pair LMKPair, schemeTag byte) ([]by
 	return encrypted, nil
 }
 
+// LoadLMKFromHex parses an LMK pair from two hex-encoded 8-byte halves.
+// Both halves must decode to exactly 8 bytes; no key material is logged on
+// failure.
 func LoadLMKFromHex(leftHex, rightHex string) (LMKPair, error) {
 	left, err := hex.DecodeString(leftHex)
 	if err != nil || len(left) != 8 {

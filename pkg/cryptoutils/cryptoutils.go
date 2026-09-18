@@ -139,8 +139,12 @@ func NewECBEncrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbEncrypter)(&ecb{b: b})
 }
 
+// BlockSize returns the cipher's block size, satisfying cipher.BlockMode.
 func (x *ecbEncrypter) BlockSize() int { return x.b.BlockSize() }
 
+// CryptBlocks ECB-encrypts src block by block into dst.
+// dst must be at least as long as src. It panics if len(src) is not a
+// multiple of the block size, matching cipher.BlockMode semantics.
 func (x *ecbEncrypter) CryptBlocks(dst, src []byte) {
 	if len(src)%x.BlockSize() != 0 {
 		panic(fmt.Sprintf(
@@ -161,8 +165,12 @@ func NewECBDecrypter(b cipher.Block) cipher.BlockMode {
 	return (*ecbDecrypter)(&ecb{b: b})
 }
 
+// BlockSize returns the cipher's block size, satisfying cipher.BlockMode.
 func (x *ecbDecrypter) BlockSize() int { return x.b.BlockSize() }
 
+// CryptBlocks ECB-decrypts src block by block into dst.
+// dst must be at least as long as src. It panics if len(src) is not a
+// multiple of the block size, matching cipher.BlockMode semantics.
 func (x *ecbDecrypter) CryptBlocks(dst, src []byte) {
 	if len(src)%x.BlockSize() != 0 {
 		panic(fmt.Sprintf(
@@ -178,6 +186,14 @@ func (x *ecbDecrypter) CryptBlocks(dst, src []byte) {
 	}
 }
 
+// KeyCV computes the Key Check Value of a DES/3DES key: it ECB-encrypts
+// two zero blocks under the key and returns the first kcvLen bytes.
+// keyHex must decode to 8, 16, or 24 bytes; shorter keys are expanded to
+// triple length per classic HSM convention (K1K1K1 for single, K1K2K1 for
+// double length).
+//
+// Returns an error if keyHex is not valid hex, has an unsupported length,
+// or kcvLen exceeds the computed check value.
 func KeyCV(keyHex []byte, kcvLen int) ([]byte, error) {
 	rawKey, err := hex.DecodeString(string(keyHex))
 	if err != nil {
