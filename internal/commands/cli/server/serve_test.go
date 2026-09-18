@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -47,6 +48,76 @@ func TestRunServeKeepsServingUntilCanceled(t *testing.T) {
 	dialWhenReady(t, address, serveErr)
 
 	// The command must stay running until the context is canceled.
+	select {
+	case err := <-serveErr:
+		t.Fatalf("runServe exited while server should still be running (err: %v)", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	cancel()
+
+	waitToReturn(t, serveErr)
+}
+
+// TestRunServePortFlagOverridesConfig guards against the config-layering bug
+// where --host/--port were bound to the global viper while runServe read
+// host/port from config.Get() (populated by a different viper instance), so
+// the flags were silently ignored and config.yaml always won.
+func TestRunServePortFlagOverridesConfig(t *testing.T) {
+	// Reserve two free ports: one for the config value, one for the flag.
+	// The server must bind the flag's port, not the config's.
+	flagListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to reserve flag port: %v", err)
+	}
+
+	flagAddress := flagListener.Addr().String()
+	flagPort := flagListener.Addr().(*net.TCPAddr).Port
+
+	if err := flagListener.Close(); err != nil {
+		t.Fatalf("failed to release flag port: %v", err)
+	}
+
+	cfgListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to reserve config port: %v", err)
+	}
+
+	cfgPort := cfgListener.Addr().(*net.TCPAddr).Port
+
+	if err := cfgListener.Close(); err != nil {
+		t.Fatalf("failed to release config port: %v", err)
+	}
+
+	if flagPort == cfgPort {
+		t.Fatalf("reserved identical ports: %d", flagPort)
+	}
+
+	cfg := config.Get()
+	cfg.Server.Host = "127.0.0.1"
+	cfg.Server.Port = cfgPort
+	cfg.Plugin.Path = t.TempDir()
+	cfg.Plugin.ExecutionTimeout = 2 * time.Second
+	cfg.Plugin.PoolSize = 2
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := NewServeCommand()
+
+	if err := cmd.Flags().Set("port", strconv.Itoa(flagPort)); err != nil {
+		t.Fatalf("failed to set --port flag: %v", err)
+	}
+
+	cmd.SetContext(ctx)
+
+	serveErr := make(chan error, 1)
+
+	go func() { serveErr <- runServe(cmd, nil) }()
+
+	// Must become reachable on the flag's port, not the config's.
+	dialWhenReady(t, flagAddress, serveErr)
+
 	select {
 	case err := <-serveErr:
 		t.Fatalf("runServe exited while server should still be running (err: %v)", err)

@@ -32,11 +32,36 @@ func NewServeCommand() *cobra.Command {
 	cmd.Flags().String("host", "localhost", "Server host")
 	cmd.Flags().Int("port", 1500, "Server port")
 
-	// Bind serve command flags to viper.
-	_ = viper.BindPFlag("server.host", cmd.Flags().Lookup("host"))
-	_ = viper.BindPFlag("server.port", cmd.Flags().Lookup("port"))
-
 	return cmd
+}
+
+// resolveServerAddr returns the host and port to serve on; explicitly set
+// CLI flags take precedence over configuration values. The flags are read
+// from the command, not viper: config.Get() is populated by the config
+// package's own viper instance, so flags bound to the global viper never
+// reached it and were silently ignored.
+func resolveServerAddr(cmd *cobra.Command, cfg *config.Config) (string, int, error) {
+	host, port := cfg.Server.Host, cfg.Server.Port
+
+	if cmd.Flags().Changed("host") {
+		flagHost, err := cmd.Flags().GetString("host")
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid --host flag: %w", err)
+		}
+
+		host = flagHost
+	}
+
+	if cmd.Flags().Changed("port") {
+		flagPort, err := cmd.Flags().GetInt("port")
+		if err != nil {
+			return "", 0, fmt.Errorf("invalid --port flag: %w", err)
+		}
+
+		port = flagPort
+	}
+
+	return host, port, nil
 }
 
 func runServe(cmd *cobra.Command, _ []string) error {
@@ -94,8 +119,13 @@ func runServe(cmd *cobra.Command, _ []string) error {
 			Msg("plugin details")
 	}
 
-	// Initialize the server with configured host and port.
-	serverAddr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+	// Initialize the server with host and port; CLI flags override config.
+	host, port, err := resolveServerAddr(cmd, cfg)
+	if err != nil {
+		return err
+	}
+
+	serverAddr := fmt.Sprintf("%s:%d", host, port)
 	srv, err := server.NewServer(
 		serverAddr,
 		pluginManager,
