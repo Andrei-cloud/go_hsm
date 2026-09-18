@@ -223,7 +223,8 @@ func ExecuteCA(input []byte) ([]byte, error) {
 
 	// Update PIN length from actual clear PIN length
 	logInfo("CA: Formatting response.")
-	pinLen = fmt.Appendf([]byte{}, "%02d", len(clearPin))
+
+	pinLen = []byte(fmt.Sprintf("%02d", len(clearPin)))
 
 	// Build response: CB + 00 + pin length + PIN block + format
 	resp := slices.Concat([]byte("CB00"), pinLen, cryptoutils.Raw2B(out), []byte(fmtDst))

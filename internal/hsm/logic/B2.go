@@ -2,6 +2,7 @@ package logic
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/andrei-cloud/go_hsm/internal/errorcodes"
 )
@@ -18,11 +19,13 @@ func ExecuteB2(input []byte) ([]byte, error) {
 
 	// First 4 bytes are the data length in hex (ASCII encoded).
 	lengthField := input[:4]
-	var dataLen int
-	_, err := fmt.Sscanf(string(lengthField), "%04X", &dataLen)
+
+	dataLen64, err := strconv.ParseUint(string(lengthField), 16, 32)
 	if err != nil {
 		return nil, errorcodes.Err15
 	}
+
+	dataLen := int(dataLen64)
 
 	logInfo(fmt.Sprintf("B2: data length: %d", dataLen))
 	if len(input) < 4+dataLen {

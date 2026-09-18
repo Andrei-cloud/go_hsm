@@ -2,21 +2,22 @@
 package pinblock
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"strings"
 )
 
 // GetRandomHexDigit returns a random hex digit (0-F).
 func GetRandomHexDigit() string {
 	b := make([]byte, 1)
-	_, err := rand.Read(b)
+
+	_, err := io.ReadFull(Rand, b)
 	if err != nil {
-		// Fallback to a pseudo-random digit if crypto/rand fails, though this is unlikely.
+		// Fallback to a pseudo-random digit if the CSPRNG fails, though this is unlikely.
 		// In a real scenario, this error should be handled more robustly.
 		// For HSM operations, cryptographic randomness is critical.
-		// Consider panicking or returning a clear error if rand.Read fails.
+		// Consider panicking or returning a clear error if the read fails.
 		return "0" // Or handle error appropriately.
 	}
 
@@ -26,9 +27,10 @@ func GetRandomHexDigit() string {
 // GetRandomHexDigitAF returns a random hex digit (A-F).
 func GetRandomHexDigitAF() string {
 	b := make([]byte, 1)
-	_, err := rand.Read(b)
+
+	_, err := io.ReadFull(Rand, b)
 	if err != nil {
-		// Fallback if crypto/rand fails.
+		// Fallback if the CSPRNG fails.
 		return "A" // Or handle error appropriately.
 	}
 	// Generate a number from 10 to 15, then format as hex.
