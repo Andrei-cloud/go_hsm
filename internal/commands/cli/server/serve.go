@@ -150,22 +150,18 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	signal.Notify(stopChan, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(stopChan)
 
-	// Start server in background
-	srvErrChan := make(chan error, 1)
-	go func() {
-		srvErrChan <- srv.Start()
-	}()
+	// Start the server. anet's Start() binds the listener and spawns the
+	// accept loop, returning as soon as the port is bound; serving continues
+	// in the background until Stop is called.
+	if err := srv.Start(); err != nil {
+		return fmt.Errorf("failed to start server: %w", err)
+	}
 
 	select {
 	case sig := <-stopChan:
 		log.Info().Str("signal", sig.String()).Msg("shutting down server...")
 	case <-ctx.Done():
 		log.Info().Msg("context canceled, shutting down server...")
-	case err := <-srvErrChan:
-		if err != nil {
-			return fmt.Errorf("server error: %w", err)
-		}
-		return nil
 	}
 
 	if err := srv.Stop(); err != nil {
