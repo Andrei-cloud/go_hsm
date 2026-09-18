@@ -235,10 +235,20 @@ func TestMACValidation(t *testing.T) {
 		t.Fatalf("UnwrapKeyBlock failed for valid key block: %v", err)
 	}
 
-	// Corrupt the key block by changing the last byte (MAC).
+	// Corrupt the MAC while keeping it valid hex: XOR'ing a hex char with
+	// 0x01 can produce a non-hex byte ('A'->'@', 'F'->'G'), which then fails
+	// hex decoding instead of MAC verification (~12% flake). Swapping the
+	// last char between '0' and '1' always changes the decoded MAC bytes and
+	// always decodes, so the MAC comparison always runs.
 	corruptedKeyBlock := make([]byte, len(keyBlock))
 	copy(corruptedKeyBlock, keyBlock)
-	corruptedKeyBlock[len(corruptedKeyBlock)-1] ^= 0x01 // Flip one bit.
+
+	tail := &corruptedKeyBlock[len(corruptedKeyBlock)-1]
+	if *tail == '0' {
+		*tail = '1'
+	} else {
+		*tail = '0'
+	}
 
 	// Verify MAC validation fails.
 	_, _, err = UnwrapKeyBlock(lmk, corruptedKeyBlock)
