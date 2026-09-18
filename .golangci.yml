@@ -1,54 +1,64 @@
-
+version: "2"
 run:
-  timeout: 5m
   modules-download-mode: readonly
-
 linters:
-  enable-all: true
+  default: all
   disable:
-    - exhaustivestruct
-    - golint
-    - interfacer
-    - maligned
-    - scopelint
-    - structcheck
-    - varcheck
-    - deadcode
-    - ifshort
-    - nosnakecase
+    - depguard # no rules configured; with default:all it flags every non-stdlib import
+    - exhaustruct # deprecated since v2.13.0; v1 config disabled its predecessor (exhaustivestruct), restoring that intent
+    - gomodguard # deprecated since v2.12.0; replaced by gomodguard_v2
+    - noinlineerr # conflicts with the codebase-wide `if err := f(); err != nil` idiom
     - nonamedreturns
     - rowserrcheck
     - sqlclosecheck
-    - wastedassign
-    - stylecheck
-    - typecheck
-    - unparam
     - tparallel
-    
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - funlen
-        - goconst
-        - goerr113
-        - noctx
-        - wrapcheck
-        - exhaustivestruct
-        - gocyclo
-        - dupl
-        - bodyclose
-        - paralleltest
-        - testpackage
-        - forcetypeassert
-        - tparallel
-        
-    - linters:
-        - gomnd
-      text: "magic number"
-    - linters:
-        - goconst
-      text: "string literal"
-    - linters:
-        - lll
-      text: "line is too long"
+    - unparam
+    - wastedassign
+    - wsl # deprecated since v2.2.0; replaced by wsl_v5 which default:all already enables
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - bodyclose
+          - dupl
+          - err113
+          - forcetypeassert
+          - funlen
+          - goconst
+          - gocyclo
+          - noctx
+          - paralleltest
+          - testpackage
+          - tparallel
+          - wrapcheck
+        path: _test\.go
+      - linters:
+          - mnd
+        text: magic number
+      - linters:
+          - goconst
+        text: string literal
+      - linters:
+          - lll
+        text: line is too long
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
