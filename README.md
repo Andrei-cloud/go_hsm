@@ -116,6 +116,8 @@ Implemented as WASM plugins, with more extensible via the plugin system:
 | HC | Generate a TMK, TPK or PVK variant LMK key |
 | NC | Network diagnostics (firmware version) |
 | KQ | ARQC verification and/or ARPC generation |
+| M6 | Generate a MAC (ISO/IEC 9797-1 algorithm 1 or 3, TAK or ZAK, single block) |
+| M8 | Verify a MAC (ISO/IEC 9797-1 algorithm 1 or 3, TAK or ZAK, single block) |
 
 ## Wire Protocol
 

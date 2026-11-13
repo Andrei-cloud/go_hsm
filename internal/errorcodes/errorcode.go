@@ -7,8 +7,11 @@ var (
 	Err00 = HSMError{"00", "No error"}
 	Err01 = HSMError{"01", "Verification failure or warning of imported key parity error"}
 	Err02 = HSMError{"02", "Key inappropriate length for algorithm"}
+	Err03 = HSMError{"03", "Invalid input format flag"}
 	Err04 = HSMError{"04", "Invalid key type code"}
 	Err05 = HSMError{"05", "Invalid key length flag"}
+	Err06 = HSMError{"06", "Invalid message length"}
+	Err09 = HSMError{"09", "Invalid padding method"}
 	Err10 = HSMError{"10", "Source key parity error"}
 	Err11 = HSMError{"11", "Destination key parity error or key all zeros"}
 	Err12 = HSMError{"12", "Contents of user storage not available. Reset, power-down or overwrite"}
