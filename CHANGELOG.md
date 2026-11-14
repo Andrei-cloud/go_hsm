@@ -9,6 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - M6 (generate MAC) and M8 (verify MAC) commands: ISO/IEC 9797-1 algorithm 1 (TDEA on every block) and algorithm 3 (retail MAC), 8- or 16-digit MACs, binary or hex input, padding methods 0-2, under a TAK (003) or ZAK (008). Mode 0 (a message in a single block) only. M8 answers `M901` when the MAC does not hold.
+- A6 (import a key under ZMK) and A8 (export a key under ZMK) commands for the ANSI X9.17 ECB forms: `Z` (or untagged) single, `X` double and `Y` triple length. Both return the key's 6-digit check value; A6 answers `01` with the key when the imported key has a parity error. The Thales variant forms `U`/`T` under a ZMK answer 26.
 - Error codes 03 (invalid input format flag), 06 (invalid message length) and 09 (invalid padding method) in the shared catalogue.
 
 ### Fixed
