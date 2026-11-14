@@ -128,7 +128,12 @@ func (pm *PluginManager) LoadAll(dir string) error {
 			log.Debug().Err(err).Str("file", f.Name()).Msg("failed to compile plugin module")
 			continue
 		}
-		cfg := wazero.NewModuleConfig().WithName(cmdCode).WithStartFunctions()
+		// A plugin is a WASI reactor: _initialize runs its package initialisers
+		// (package-level maps, init functions) once per instance, before any
+		// export is called. It never runs main. wazero skips a start function
+		// a module doesn't export, so a plugin built as a command still loads,
+		// but only with the initialisers TinyGo could evaluate at compile time.
+		cfg := wazero.NewModuleConfig().WithName(cmdCode).WithStartFunctions("_initialize")
 		factory := func() (*PluginInstance, error) {
 			instance, err := newRt.InstantiateModule(pm.ctx, compiled, cfg)
 			if err != nil {

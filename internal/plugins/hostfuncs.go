@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,6 +87,12 @@ func (h *HostFunctions) Register(ctx context.Context) error {
 			stack[0] = h.generateRandomKey(ctx, mod, api.DecodeU32(stack[0]))
 		}), []api.ValueType{api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
 		Export("RandomKey")
+
+	h.builder.NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, mod api.Module, stack []uint64) {
+			stack[0] = h.randomBytes(ctx, mod, api.DecodeU32(stack[0]))
+		}), []api.ValueType{api.ValueTypeI32}, []api.ValueType{api.ValueTypeI64}).
+		Export("RandomBytes")
 
 	// Instantiate the module
 	_, err := h.builder.Instantiate(ctx)
@@ -338,4 +345,41 @@ func (h *HostFunctions) generateRandomKey(ctx context.Context, mod api.Module, l
 	}
 
 	return uint64(resultPtr)<<32 | uint64(len(key))
+}
+
+// maxRandomBytes bounds one RandomBytes call: padding and nonces, never bulk data.
+const maxRandomBytes = 4096
+
+// randomBytes answers a plugin's RandomBytes call with length bytes from
+// crypto/rand, written into the plugin's memory. Unlike RandomKey it applies no
+// key length rule and no DES parity, so it serves padding and other plain
+// random data. It returns 0 for a length of 0 or above maxRandomBytes, or on
+// failure.
+func (h *HostFunctions) randomBytes(ctx context.Context, mod api.Module, length uint32) uint64 {
+	if length == 0 || length > maxRandomBytes {
+		log.Error().Uint32("length", length).Msg("random bytes length out of range")
+		return 0
+	}
+
+	buf := make([]byte, length)
+	if _, err := rand.Read(buf); err != nil {
+		log.Error().Err(err).Msg("failed to read random bytes")
+		return 0
+	}
+	defer clear(buf)
+
+	allocFn := mod.ExportedFunction("Alloc")
+	results, err := allocFn.Call(ctx, uint64(len(buf)))
+	if err != nil || len(results) == 0 {
+		log.Error().Err(err).Msg("failed to allocate memory for random bytes")
+		return 0
+	}
+
+	resultPtr := uint32(results[0])
+	if err := writeMemory(mod, resultPtr, buf); err != nil {
+		log.Error().Err(err).Msg("failed to write random bytes to memory")
+		return 0
+	}
+
+	return uint64(resultPtr)<<32 | uint64(len(buf))
 }

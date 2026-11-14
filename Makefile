@@ -27,7 +27,7 @@ plugins: ## Build WASM plugins
 		echo "  - $$name.wasm"; \
 		if [ -f "./internal/commands/plugins/$$name/main.go" ]; then \
 			if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
-				-target=wasi -scheduler=none -opt=z -no-debug \
+				-target=wasi -buildmode=c-shared -scheduler=none -opt=z -no-debug \
 				"./internal/commands/plugins/$$name/main.go"; then \
 				rm "./internal/commands/plugins/$$name/main.go"; \
 				echo "    Cleaned up generated code"; \
@@ -44,7 +44,7 @@ plugins: ## Build WASM plugins
 				echo "  - $$name.wasm"; \
 				if [ -f "./internal/commands/plugins/$$name/main.go" ]; then \
 					if tinygo build -o "$(WASM_OUT_DIR)/$$name.wasm" \
-						-target=wasi -scheduler=none -opt=z -no-debug \
+						-target=wasi -buildmode=c-shared -scheduler=none -opt=z -no-debug \
 						"./internal/commands/plugins/$$name/main.go"; then \
 						rm "./internal/commands/plugins/$$name/main.go"; \
 						echo "    Cleaned up generated code"; \
