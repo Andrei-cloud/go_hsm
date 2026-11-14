@@ -57,5 +57,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Thales variant-LMK key generation, import and check CLI commands (`keys generate|import|check`) with parity validation and interactive TUI for key block headers.
 - Key block support for Thales `S` format key blocks.
 
-[Unreleased]: https://github.com/andrei-cloud/go_hsm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/andrei-cloud/go_hsm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/andrei-cloud/go_hsm/releases/tag/v0.4.0
 [0.3.0]: https://github.com/andrei-cloud/go_hsm/releases/tag/v0.3.0
