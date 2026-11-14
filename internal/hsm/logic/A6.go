@@ -8,7 +8,9 @@ import (
 // ExecuteA6 imports a key received under a ZMK and returns it under the LMK.
 // The request is the key type (3H), the ZMK under LMK, the key under the ZMK
 // (16H, 'X' and 32H, or 'Y' and 48H, encrypted in ECB mode) and the key scheme
-// under LMK (1A: 'Z', 'U' or 'T'). The response is "A7" + "00" + the key under
+// under LMK (1A: 'Z', 'U' or 'T'). The key under the ZMK may instead be 'R'
+// and a TR-31 key block (version B for a TDES ZMK), whose key usage, algorithm
+// and mode of use must fit the key type. The response is "A7" + "00" + the key under
 // LMK + its check value (6H). An imported key with a parity error is still
 // returned, with "01" in place of "00", as a warning.
 func ExecuteA6(input []byte) ([]byte, error) {
@@ -26,22 +28,12 @@ func ExecuteA6(input []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	encryptedKey, data, err := readKeyUnderZMK("A6", data)
+	clearKey, data, err := readZoneKey(clearZMK, data, keyType)
 	if err != nil {
 		return nil, err
 	}
 
-	if isAllZero(encryptedKey) {
-		logError("A6: key under ZMK is all zeros")
-		return nil, errorcodes.Err11
-	}
-
-	lmkScheme, err := readLMKScheme("A6", data, len(encryptedKey))
-	if err != nil {
-		return nil, err
-	}
-
-	clearKey, err := underZMK(clearZMK, encryptedKey, false)
+	lmkScheme, err := readLMKScheme("A6", data, len(clearKey))
 	if err != nil {
 		return nil, err
 	}
@@ -73,4 +65,45 @@ func ExecuteA6(input []byte) ([]byte, error) {
 	}
 
 	return append(resp, kcv...), nil
+}
+
+// readZoneKey reads the key under the ZMK, a TR-31 block ('R') or a key in
+// ECB mode, and returns it in the clear with what follows. A block must carry
+// a usage, algorithm and mode of use that fit keyType.
+func readZoneKey(clearZMK, data []byte, keyType string) ([]byte, []byte, error) {
+	if len(data) > 0 && data[0] == keyBlockScheme {
+		block, rest, err := readKeyBlock("A6", data)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		clearKey, err := openKeyBlock("A6", clearZMK, block, keyType)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if isAllZero(clearKey) {
+			logError("A6: key in key block is all zeros")
+			return nil, nil, errorcodes.Err11
+		}
+
+		return clearKey, rest, nil
+	}
+
+	encryptedKey, rest, err := readKeyUnderZMK("A6", data)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if isAllZero(encryptedKey) {
+		logError("A6: key under ZMK is all zeros")
+		return nil, nil, errorcodes.Err11
+	}
+
+	clearKey, err := underZMK(clearZMK, encryptedKey, false)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return clearKey, rest, nil
 }
