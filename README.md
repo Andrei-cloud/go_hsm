@@ -105,8 +105,8 @@ Implemented as WASM plugins, with more extensible via the plugin system:
 | Command | Description |
 |---------|-------------|
 | A0 | Generate a random key |
-| A6 | Import a key under ZMK (ANSI X9.17 ECB forms Z/X/Y) |
-| A8 | Export a key under ZMK (ANSI X9.17 ECB forms Z/X/Y) |
+| A6 | Import a key under ZMK (ANSI X9.17 ECB forms Z/X/Y, or a TR-31 `R` key block) |
+| A8 | Export a key under ZMK (ANSI X9.17 ECB forms Z/X/Y, or a TR-31 `R` key block) |
 | B2 | Echo test command |
 | BU | Generate Key Check Value (KCV) |
 | CA | Translate a PIN from TPK to ZPK |

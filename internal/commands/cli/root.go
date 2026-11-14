@@ -15,7 +15,7 @@ var cfgFile string
 func NewRootCommand() (*cobra.Command, error) {
 	rootCmd := &cobra.Command{
 		Use:     "go_hsm",
-		Version: "0.3.0",
+		Version: "0.4.0",
 		Short:   "Hardware Security Module server and utilities",
 		Long: `A flexible HSM server and utility tool for PIN block operations 
 and other cryptographic functions for payment card processing.`,

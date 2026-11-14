@@ -13,7 +13,7 @@ Go module: `github.com/andrei-cloud/go_hsm` · Go 1.27+ · TinyGo 0.42+ (plugins
 
 ## Implemented HSM commands (plugins)
 
-A0 generate key · A6 import key under ZMK · A8 export key under ZMK · B2 echo · BU key check value · CA translate PIN TPK→ZPK · CW generate CVV · CY verify CVV · DC verify terminal PIN (ABA PVV) · EC verify interchange PIN (ABA PVV) · FA translate ZMK→ZPK · HC generate TMK/TPK/PVK · NC diagnostics · KQ ARQC verify / ARPC generate · M6 generate MAC · M8 verify MAC
+A0 generate key · A6 import key under ZMK (X9.17 ECB or TR-31 block) · A8 export key under ZMK (X9.17 ECB or TR-31 block) · B2 echo · BU key check value · CA translate PIN TPK→ZPK · CW generate CVV · CY verify CVV · DC verify terminal PIN (ABA PVV) · EC verify interchange PIN (ABA PVV) · FA translate ZMK→ZPK · HC generate TMK/TPK/PVK · NC diagnostics · KQ ARQC verify / ARPC generate · M6 generate MAC · M8 verify MAC
 
 ## Key packages
 
