@@ -29,6 +29,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Documentation rebuilt: `README.md` rewritten, `CONTRIBUTING.md`, this `CHANGELOG.md` and `llms.txt` added, and godoc filled in across `cmd/`, `internal/` and `pkg/`.
 - Plugins are built with `tinygo build -target=wasi -buildmode=c-shared`, which is what makes `_initialize` (and therefore package initialisers) present in the module.
 - Adds `github.com/moov-io/tr31` for TR-31 key blocks. The module is temporarily `replace`d with a fork whose changes make the library's random source injectable and drop the goroutine from `Blocks.Iter` so the package links under scheduler-less TinyGo; tracked in #16 for upstreaming and removal of the directive.
 - Go directive raised to 1.27.1; all dependencies updated (zerolog 1.35.1, cobra 1.10.2, testify 1.12.1, wazero 1.12.0, mapstructure v2.5.0, plus indirect updates).
