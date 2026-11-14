@@ -64,6 +64,18 @@ func resolveServerAddr(cmd *cobra.Command, cfg *config.Config) (string, int, err
 	return host, port, nil
 }
 
+// resolvePluginPath returns the plugin directory; an explicitly set
+// --plugin-path flag takes precedence over the configured path. The flag is a
+// persistent flag on the root command, bound to the global viper, which the
+// config package's own viper instance never sees.
+func resolvePluginPath(cmd *cobra.Command, cfg *config.Config) string {
+	if flag := cmd.Flag("plugin-path"); flag != nil && flag.Changed {
+		return flag.Value.String()
+	}
+
+	return cfg.Plugin.Path
+}
+
 func runServe(cmd *cobra.Command, _ []string) error {
 	// Get configuration.
 	cfg := config.Get()
@@ -86,8 +98,10 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to initialize HSM instance: %v", err)
 	}
 
+	pluginPath := resolvePluginPath(cmd, cfg)
+
 	// Make sure plugin directory exists.
-	if err := os.MkdirAll(cfg.Plugin.Path, 0o755); err != nil {
+	if err := os.MkdirAll(pluginPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create plugin directory: %v", err)
 	}
 
@@ -104,7 +118,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	)
 
 	// Load plugins from the configured directory.
-	if err := pluginManager.LoadAll(cfg.Plugin.Path); err != nil {
+	if err := pluginManager.LoadAll(pluginPath); err != nil {
 		return fmt.Errorf("failed to load plugins: %v", err)
 	}
 
@@ -152,7 +166,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 				plugins.WithExecutionTimeout(cfg.Plugin.ExecutionTimeout),
 				plugins.WithPoolSize(cfg.Plugin.PoolSize),
 			)
-			if err := newPM.LoadAll(cfg.Plugin.Path); err != nil {
+			if err := newPM.LoadAll(pluginPath); err != nil {
 				log.Error().Err(err).Msg("failed to reload plugins")
 				continue
 			}

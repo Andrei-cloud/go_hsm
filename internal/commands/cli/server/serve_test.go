@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andrei-cloud/go_hsm/internal/config"
+	"github.com/spf13/cobra"
 )
 
 // TestRunServeKeepsServingUntilCanceled guards against the regression where
@@ -171,5 +172,35 @@ func waitToReturn(t *testing.T, serveErr chan error) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("runServe did not return after context cancellation")
+	}
+}
+
+// TestPluginPathFlagOverridesConfig guards against the config-layering bug
+// where --plugin-path was bound to the global viper while runServe read the
+// plugin directory from config.Get(), so the flag was silently ignored.
+func TestPluginPathFlagOverridesConfig(t *testing.T) {
+	cfg := config.Get()
+	configured := cfg.Plugin.Path
+	cfg.Plugin.Path = "from-config"
+
+	t.Cleanup(func() { cfg.Plugin.Path = configured })
+
+	// A stand-in for the root command, which owns the persistent flag.
+	root := &cobra.Command{Use: "go_hsm"} //nolint:exhaustruct // only the flag matters here.
+	root.PersistentFlags().String("plugin-path", "plugins", "path to plugin directory")
+
+	serve := NewServeCommand()
+	root.AddCommand(serve)
+
+	if got := resolvePluginPath(serve, cfg); got != "from-config" {
+		t.Fatalf("without the flag, plugin path %q, want the configured one", got)
+	}
+
+	if err := root.PersistentFlags().Set("plugin-path", "from-flag"); err != nil {
+		t.Fatalf("failed to set --plugin-path flag: %v", err)
+	}
+
+	if got := resolvePluginPath(serve, cfg); got != "from-flag" {
+		t.Fatalf("plugin path %q, want the flag's", got)
 	}
 }
