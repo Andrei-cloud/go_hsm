@@ -8,8 +8,10 @@ import (
 // ExecuteA8 exports a key held under the LMK, encrypted under a ZMK. The
 // request is the key type (3H), the ZMK under LMK, the key under LMK (16H, 'U'
 // and 32H, or 'T' and 48H) and the key scheme under ZMK (1A: 'Z', 'X' or 'Y',
-// ECB mode, matching the key's length). The response is "A9" + "00" + the key
-// under the ZMK (with its scheme tag, none for 'Z') + its check value (6H).
+// ECB mode, matching the key's length, or 'R' for a TR-31 key block, version
+// B, carrying the usage and mode of use of the key type). The response is
+// "A9" + "00" + the key under the ZMK (with its scheme tag, none for 'Z') + its
+// check value (6H).
 func ExecuteA8(input []byte) ([]byte, error) {
 	logInfo("A8: exporting a key under ZMK")
 
@@ -42,6 +44,16 @@ func ExecuteA8(input []byte) ([]byte, error) {
 		return nil, errorcodes.Err11
 	}
 
+	if len(data) > 0 && data[0] == keyBlockScheme {
+		return exportKeyBlock(clearZMK, clearKey, keyType)
+	}
+
+	return exportZoneKey(clearZMK, clearKey, data)
+}
+
+// exportZoneKey answers A8 with the key encrypted under the ZMK in ECB mode,
+// in the scheme data asks for.
+func exportZoneKey(clearZMK, clearKey, data []byte) ([]byte, error) {
 	zoneScheme, err := readZoneScheme("A8", data, len(clearKey))
 	if err != nil {
 		return nil, err
@@ -64,6 +76,26 @@ func ExecuteA8(input []byte) ([]byte, error) {
 	}
 
 	resp = append(resp, cryptoutils.Raw2B(zoneKey)...)
+
+	return append(resp, kcv...), nil
+}
+
+// exportKeyBlock answers A8 with the key in a TR-31 block under the ZMK:
+// "A9" + "00" + 'R' + the block + the key's check value (6H).
+func exportKeyBlock(clearZMK, clearKey []byte, keyType string) ([]byte, error) {
+	block, err := sealKeyBlock("A8", clearZMK, clearKey, keyType)
+	if err != nil {
+		return nil, err
+	}
+
+	kcv, err := cryptoutils.KeyCV(cryptoutils.Raw2B(clearKey), kcvDigits)
+	if err != nil {
+		logError("A8: check value calculation failed")
+		return nil, errorcodes.Err68
+	}
+
+	resp := append([]byte("A900"), keyBlockScheme)
+	resp = append(resp, block...)
 
 	return append(resp, kcv...), nil
 }
