@@ -11,7 +11,7 @@ go_hsm
 .prompts/*
 GEMINI.md
 server.test
-
+IDEA.md
 
 cpu.pprof
 mem.pprof
