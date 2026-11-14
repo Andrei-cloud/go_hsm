@@ -29,3 +29,7 @@ func wasmLogDebug(s string)
 //go:wasm-module env
 //export RandomKey
 func wasmRandomKey(length uint32) uint64
+
+//go:wasm-module env
+//export RandomBytes
+func wasmRandomBytes(length uint32) uint64
