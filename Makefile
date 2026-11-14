@@ -14,7 +14,7 @@ bin/plugingen:
 
 gen: ## Generate new plugin code
 	@echo "Generating new plugin code..."
-	@go generate ./internal/commands/plugins/...
+	@for f in internal/commands/plugins/*/gen.go; do go generate "$$f"; done
 
 plugins: ## Build WASM plugins
 	@echo "Building WASM plugins with TinyGo..."
