@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/andrei-cloud/anet v0.3.0
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/moov-io/tr31 v1.1.0
+	github.com/moov-io/tr31 v1.2.0
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -48,5 +48,3 @@ require (
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )
-
-replace github.com/moov-io/tr31 => github.com/anabeto93/tr31 v1.1.1-0.20261114092658-ed4a24aa2f37
