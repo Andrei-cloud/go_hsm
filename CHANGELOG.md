@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `github.com/moov-io/tr31` is taken from its v1.2.0 release instead of a fork. That release carries the fixes 0.4.0 needed: `Blocks.Iter` fills its channel before returning it, an optional block's length that isn't hex is refused, and callers supply the random source (`tr31.Rand`) that a TinyGo plugin needs.
+
 ## [0.4.0] - 2026-11-14
 
 ### Added
